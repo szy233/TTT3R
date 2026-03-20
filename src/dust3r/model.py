@@ -1297,6 +1297,183 @@ class ARCroco3DStereo(CroCoNet):
             return ress, views, all_state_args
         return ress, views
 
+    def forward_recurrent_analysis(self, views, device='cuda'):
+        """
+        Analysis mode inference for Experiment 1: State Token Frequency Visualization.
+
+        Identical inference logic to forward_recurrent_lighter, but additionally captures
+        per-frame state token trajectories and state-to-image cross-attention maps.
+
+        Args:
+            views:  list of view dicts (same format as forward_recurrent_lighter)
+            device: compute device string
+
+        Returns:
+            ress:          list of prediction dicts (same as forward_recurrent_lighter)
+            analysis_data: dict with keys
+                'state_history'      – list of T cpu tensors [n_state, dec_dim],
+                                       state BEFORE the update at each frame
+                'cross_attn_history' – list of T cpu tensors [n_state, n_img_patches],
+                                       mean cross-attention over all decoder layers/heads
+                'img_shapes'         – list of T (H_patches, W_patches) tuples
+        """
+        ress = []
+        state_history = []
+        cross_attn_history = []
+        img_shapes_list = []
+        reset_mask = False
+
+        for i, _view in enumerate(views):
+            view = to_gpu(_view, device)
+            device = view["img"].device
+            batch_size = view["img"].shape[0]
+
+            img_mask = view["img_mask"].reshape(-1, batch_size)
+            ray_mask = view["ray_mask"].reshape(-1, batch_size)
+            imgs = view["img"].unsqueeze(0)
+            ray_maps = view["ray_map"].unsqueeze(0)
+            shapes = (
+                view["true_shape"].unsqueeze(0)
+                if "true_shape" in view
+                else torch.tensor(view["img"].shape[-2:], device=device)
+                    .unsqueeze(0).repeat(batch_size, 1).unsqueeze(0)
+            )
+            imgs = imgs.view(-1, *imgs.shape[2:])
+            ray_maps = ray_maps.view(-1, *ray_maps.shape[2:])
+            shapes = shapes.view(-1, 2).to(imgs.device)
+            img_masks_flat = img_mask.view(-1)
+            ray_masks_flat = ray_mask.view(-1)
+
+            selected_imgs = imgs[img_masks_flat]
+            selected_shapes = shapes[img_masks_flat]
+            if selected_imgs.size(0) > 0:
+                img_out, img_pos, _ = self._encode_image(selected_imgs, selected_shapes)
+            else:
+                img_out, img_pos = None, None
+
+            ray_maps = ray_maps.permute(0, 3, 1, 2)
+            selected_ray_maps = ray_maps[ray_masks_flat]
+            selected_shapes_ray = shapes[ray_masks_flat]
+            if selected_ray_maps.size(0) > 0:
+                ray_out, ray_pos, _ = self._encode_ray_map(selected_ray_maps, selected_shapes_ray)
+            else:
+                ray_out, ray_pos = None, None
+
+            shape = shapes
+            if img_out is not None and ray_out is None:
+                feat_i = img_out[-1]
+                pos_i = img_pos
+            elif img_out is None and ray_out is not None:
+                feat_i = ray_out[-1]
+                pos_i = ray_pos
+            elif img_out is not None and ray_out is not None:
+                feat_i = img_out[-1] + ray_out[-1]
+                pos_i = img_pos
+            else:
+                raise NotImplementedError
+
+            if i == 0:
+                state_feat, state_pos = self._init_state(feat_i, pos_i)
+                mem = self.pose_retriever.mem.expand(feat_i.shape[0], -1, -1)
+                init_state_feat = state_feat.clone()
+                init_mem = mem.clone()
+
+            if self.pose_head_flag:
+                global_img_feat_i = self._get_img_level_feat(feat_i)
+                if i == 0 or reset_mask:
+                    pose_feat_i = self.pose_token.expand(feat_i.shape[0], -1, -1)
+                else:
+                    pose_feat_i = self.pose_retriever.inquire(global_img_feat_i, mem)
+                pose_pos_i = -torch.ones(
+                    feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype
+                )
+            else:
+                pose_feat_i = None
+                pose_pos_i = None
+                global_img_feat_i = self._get_img_level_feat(feat_i)
+
+            # ── ANALYSIS: record state BEFORE update ──────────────────────────────
+            state_history.append(state_feat[0].detach().cpu())  # [n_state, dec_dim]
+
+            new_state_feat, dec, _, cross_attn_state_raw, _, _ = self._recurrent_rollout(
+                state_feat, state_pos, feat_i, pos_i,
+                pose_feat_i, pose_pos_i, init_state_feat,
+                img_mask=view["img_mask"],
+                reset_mask=view["reset"],
+                update=view.get("update", None),
+                return_attn=True,
+            )
+
+            # ── ANALYSIS: aggregate cross-attention → [n_state, n_img_patches] ───
+            cross_attn_list = list(cross_attn_state_raw)  # list of [1, n_heads, n_state, n_img]
+            if len(cross_attn_list) > 0 and cross_attn_list[0] is not None:
+                # [n_layers, n_heads, n_state, n_img]
+                cross_attn_stacked = torch.cat(cross_attn_list, dim=0)
+                # average over layers and heads → [n_state, n_img]
+                cross_attn_avg = cross_attn_stacked.mean(dim=(0, 1))
+                # remove pose token (first column) if pose head is active
+                if self.pose_head_flag:
+                    cross_attn_img = cross_attn_avg[:, 1:]   # [n_state, n_img_patches]
+                else:
+                    cross_attn_img = cross_attn_avg
+                cross_attn_history.append(cross_attn_img.detach().cpu())
+
+                # patch grid shape (H_p, W_p) derived from actual image height/width
+                H_img = int(shapes[0, 0].item())
+                W_img = int(shapes[0, 1].item())
+                patch_size = 16
+                img_shapes_list.append((H_img // patch_size, W_img // patch_size))
+            # ──────────────────────────────────────────────────────────────────────
+
+            out_pose_feat_i = dec[-1][:, 0:1]
+            new_mem = self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
+
+            assert len(dec) == self.dec_depth + 1
+            head_input = [
+                dec[0].float(),
+                dec[self.dec_depth * 2 // 4][:, 1:].float(),
+                dec[self.dec_depth * 3 // 4][:, 1:].float(),
+                dec[self.dec_depth].float(),
+            ]
+            res = self._downstream_head(head_input, shape, pos=pos_i)
+            ress.append(to_cpu(res))
+
+            img_mask_val = view["img_mask"]
+            update_val = view.get("update", None)
+            update_mask = (img_mask_val & update_val) if update_val is not None else img_mask_val
+            update_mask = update_mask[:, None, None].float()
+
+            if i == 0 or reset_mask:
+                update_mask1 = update_mask
+            else:
+                if self.config.model_update_type == "cut3r":
+                    update_mask1 = update_mask
+                elif self.config.model_update_type == "ttt3r":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None]
+                else:
+                    raise ValueError(f"Invalid model type: {self.config.model_update_type}")
+
+            state_feat = new_state_feat * update_mask1 + state_feat * (1 - update_mask1)
+            mem = new_mem * update_mask + mem * (1 - update_mask)
+
+            reset_mask = view["reset"]
+            if reset_mask is not None:
+                reset_mask = reset_mask[:, None, None].float()
+                state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
+                mem = init_mem * reset_mask + mem * (1 - reset_mask)
+
+        analysis_data = {
+            'state_history': state_history,        # list[T] of [n_state, dec_dim]
+            'cross_attn_history': cross_attn_history,  # list[T] of [n_state, n_img_patches]
+            'img_shapes': img_shapes_list,         # list[T] of (H_patches, W_patches)
+        }
+        return ress, analysis_data
+
 if __name__ == "__main__":
     print(ARCroco3DStereo.mro())
     cfg = ARCroco3DStereoConfig(
