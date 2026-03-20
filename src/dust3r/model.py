@@ -1457,6 +1457,25 @@ class ARCroco3DStereo(CroCoNet):
                     )
                     state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None]
+                elif self.config.model_update_type == "ttt3r_conf":
+                    # TTT3R base mask
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    # Confidence gate: use current frame's mean confidence
+                    # conf_self shape: (B, H, W, 1), values typically in [1, 10+]
+                    conf_scale = getattr(self.config, 'conf_gate_scale', 10.0)
+                    if "conf_self" in res:
+                        mean_conf = res["conf_self"].mean()
+                    elif "conf" in res:
+                        mean_conf = res["conf"].mean()
+                    else:
+                        mean_conf = torch.tensor(conf_scale, device=device)
+                    conf_gate = torch.clamp(mean_conf / conf_scale, 0.0, 1.0)
+                    update_mask1 = update_mask * ttt3r_mask * conf_gate
                 else:
                     raise ValueError(f"Invalid model type: {self.config.model_update_type}")
 
