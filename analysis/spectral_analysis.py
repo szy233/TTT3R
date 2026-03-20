@@ -126,7 +126,80 @@ def derive_depth_dir(seq_path):
     color_dir = os.path.normpath(seq_path)
     parent = os.path.dirname(color_dir)
     base = os.path.basename(color_dir)
-    return os.path.join(parent, base.replace("color", "depth", 1))
+    # ScanNet: color -> depth; TUM: rgb -> depth
+    for src in ("color", "rgb"):
+        if src in base:
+            return os.path.join(parent, base.replace(src, "depth", 1))
+    return os.path.join(parent, "depth")
+
+
+def load_tum_associations(scene_dir):
+    """Load TUM associations.txt to build rgb->depth filename mapping."""
+    assoc_path = os.path.join(scene_dir, "associations.txt")
+    if not os.path.exists(assoc_path):
+        return None
+    mapping = {}
+    with open(assoc_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) >= 4:
+                # format: ts_rgb rgb/file ts_depth depth/file
+                rgb_file = os.path.basename(parts[1])
+                depth_file = os.path.basename(parts[3])
+                mapping[rgb_file] = depth_file
+    return mapping if mapping else None
+
+
+def build_tum_timestamp_index(depth_dir):
+    """Build sorted list of (timestamp, filename) for TUM depth images."""
+    depth_files = sorted(glob.glob(os.path.join(depth_dir, "*.png")))
+    index = []
+    for f in depth_files:
+        name = os.path.splitext(os.path.basename(f))[0]
+        try:
+            ts = float(name)
+            index.append((ts, f))
+        except ValueError:
+            continue
+    return index
+
+
+def find_gt_depth_path(img_path, depth_dir, tum_assoc=None,
+                       tum_depth_index=None, max_dt=0.05):
+    """Find corresponding GT depth path for an image."""
+    basename = os.path.splitext(os.path.basename(img_path))[0]
+    # Direct match (ScanNet style)
+    direct = os.path.join(depth_dir, basename + ".png")
+    if os.path.exists(direct):
+        return direct
+    # TUM association match
+    if tum_assoc is not None:
+        rgb_file = os.path.basename(img_path)
+        if rgb_file in tum_assoc:
+            depth_path = os.path.join(depth_dir, tum_assoc[rgb_file])
+            if os.path.exists(depth_path):
+                return depth_path
+    # TUM timestamp nearest-neighbor match
+    if tum_depth_index is not None:
+        try:
+            rgb_ts = float(basename)
+        except ValueError:
+            return None
+        # Binary search for closest timestamp
+        timestamps = [t for t, _ in tum_depth_index]
+        idx = np.searchsorted(timestamps, rgb_ts)
+        best_path, best_dt = None, max_dt
+        for i in [idx - 1, idx]:
+            if 0 <= i < len(tum_depth_index):
+                dt = abs(tum_depth_index[i][0] - rgb_ts)
+                if dt < best_dt:
+                    best_dt = dt
+                    best_path = tum_depth_index[i][1]
+        return best_path
+    return None
 
 
 # =============================================================================
@@ -473,8 +546,16 @@ def main():
     # ── Depth dir ──────────────────────────────────────────────────────────────
     depth_dir = derive_depth_dir(args.seq_path)
     has_depth = os.path.isdir(depth_dir)
+    # TUM association file: lives in parent of rgb/
+    scene_dir = os.path.dirname(os.path.normpath(args.seq_path))
+    tum_assoc = load_tum_associations(scene_dir) if has_depth else None
+    tum_depth_index = build_tum_timestamp_index(depth_dir) if has_depth else None
     if has_depth:
         print(f"[depth] GT depth dir: {depth_dir}")
+        if tum_assoc:
+            print(f"[depth] TUM associations loaded: {len(tum_assoc)} pairs")
+        elif tum_depth_index:
+            print(f"[depth] TUM timestamp index built: {len(tum_depth_index)} depth frames")
     else:
         print(f"[warn] No depth dir found, skipping error correlation")
 
@@ -517,9 +598,9 @@ def main():
         if has_depth:
             pts3d = ress[t]["pts3d_in_self_view"]
             pred_depth = pts3d[0, :, :, 2].numpy()
-            basename = os.path.splitext(os.path.basename(img_paths[t]))[0]
-            depth_path = os.path.join(depth_dir, basename + ".png")
-            if os.path.exists(depth_path):
+            depth_path = find_gt_depth_path(img_paths[t], depth_dir,
+                                              tum_assoc, tum_depth_index)
+            if depth_path is not None:
                 gt = load_gt_depth(depth_path, args.depth_scale)
                 if gt is not None:
                     depth_errors[t] = compute_frame_depth_error(
