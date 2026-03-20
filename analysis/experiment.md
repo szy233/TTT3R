@@ -160,3 +160,70 @@ freq_map = (token_var[:, None] * cross_attn[t]).sum(axis=0)  # [N_patches]
 H_p, W_p = data["img_shapes"][t]
 freq_map_2d = freq_map.reshape(H_p, W_p)
 ```
+
+---
+
+# Experiment A: Frequency vs Reconstruction Error Correlation
+
+## 目标
+
+验证 state token 的时间频率（temporal variance）和重建误差（depth error）之间的相关性。
+如果高频 token 关注的区域误差更大 → 说明频率可以作为自监督的质量信号。
+
+## 运行命令
+
+### ScanNet（需要 GT depth）
+
+```bash
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/freq_error_analysis.py \
+    --model_path /home/szy/research/TTT3R/model/cut3r_512_dpt_4_64.pth \
+    --seq_path /home/szy/research/dataset/scannetv2/scene0707_00/color \
+    --output_dir analysis_results/expA_scannet_scene0707_ttt3r \
+    --model_update_type ttt3r \
+    --size 512 \
+    --frame_interval 5 \
+    --max_frames 200 \
+    --device cuda
+```
+
+### 对比实验：cut3r vs ttt3r
+
+```bash
+# ttt3r
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/freq_error_analysis.py \
+    --model_path /home/szy/research/TTT3R/model/cut3r_512_dpt_4_64.pth \
+    --seq_path /home/szy/research/dataset/scannetv2/scene0707_00/color \
+    --output_dir analysis_results/expA_scannet_ttt3r \
+    --model_update_type ttt3r \
+    --size 512 --frame_interval 5 --max_frames 200
+
+# cut3r
+CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src python analysis/freq_error_analysis.py \
+    --model_path /home/szy/research/TTT3R/model/cut3r_512_dpt_4_64.pth \
+    --seq_path /home/szy/research/dataset/scannetv2/scene0707_00/color \
+    --output_dir analysis_results/expA_scannet_cut3r \
+    --model_update_type cut3r \
+    --size 512 --frame_interval 5 --max_frames 200
+```
+
+## 参数说明
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--seq_path` | ScanNet scene 的 `color/` 目录 | 必填 |
+| `--depth_scale` | GT depth 从 uint16 转 meters 的除数 | `1000.0` |
+| `--max_depth` | 忽略超过此深度的 GT（meters） | `10.0` |
+| `--patch_size` | ViT patch 大小 | `16` |
+
+## 输出文件
+
+```
+analysis_results/expA/
+├── correlation_summary.txt          # Pearson/Spearman 汇总
+├── freq_error_data.npz              # 原始数据
+└── plots/
+    ├── scatter_freq_vs_error.png    # 频率 vs 误差散点图
+    ├── correlation_over_time.png    # 逐帧相关系数变化
+    └── side_by_side/
+        └── frame_XXXXXX.png        # 4-panel: RGB | 频率 | 误差 | 叠加
+```

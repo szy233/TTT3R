@@ -1409,6 +1409,8 @@ class ARCroco3DStereo(CroCoNet):
             if len(cross_attn_list) > 0 and cross_attn_list[0] is not None:
                 # [n_layers, n_heads, n_state, n_img]
                 cross_attn_stacked = torch.cat(cross_attn_list, dim=0)
+                # blocks.py returns raw logits (attn_before_softmax); apply softmax before averaging
+                cross_attn_stacked = torch.softmax(cross_attn_stacked, dim=-1)
                 # average over layers and heads → [n_state, n_img]
                 cross_attn_avg = cross_attn_stacked.mean(dim=(0, 1))
                 # remove pose token (first column) if pose head is active
