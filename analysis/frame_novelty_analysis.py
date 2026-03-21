@@ -1,21 +1,21 @@
 """
-Layer 1 Analysis: Frequency-Domain Frame Novelty
+Layer 1 Analysis: Frequency-Domain Frame Spectral Change
 =================================================
 
 Motivation experiment for the frame-selection layer:
 
 1. Show that state token oscillation correlates with frame redundancy
-   (redundant frames = low structural novelty)
-2. Show that skipping low-novelty frames reduces state oscillation
+   (redundant frames = low structural spectral_change)
+2. Show that skipping low-spectral_change frames reduces state oscillation
 3. Measure accuracy (depth error) with and without frame filtering
-4. Visualize novelty scores, kept vs skipped frames, and state oscillation
+4. Visualize spectral_change scores, kept vs skipped frames, and state oscillation
 
 Usage
 -----
-CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/frame_novelty_analysis.py \
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/frame_spectral_change_analysis.py \
     --model_path /path/to/model.pth \
     --seq_path /path/to/scene/color \
-    --output_dir analysis_results/frame_novelty \
+    --output_dir analysis_results/frame_spectral_change \
     --depth_dir /path/to/scene/depth \
     --model_update_type cut3r --size 512 --max_frames 300
 """
@@ -127,7 +127,7 @@ def parse_args():
                    help='RGB directory')
     p.add_argument('--depth_dir',  type=str, default='',
                    help='GT depth directory (optional)')
-    p.add_argument('--output_dir', type=str, default='analysis_results/frame_novelty')
+    p.add_argument('--output_dir', type=str, default='analysis_results/frame_spectral_change')
     p.add_argument('--model_update_type', type=str, default='cut3r')
     p.add_argument('--depth_scale', type=float, default=1000.0)
     p.add_argument('--size',        type=int, default=512)
@@ -169,15 +169,15 @@ def main():
 
     all_views = build_views(img_paths, args.size)
 
-    # ── Compute per-frame novelty (before inference) ──────────────────────────
-    print("[novelty] Computing frame novelty scores ...")
-    novelty_scores = [None]  # frame 0 has no prev
+    # ── Compute per-frame spectral_change (before inference) ──────────────────────────
+    print("[spectral_change] Computing frame spectral_change scores ...")
+    spectral_change_scores = [None]  # frame 0 has no prev
     imgs_tensor = [v['img'].float() for v in all_views]
     for i in range(1, len(imgs_tensor)):
-        nov = ARCroco3DStereo.compute_frame_novelty(imgs_tensor[i-1], imgs_tensor[i])
-        novelty_scores.append(nov)
+        sc = ARCroco3DStereo.compute_frame_spectral_change(imgs_tensor[i-1], imgs_tensor[i])
+        spectral_change_scores.append(sc)
     novelties_arr = np.array([n if n is not None else np.nan
-                              for n in novelty_scores])
+                              for n in spectral_change_scores])
 
     # ── Run full sequence (baseline) ─────────────────────────────────────────
     print("[run] Full sequence (baseline) ...")
@@ -186,7 +186,7 @@ def main():
 
     # ── Run filtered sequence ─────────────────────────────────────────────────
     print(f"[filter] skip_ratio={args.skip_ratio}, warmup={args.warmup}")
-    kept_views, kept_indices, _ = ARCroco3DStereo.filter_views_by_novelty(
+    kept_views, kept_indices, _ = ARCroco3DStereo.filter_views_by_spectral_change(
         all_views, skip_ratio=args.skip_ratio, warmup=args.warmup, device='cpu')
     skip_rate = 1.0 - len(kept_views) / len(all_views)
     print(f"[filter] Kept {len(kept_views)}/{len(all_views)} frames "
@@ -225,7 +225,7 @@ def main():
             err = compute_depth_error(pred_d, gt, args.max_depth)
             errors_filt.append(err)
 
-    # ── Correlate oscillation vs novelty ─────────────────────────────────────
+    # ── Correlate oscillation vs spectral_change ─────────────────────────────────────
     # osc_full[t] corresponds to frames 1..T-1 (delta between t and t-1)
     nov_for_osc = novelties_arr[1:len(osc_full)+1]
     valid = np.isfinite(nov_for_osc) & np.isfinite(osc_full)
@@ -244,7 +244,7 @@ def main():
     print(f"  Full sequence : {osc_full.mean():.4f} ± {osc_full.std():.4f}")
     print(f"  Filtered seq  : {osc_filt.mean():.4f} ± {osc_filt.std():.4f}")
     print(f"  Reduction     : {(osc_full.mean()-osc_filt.mean())/osc_full.mean()*100:.1f}%")
-    print(f"\nNovelty ↔ Oscillation correlation: r={r_nov_osc:+.3f} (p={p_nov_osc:.3f})")
+    print(f"\nSpectral Change ↔ Oscillation correlation: r={r_nov_osc:+.3f} (p={p_nov_osc:.3f})")
     if has_depth:
         ef = np.nanmean(errors_full)
         efilt = np.nanmean(errors_filt)
@@ -254,7 +254,7 @@ def main():
         print(f"  Change        : {(efilt-ef)/ef*100:+.1f}%")
     print("="*60)
 
-    with open(os.path.join(args.output_dir, 'novelty_summary.txt'), 'w') as f:
+    with open(os.path.join(args.output_dir, 'spectral_change_summary.txt'), 'w') as f:
         f.write(f"seq_path: {args.seq_path}\n")
         f.write(f"model_update_type: {args.model_update_type}\n")
         f.write(f"skip_ratio={args.skip_ratio} warmup={args.warmup}\n")
@@ -263,7 +263,7 @@ def main():
         f.write(f"osc_full={osc_full.mean():.4f}±{osc_full.std():.4f}\n")
         f.write(f"osc_filt={osc_filt.mean():.4f}±{osc_filt.std():.4f}\n")
         f.write(f"osc_reduction={100*(osc_full.mean()-osc_filt.mean())/osc_full.mean():.1f}%\n")
-        f.write(f"r_novelty_oscillation={r_nov_osc:.4f} p={p_nov_osc:.4f}\n")
+        f.write(f"r_spectral_change_oscillation={r_nov_osc:.4f} p={p_nov_osc:.4f}\n")
         if has_depth:
             f.write(f"depth_err_full={np.nanmean(errors_full):.4f}\n")
             f.write(f"depth_err_filt={np.nanmean(errors_filt):.4f}\n")
@@ -275,9 +275,9 @@ def main():
     t_full = np.arange(len(novelties_arr))
     t_osc  = np.arange(1, len(osc_full)+1)
 
-    # Panel 1: Novelty scores + kept/skipped
+    # Panel 1: Spectral Change scores + kept/skipped
     ax1 = fig.add_subplot(gs[0, :])
-    ax1.plot(t_full, novelties_arr, color='C0', linewidth=0.8, label='Novelty score')
+    ax1.plot(t_full, novelties_arr, color='C0', linewidth=0.8, label='Spectral Change score')
     ax1.axhline(np.nanmean(novelties_arr) * args.skip_ratio,
                 color='red', linestyle='--', linewidth=1.0,
                 label=f'skip threshold (≈{args.skip_ratio}×mean)')
@@ -286,7 +286,7 @@ def main():
         ax1.axvspan(si - 0.5, si + 0.5, alpha=0.15, color='red')
     ax1.set_xlabel('Frame index')
     ax1.set_ylabel('Low-freq energy ratio')
-    ax1.set_title(f'Frame Novelty Scores — {skip_rate:.1%} frames skipped (red)')
+    ax1.set_title(f'Frame Spectral Change Scores — {skip_rate:.1%} frames skipped (red)')
     ax1.legend(loc='upper right', fontsize=8)
 
     # Panel 2: State oscillation — full vs filtered
@@ -307,13 +307,13 @@ def main():
     ax3.set_title('State Oscillation: Filtered Sequence')
     ax3.legend(fontsize=8)
 
-    # Panel 3: Scatter novelty vs oscillation
+    # Panel 3: Scatter spectral_change vs oscillation
     ax4 = fig.add_subplot(gs[2, 0])
     ax4.scatter(nov_for_osc[valid], osc_full[valid],
                 alpha=0.4, s=8, color='C0')
-    ax4.set_xlabel('Frame novelty score')
+    ax4.set_xlabel('Frame spectral_change score')
     ax4.set_ylabel('State oscillation')
-    ax4.set_title(f'Novelty ↔ Oscillation (r={r_nov_osc:+.3f})')
+    ax4.set_title(f'Spectral Change ↔ Oscillation (r={r_nov_osc:+.3f})')
 
     # Panel 4: Depth error comparison (if available)
     ax5 = fig.add_subplot(gs[2, 1])
@@ -333,10 +333,10 @@ def main():
                  ha='center', va='center', transform=ax5.transAxes)
         ax5.set_title('Depth Error')
 
-    plt.suptitle(f'Layer 1: Frequency-Domain Frame Novelty Analysis\n'
+    plt.suptitle(f'Layer 1: Frequency-Domain Frame Spectral Change Analysis\n'
                  f'{os.path.basename(args.seq_path)} | {args.model_update_type}',
                  fontsize=11)
-    out_fig = os.path.join(args.output_dir, 'frame_novelty_analysis.png')
+    out_fig = os.path.join(args.output_dir, 'frame_spectral_change_analysis.png')
     plt.savefig(out_fig, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"[done] → {args.output_dir}")

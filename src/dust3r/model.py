@@ -1186,12 +1186,12 @@ class ARCroco3DStereo(CroCoNet):
         return alpha
 
     @staticmethod
-    def compute_frame_novelty(img_prev, img_curr):
+    def compute_frame_spectral_change(img_prev, img_curr):
         """
         Compute the low-frequency structural energy of the inter-frame difference.
 
         Returns the absolute low-frequency energy (not a ratio), so that
-        redundant frames (tiny changes) produce small values and novel frames
+        redundant frames (tiny changes) produce small values and high-change frames
         (large structural changes) produce large values.  The caller is
         responsible for adaptive thresholding via a running mean.
 
@@ -1218,10 +1218,10 @@ class ARCroco3DStereo(CroCoNet):
         return low_freq_energy.item()
 
     @staticmethod
-    def filter_views_by_novelty(views, skip_ratio=0.3, warmup=10,
+    def filter_views_by_spectral_change(views, skip_ratio=0.3, warmup=10,
                                 always_keep_first=True, device='cpu'):
         """
-        Adaptively filter a view sequence, skipping the least novel frames.
+        Adaptively filter a view sequence, skipping the least high-change frames.
 
         Uses a running mean of low-frequency structural energy as the reference.
         A frame is skipped if its energy falls below (skip_ratio * running_mean),
@@ -1237,7 +1237,7 @@ class ARCroco3DStereo(CroCoNet):
         Returns:
             kept_views:    filtered list of view dicts
             kept_indices:  original indices of kept frames
-            novelties:     list of per-frame raw novelty energies (len = len(views))
+            novelties:     list of per-frame raw spectral_change energies (len = len(views))
         """
         kept_views = []
         kept_indices = []
@@ -1256,7 +1256,7 @@ class ARCroco3DStereo(CroCoNet):
                     kept_indices.append(i)
                 continue
 
-            energy = ARCroco3DStereo.compute_frame_novelty(img_prev, img)
+            energy = ARCroco3DStereo.compute_frame_spectral_change(img_prev, img)
             novelties.append(energy)
 
             # Warm-start running mean
@@ -1265,10 +1265,10 @@ class ARCroco3DStereo(CroCoNet):
             else:
                 running_mean = gamma * running_mean + (1 - gamma) * energy
 
-            # Always keep during warmup; afterwards skip low-novelty frames
-            is_novel = (i < warmup) or (energy >= skip_ratio * running_mean)
+            # Always keep during warmup; afterwards skip low-spectral-change frames
+            is_informative = (i < warmup) or (energy >= skip_ratio * running_mean)
 
-            if is_novel:
+            if is_informative:
                 kept_views.append(view)
                 kept_indices.append(i)
                 img_prev = img  # advance reference only on kept frames
