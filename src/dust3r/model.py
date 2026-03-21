@@ -1140,10 +1140,51 @@ class ARCroco3DStereo(CroCoNet):
             return ress, views, all_state_args
         return ress, views
 
+    @staticmethod
+    def _spectral_modulation(state_feat, new_state_feat, spectral_state, config):
+        """
+        Compute per-token spectral modulation factor α ∈ [0, 1].
+
+        Maintains EMA of state trajectory (low-pass) and running mean of
+        high-freq oscillation energy.  Tokens currently oscillating above
+        their historical average get suppressed (α → 0).
+
+        Args:
+            state_feat:     [1, n_state, D]  current state BEFORE update
+            new_state_feat: [1, n_state, D]  proposed new state
+            spectral_state: dict  (mutated in-place)
+            config:         model config with spectral hyperparams
+        Returns:
+            alpha: [1, n_state, 1]  modulation factor per token
+        """
+        mu = getattr(config, 'spectral_ema_momentum', 0.95)
+        gamma = getattr(config, 'spectral_running_momentum', 0.95)
+        tau = getattr(config, 'spectral_temperature', 2.0)
+
+        # Update EMA with current (pre-update) state
+        ema = spectral_state['ema']
+        ema = mu * ema + (1 - mu) * state_feat  # [1, n_state, D]
+        spectral_state['ema'] = ema
+
+        # High-freq residual of the *proposed* new state
+        high_freq = new_state_feat - ema                  # [1, n_state, D]
+        energy = high_freq.norm(dim=-1, keepdim=True)     # [1, n_state, 1]
+
+        # Running mean of energy
+        running_e = spectral_state['running_energy']
+        running_e = gamma * running_e + (1 - gamma) * energy
+        spectral_state['running_energy'] = running_e
+
+        # Modulation: suppress when current energy >> running mean
+        ratio = energy / (running_e + 1e-6)               # [1, n_state, 1]
+        alpha = torch.sigmoid(-tau * (ratio - 1.0))       # high ratio → low α
+        return alpha
+
     def forward_recurrent_lighter(self, views, device='cuda', ret_state=False):
         ress = []
         all_state_args = []
         reset_mask = False
+        spectral_state = None  # initialized at frame 0
         for i, _view in enumerate(views):
             view = to_gpu(_view, device)
             device = view["img"].device
@@ -1265,17 +1306,37 @@ class ARCroco3DStereo(CroCoNet):
             update_mask = update_mask[:, None, None].float()
 
             # update with learning rate
-            if i  == 0 or reset_mask:
+            update_type = self.config.model_update_type
+            if i == 0 or reset_mask:
                 update_mask1 = update_mask
+                # Initialize spectral state at frame 0
+                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                    spectral_state = {
+                        'ema': state_feat.clone(),
+                        'running_energy': torch.zeros(
+                            1, state_feat.shape[1], 1,
+                            device=state_feat.device),
+                    }
             else:
-                if self.config.model_update_type == "cut3r":
+                if update_type == "cut3r":
                     update_mask1 = update_mask
-                elif self.config.model_update_type == "ttt3r":
+                elif update_type == "ttt3r":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)') # [12, 16, 768, 1 + 576] -> [1, 768, 1 + 576, 12*16]
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
+                elif update_type == "cut3r_spectral":
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    update_mask1 = update_mask * alpha
+                elif update_type == "ttt3r_spectral":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha
                 else:
-                    raise ValueError(f"Invalid model type: {self.config.model_update_type}")
+                    raise ValueError(f"Invalid model type: {update_type}")
 
             update_mask2 = update_mask
             state_feat = new_state_feat * update_mask1 + state_feat * (
@@ -1292,6 +1353,13 @@ class ARCroco3DStereo(CroCoNet):
                     1 - reset_mask
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
+                # Reset spectral state on scene reset
+                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                    spectral_state = {
+                        'ema': state_feat.clone(),
+                        'running_energy': torch.zeros_like(
+                            spectral_state['running_energy']),
+                    }
 
         if ret_state:
             return ress, views, all_state_args
@@ -1322,6 +1390,7 @@ class ARCroco3DStereo(CroCoNet):
         cross_attn_history = []
         img_shapes_list = []
         reset_mask = False
+        spectral_state = None
 
         for i, _view in enumerate(views):
             view = to_gpu(_view, device)
@@ -1445,28 +1514,33 @@ class ARCroco3DStereo(CroCoNet):
             update_mask = (img_mask_val & update_val) if update_val is not None else img_mask_val
             update_mask = update_mask[:, None, None].float()
 
+            update_type = self.config.model_update_type
             if i == 0 or reset_mask:
                 update_mask1 = update_mask
+                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                    spectral_state = {
+                        'ema': state_feat.clone(),
+                        'running_energy': torch.zeros(
+                            1, state_feat.shape[1], 1,
+                            device=state_feat.device),
+                    }
             else:
-                if self.config.model_update_type == "cut3r":
+                if update_type == "cut3r":
                     update_mask1 = update_mask
-                elif self.config.model_update_type == "ttt3r":
+                elif update_type == "ttt3r":
                     cross_attn_rearr = rearrange(
                         torch.cat(list(cross_attn_state_raw), dim=0),
                         'l h nstate nimg -> 1 nstate nimg (l h)'
                     )
                     state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None]
-                elif self.config.model_update_type == "ttt3r_conf":
-                    # TTT3R base mask
+                elif update_type == "ttt3r_conf":
                     cross_attn_rearr = rearrange(
                         torch.cat(list(cross_attn_state_raw), dim=0),
                         'l h nstate nimg -> 1 nstate nimg (l h)'
                     )
                     state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
                     ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
-                    # Confidence gate: use current frame's mean confidence
-                    # conf_self shape: (B, H, W, 1), values typically in [1, 10+]
                     conf_scale = getattr(self.config, 'conf_gate_scale', 10.0)
                     if "conf_self" in res:
                         mean_conf = res["conf_self"].mean()
@@ -1476,8 +1550,22 @@ class ARCroco3DStereo(CroCoNet):
                         mean_conf = torch.tensor(conf_scale, device=device)
                     conf_gate = torch.clamp(mean_conf / conf_scale, 0.0, 1.0)
                     update_mask1 = update_mask * ttt3r_mask * conf_gate
+                elif update_type == "cut3r_spectral":
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    update_mask1 = update_mask * alpha
+                elif update_type == "ttt3r_spectral":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha
                 else:
-                    raise ValueError(f"Invalid model type: {self.config.model_update_type}")
+                    raise ValueError(f"Invalid model type: {update_type}")
 
             state_feat = new_state_feat * update_mask1 + state_feat * (1 - update_mask1)
             mem = new_mem * update_mask + mem * (1 - update_mask)
@@ -1487,6 +1575,12 @@ class ARCroco3DStereo(CroCoNet):
                 reset_mask = reset_mask[:, None, None].float()
                 state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
+                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                    spectral_state = {
+                        'ema': state_feat.clone(),
+                        'running_energy': torch.zeros_like(
+                            spectral_state['running_energy']),
+                    }
 
         analysis_data = {
             'state_history': state_history,        # list[T] of [n_state, dec_dim]
