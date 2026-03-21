@@ -67,7 +67,44 @@ def load_gt_depth(depth_path, depth_scale=1000.0):
     return depth
 
 
-def match_depth_path(img_path, depth_dir, dataset='scannet'):
+def load_tum_associations(scene_dir):
+    """Load TUM rgb→depth associations from depth.txt + rgb.txt by nearest timestamp."""
+    rgb_txt   = os.path.join(scene_dir, 'rgb.txt')
+    depth_txt = os.path.join(scene_dir, 'depth.txt')
+    if not (os.path.exists(rgb_txt) and os.path.exists(depth_txt)):
+        return {}
+
+    def parse_txt(path):
+        entries = {}
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    entries[float(parts[0])] = parts[1]
+        return entries
+
+    rgb_entries   = parse_txt(rgb_txt)    # ts → rgb/xxxxx.png
+    depth_entries = parse_txt(depth_txt)  # ts → depth/xxxxx.png
+    depth_ts = sorted(depth_entries.keys())
+
+    assoc = {}  # rgb filename → depth filepath
+    for rts, rpath in rgb_entries.items():
+        # nearest depth timestamp
+        idx = np.searchsorted(depth_ts, rts)
+        idx = min(max(idx, 0), len(depth_ts) - 1)
+        if abs(depth_ts[idx] - rts) < 0.02:   # 20ms tolerance
+            dpath = os.path.join(scene_dir, depth_entries[depth_ts[idx]])
+            assoc[os.path.basename(rpath)] = dpath
+    return assoc
+
+
+def match_depth_path(img_path, depth_dir, dataset='scannet', tum_assoc=None):
+    if dataset == 'tum' and tum_assoc:
+        key = os.path.basename(img_path)
+        return tum_assoc.get(key, None)
     stem = os.path.splitext(os.path.basename(img_path))[0]
     for ext in ('.png', '.PNG'):
         cand = os.path.join(depth_dir, stem + ext)
@@ -101,13 +138,16 @@ def compute_state_oscillation(state_history):
 # ── per-scene evaluation ──────────────────────────────────────────────────────
 
 def eval_scene(model, img_paths, depth_dir, depth_scale, size,
-               max_depth, skip_ratio, warmup, device, dataset):
+               max_depth, skip_ratio, warmup, device, dataset, scene_dir=''):
     from dust3r.model import ARCroco3DStereo
 
     if len(img_paths) < 30:
         return None
 
     all_views = build_views(img_paths, size)
+
+    # TUM depth associations
+    tum_assoc = load_tum_associations(scene_dir) if dataset == 'tum' else {}
 
     # Compute spectral change scores
     imgs_tensor = [v['img'].float() for v in all_views]
@@ -138,43 +178,49 @@ def eval_scene(model, img_paths, depth_dir, depth_scale, size,
     valid = np.isfinite(sc_for_osc) & np.isfinite(osc_full) & (sc_for_osc > 0)
     r_sc_osc = pearsonr(sc_for_osc[valid], osc_full[valid])[0] if valid.sum() > 10 else np.nan
 
-    # Depth errors
-    errors_full, errors_filt = [], []
-    if depth_dir and os.path.isdir(depth_dir):
-        for t, (res, ipath) in enumerate(zip(ress_full, img_paths)):
-            dpath = match_depth_path(ipath, depth_dir, dataset)
-            if dpath is None:
-                continue
-            gt = load_gt_depth(dpath, depth_scale)
-            if gt is None:
-                continue
-            pred_d = res['pts3d_in_self_view'][0, :, :, 2].numpy()
-            err = compute_depth_error(pred_d, gt, max_depth)
-            if not np.isnan(err):
-                errors_full.append(err)
+    # Depth errors — evaluated on the SAME set of frames (kept_indices) for fair comparison.
+    # full_at_kept:  full-sequence predictions at kept frame positions
+    # filt_at_kept:  filtered-sequence predictions at kept frame positions
+    # This isolates the effect of skipping on reconstruction quality,
+    # independent of which frames are selected.
+    errors_full_at_kept, errors_filt = [], []
 
-        for t, (res, orig_idx) in enumerate(zip(ress_filt, kept_indices)):
-            dpath = match_depth_path(img_paths[orig_idx], depth_dir, dataset)
+    # Build a map from original index → position in ress_filt
+    filt_pos = {orig_idx: t for t, orig_idx in enumerate(kept_indices)}
+
+    if depth_dir and os.path.isdir(depth_dir):
+        for orig_idx, res_filt in zip(kept_indices, ress_filt):
+            ipath = img_paths[orig_idx]
+            dpath = match_depth_path(ipath, depth_dir, dataset, tum_assoc)
             if dpath is None:
                 continue
             gt = load_gt_depth(dpath, depth_scale)
             if gt is None:
                 continue
-            pred_d = res['pts3d_in_self_view'][0, :, :, 2].numpy()
-            err = compute_depth_error(pred_d, gt, max_depth)
-            if not np.isnan(err):
-                errors_filt.append(err)
+
+            # Full sequence prediction at this same frame
+            pred_d_full = ress_full[orig_idx]['pts3d_in_self_view'][0, :, :, 2].numpy()
+            err_full = compute_depth_error(pred_d_full, gt, max_depth)
+
+            # Filtered sequence prediction at this frame
+            pred_d_filt = res_filt['pts3d_in_self_view'][0, :, :, 2].numpy()
+            err_filt = compute_depth_error(pred_d_filt, gt, max_depth)
+
+            if not np.isnan(err_full):
+                errors_full_at_kept.append(err_full)
+            if not np.isnan(err_filt):
+                errors_filt.append(err_filt)
 
     return {
-        'skip_rate':    skip_rate,
-        'osc_full':     osc_full.mean(),
-        'osc_filt':     osc_filt.mean(),
-        'osc_reduction': (osc_full.mean() - osc_filt.mean()) / (osc_full.mean() + 1e-8),
-        'r_sc_osc':     r_sc_osc,
-        'err_full':     np.nanmean(errors_full) if errors_full else np.nan,
-        'err_filt':     np.nanmean(errors_filt) if errors_filt else np.nan,
-        'n_full':       len(all_views),
-        'n_filt':       len(kept_views),
+        'skip_rate':     skip_rate,
+        'osc_full':      osc_full.mean(),
+        'osc_filt':      osc_filt.mean(),
+        'r_sc_osc':      r_sc_osc,
+        # Fair comparison: both evaluated on the same kept frames
+        'err_full':      np.nanmean(errors_full_at_kept) if errors_full_at_kept else np.nan,
+        'err_filt':      np.nanmean(errors_filt)         if errors_filt         else np.nan,
+        'n_full':        len(all_views),
+        'n_filt':        len(kept_views),
     }
 
 
@@ -216,6 +262,7 @@ def discover_scenes(args):
                 'name': os.path.basename(sd),
                 'rgb_dir': os.path.join(sd, 'color'),
                 'depth_dir': os.path.join(sd, 'depth'),
+                'scene_dir': sd,
                 'depth_scale': 1000.0,
                 'frame_interval': args.frame_interval,
                 'dataset': 'scannet',
@@ -230,6 +277,7 @@ def discover_scenes(args):
                     'name': os.path.basename(td),
                     'rgb_dir': rgb_dir,
                     'depth_dir': depth_dir,
+                    'scene_dir': td,          # needed for TUM associations
                     'depth_scale': 5000.0,
                     'frame_interval': args.frame_interval,
                     'dataset': 'tum',
@@ -265,7 +313,8 @@ def main():
             r = eval_scene(model, img_paths,
                            scene['depth_dir'], scene['depth_scale'],
                            args.size, args.max_depth,
-                           args.skip_ratio, args.warmup, device, scene['dataset'])
+                           args.skip_ratio, args.warmup, device, scene['dataset'],
+                           scene_dir=scene.get('scene_dir', ''))
         except Exception as e:
             print(f"  [warn] {scene['name']}: {e}")
             continue
