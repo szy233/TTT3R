@@ -1188,66 +1188,63 @@ class ARCroco3DStereo(CroCoNet):
     @staticmethod
     def compute_frame_novelty(img_prev, img_curr):
         """
-        Compute structural novelty of img_curr relative to img_prev using
-        frequency-domain analysis of their difference.
+        Compute the low-frequency structural energy of the inter-frame difference.
 
-        Motivation: redundant frames produce frame differences dominated by
-        high-frequency sensor noise, while genuinely novel frames produce
-        differences with significant low-frequency (structural) content.
-        We use the ratio of low-frequency energy to total energy in the
-        difference image as a proxy for structural novelty.
+        Returns the absolute low-frequency energy (not a ratio), so that
+        redundant frames (tiny changes) produce small values and novel frames
+        (large structural changes) produce large values.  The caller is
+        responsible for adaptive thresholding via a running mean.
 
         Args:
-            img_prev: [B, C, H, W] float tensor, previous frame
+            img_prev: [B, C, H, W] float tensor, previous frame (values in [-1,1])
             img_curr: [B, C, H, W] float tensor, current frame
         Returns:
-            novelty: scalar float in [0, 1], higher = more structurally novel
+            low_freq_energy: scalar float ≥ 0 (un-normalised)
         """
         diff = img_curr - img_prev                        # [B, C, H, W]
-        # Average across batch and channels
         diff_mean = diff.mean(dim=(0, 1))                 # [H, W]
 
         F = torch.fft.fft2(diff_mean)
         power = F.abs() ** 2                              # [H, W]
 
         H, W = power.shape
-        h_cut = max(1, H // 4)
-        w_cut = max(1, W // 4)
+        h_cut = max(1, H // 8)   # top 12.5% of spatial frequencies = low-freq
+        w_cut = max(1, W // 8)
 
-        # Low-frequency region (DC quadrant in shifted spectrum)
-        # Use fftshift-equivalent indexing: DC is at corners in unshifted FFT
         low_freq_energy = (power[:h_cut, :w_cut].sum() +
                            power[:h_cut, -w_cut:].sum() +
                            power[-h_cut:, :w_cut].sum() +
                            power[-h_cut:, -w_cut:].sum())
-        total_energy = power.sum() + 1e-8
-        novelty = (low_freq_energy / total_energy).item()
-        return novelty
+        return low_freq_energy.item()
 
     @staticmethod
-    def filter_views_by_novelty(views, tau_low=0.05, tau_high=0.40,
+    def filter_views_by_novelty(views, skip_ratio=0.3, warmup=10,
                                 always_keep_first=True, device='cpu'):
         """
-        Filter a view sequence, skipping frames with low structural novelty.
+        Adaptively filter a view sequence, skipping the least novel frames.
 
-        Frames where the low-freq energy ratio falls below tau_low are
-        considered redundant and skipped.  Frames above tau_high are treated
-        as scene-change events (always kept).  The first frame is always kept.
+        Uses a running mean of low-frequency structural energy as the reference.
+        A frame is skipped if its energy falls below (skip_ratio * running_mean),
+        i.e., it brings less than skip_ratio of the average structural change.
+        A warmup period ensures the running mean is stable before filtering.
 
         Args:
             views:             list of view dicts (each has 'img' key [B,C,H,W])
-            tau_low:           lower novelty threshold; frames below → skip
-            tau_high:          upper threshold; frames above → force keep
+            skip_ratio:        frames with energy < skip_ratio * running_mean → skip
+            warmup:            number of initial frames always kept (to warm up stats)
             always_keep_first: always include views[0]
             device:            device for FFT computation
         Returns:
             kept_views:    filtered list of view dicts
             kept_indices:  original indices of kept frames
-            novelties:     list of per-frame novelty scores (len = len(views))
+            novelties:     list of per-frame raw novelty energies (len = len(views))
         """
         kept_views = []
         kept_indices = []
-        novelties = [None]  # frame 0 has no previous
+        novelties = [0.0]   # frame 0: no previous frame
+
+        running_mean = None
+        gamma = 0.95        # EMA decay for running mean
 
         img_prev = None
         for i, view in enumerate(views):
@@ -1259,13 +1256,22 @@ class ARCroco3DStereo(CroCoNet):
                     kept_indices.append(i)
                 continue
 
-            nov = ARCroco3DStereo.compute_frame_novelty(img_prev, img)
-            novelties.append(nov)
+            energy = ARCroco3DStereo.compute_frame_novelty(img_prev, img)
+            novelties.append(energy)
 
-            if nov >= tau_low or nov >= tau_high:
+            # Warm-start running mean
+            if running_mean is None:
+                running_mean = energy
+            else:
+                running_mean = gamma * running_mean + (1 - gamma) * energy
+
+            # Always keep during warmup; afterwards skip low-novelty frames
+            is_novel = (i < warmup) or (energy >= skip_ratio * running_mean)
+
+            if is_novel:
                 kept_views.append(view)
                 kept_indices.append(i)
-                img_prev = img  # only advance reference on kept frames
+                img_prev = img  # advance reference only on kept frames
 
         return kept_views, kept_indices, novelties
 

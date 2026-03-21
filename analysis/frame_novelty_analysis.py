@@ -133,10 +133,10 @@ def parse_args():
     p.add_argument('--size',        type=int, default=512)
     p.add_argument('--max_frames',  type=int, default=300)
     p.add_argument('--frame_interval', type=int, default=1)
-    p.add_argument('--tau_low',     type=float, default=0.05,
-                   help='Novelty threshold: skip frames below this')
-    p.add_argument('--tau_high',    type=float, default=0.40,
-                   help='Novelty threshold: force-keep frames above this')
+    p.add_argument('--skip_ratio',  type=float, default=0.3,
+                   help='Skip frames whose energy < skip_ratio * running_mean')
+    p.add_argument('--warmup',      type=int, default=10,
+                   help='Always keep first N frames for running mean warmup')
     p.add_argument('--max_depth',   type=float, default=10.0)
     p.add_argument('--device',      type=str, default='cuda')
     return p.parse_args()
@@ -185,9 +185,9 @@ def main():
     osc_full = compute_state_oscillation(state_hist_full)
 
     # ── Run filtered sequence ─────────────────────────────────────────────────
-    print(f"[filter] tau_low={args.tau_low}, tau_high={args.tau_high}")
+    print(f"[filter] skip_ratio={args.skip_ratio}, warmup={args.warmup}")
     kept_views, kept_indices, _ = ARCroco3DStereo.filter_views_by_novelty(
-        all_views, tau_low=args.tau_low, tau_high=args.tau_high, device='cpu')
+        all_views, skip_ratio=args.skip_ratio, warmup=args.warmup, device='cpu')
     skip_rate = 1.0 - len(kept_views) / len(all_views)
     print(f"[filter] Kept {len(kept_views)}/{len(all_views)} frames "
           f"(skip rate = {skip_rate:.1%})")
@@ -257,7 +257,7 @@ def main():
     with open(os.path.join(args.output_dir, 'novelty_summary.txt'), 'w') as f:
         f.write(f"seq_path: {args.seq_path}\n")
         f.write(f"model_update_type: {args.model_update_type}\n")
-        f.write(f"tau_low={args.tau_low} tau_high={args.tau_high}\n")
+        f.write(f"skip_ratio={args.skip_ratio} warmup={args.warmup}\n")
         f.write(f"total_frames={len(all_views)} kept={len(kept_views)} "
                 f"skip_rate={skip_rate:.3f}\n")
         f.write(f"osc_full={osc_full.mean():.4f}±{osc_full.std():.4f}\n")
@@ -278,10 +278,9 @@ def main():
     # Panel 1: Novelty scores + kept/skipped
     ax1 = fig.add_subplot(gs[0, :])
     ax1.plot(t_full, novelties_arr, color='C0', linewidth=0.8, label='Novelty score')
-    ax1.axhline(args.tau_low, color='red',   linestyle='--', linewidth=1.0,
-                label=f'τ_low={args.tau_low}')
-    ax1.axhline(args.tau_high, color='green', linestyle='--', linewidth=1.0,
-                label=f'τ_high={args.tau_high}')
+    ax1.axhline(np.nanmean(novelties_arr) * args.skip_ratio,
+                color='red', linestyle='--', linewidth=1.0,
+                label=f'skip threshold (≈{args.skip_ratio}×mean)')
     skipped = set(range(len(all_views))) - set(kept_indices)
     for si in skipped:
         ax1.axvspan(si - 0.5, si + 0.5, alpha=0.15, color='red')
