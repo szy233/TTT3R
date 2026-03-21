@@ -1185,6 +1185,90 @@ class ARCroco3DStereo(CroCoNet):
         alpha = torch.sigmoid(-tau * (ratio - 1.0))       # ∈ (0, 1)
         return alpha
 
+    @staticmethod
+    def compute_frame_novelty(img_prev, img_curr):
+        """
+        Compute structural novelty of img_curr relative to img_prev using
+        frequency-domain analysis of their difference.
+
+        Motivation: redundant frames produce frame differences dominated by
+        high-frequency sensor noise, while genuinely novel frames produce
+        differences with significant low-frequency (structural) content.
+        We use the ratio of low-frequency energy to total energy in the
+        difference image as a proxy for structural novelty.
+
+        Args:
+            img_prev: [B, C, H, W] float tensor, previous frame
+            img_curr: [B, C, H, W] float tensor, current frame
+        Returns:
+            novelty: scalar float in [0, 1], higher = more structurally novel
+        """
+        diff = img_curr - img_prev                        # [B, C, H, W]
+        # Average across batch and channels
+        diff_mean = diff.mean(dim=(0, 1))                 # [H, W]
+
+        F = torch.fft.fft2(diff_mean)
+        power = F.abs() ** 2                              # [H, W]
+
+        H, W = power.shape
+        h_cut = max(1, H // 4)
+        w_cut = max(1, W // 4)
+
+        # Low-frequency region (DC quadrant in shifted spectrum)
+        # Use fftshift-equivalent indexing: DC is at corners in unshifted FFT
+        low_freq_energy = (power[:h_cut, :w_cut].sum() +
+                           power[:h_cut, -w_cut:].sum() +
+                           power[-h_cut:, :w_cut].sum() +
+                           power[-h_cut:, -w_cut:].sum())
+        total_energy = power.sum() + 1e-8
+        novelty = (low_freq_energy / total_energy).item()
+        return novelty
+
+    @staticmethod
+    def filter_views_by_novelty(views, tau_low=0.05, tau_high=0.40,
+                                always_keep_first=True, device='cpu'):
+        """
+        Filter a view sequence, skipping frames with low structural novelty.
+
+        Frames where the low-freq energy ratio falls below tau_low are
+        considered redundant and skipped.  Frames above tau_high are treated
+        as scene-change events (always kept).  The first frame is always kept.
+
+        Args:
+            views:             list of view dicts (each has 'img' key [B,C,H,W])
+            tau_low:           lower novelty threshold; frames below → skip
+            tau_high:          upper threshold; frames above → force keep
+            always_keep_first: always include views[0]
+            device:            device for FFT computation
+        Returns:
+            kept_views:    filtered list of view dicts
+            kept_indices:  original indices of kept frames
+            novelties:     list of per-frame novelty scores (len = len(views))
+        """
+        kept_views = []
+        kept_indices = []
+        novelties = [None]  # frame 0 has no previous
+
+        img_prev = None
+        for i, view in enumerate(views):
+            img = view['img'].float().to(device)
+            if i == 0:
+                img_prev = img
+                if always_keep_first:
+                    kept_views.append(view)
+                    kept_indices.append(i)
+                continue
+
+            nov = ARCroco3DStereo.compute_frame_novelty(img_prev, img)
+            novelties.append(nov)
+
+            if nov >= tau_low or nov >= tau_high:
+                kept_views.append(view)
+                kept_indices.append(i)
+                img_prev = img  # only advance reference on kept frames
+
+        return kept_views, kept_indices, novelties
+
     def forward_recurrent_lighter(self, views, device='cuda', ret_state=False):
         ress = []
         all_state_args = []
