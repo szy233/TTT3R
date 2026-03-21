@@ -1170,14 +1170,19 @@ class ARCroco3DStereo(CroCoNet):
         high_freq = new_state_feat - ema                  # [1, n_state, D]
         energy = high_freq.norm(dim=-1, keepdim=True)     # [1, n_state, 1]
 
-        # Running mean of energy
+        # Running mean of energy — warm-start on first call to avoid ratio explosion
         running_e = spectral_state['running_energy']
-        running_e = gamma * running_e + (1 - gamma) * energy
+        if not spectral_state.get('warmed_up', False):
+            running_e = energy.clone()
+            spectral_state['warmed_up'] = True
+        else:
+            running_e = gamma * running_e + (1 - gamma) * energy
         spectral_state['running_energy'] = running_e
 
         # Modulation: suppress when current energy >> running mean
+        # ratio > 1 → oscillating more than usual → alpha ↓
         ratio = energy / (running_e + 1e-6)               # [1, n_state, 1]
-        alpha = torch.sigmoid(-tau * (ratio - 1.0))       # high ratio → low α
+        alpha = torch.sigmoid(-tau * (ratio - 1.0))       # ∈ (0, 1)
         return alpha
 
     def forward_recurrent_lighter(self, views, device='cuda', ret_state=False):
