@@ -57,11 +57,11 @@ def build_views(img_paths, size=512):
     views = []
     for img_dict in imgs:
         view = {k: v for k, v in img_dict.items()}
-        view['img_mask'] = torch.ones(1, dtype=torch.bool)
-        view['ray_mask'] = torch.zeros(1, dtype=torch.bool)
+        view['img_mask'] = torch.tensor(True).unsqueeze(0)
+        view['ray_mask'] = torch.tensor(False).unsqueeze(0)
         view['ray_map']  = torch.zeros(1, *view['img'].shape[1:3], 3)
-        view['update']   = None
-        view['reset']    = None
+        view['update']   = torch.tensor(True).unsqueeze(0)
+        view['reset']    = torch.tensor(False).unsqueeze(0)
         views.append(view)
     return views
 
