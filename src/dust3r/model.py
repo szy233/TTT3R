@@ -1186,6 +1186,46 @@ class ARCroco3DStereo(CroCoNet):
         return alpha
 
     @staticmethod
+    def _mem_spectral_gate(spectral_change, mem_spectral_state, config):
+        """
+        Compute a scalar memory-write gate g_mem ∈ (0, 1) based on frame-level
+        spectral_change relative to its EMA baseline.
+
+        High spectral_change (novel / keyframe) → g_mem → 1.0 (write memory).
+        Low spectral_change (redundant frame)    → g_mem → 0.0 (skip memory write).
+
+        Args:
+            spectral_change:     float, current frame spectral_change score
+            mem_spectral_state:  dict {'ema': float, 'warmed_up': bool}  (mutated in-place)
+            config:              model config
+        Returns:
+            g_mem: float scalar ∈ (0, 1)
+        """
+        gamma = getattr(config, 'mem_gate_ema_gamma', 0.95)
+        tau   = getattr(config, 'mem_gate_tau', 3.0)
+        # Hard threshold ratio: frames below this fraction of the EMA are suppressed
+        skip_ratio = getattr(config, 'mem_gate_skip_ratio', 0.5)
+
+        ema = mem_spectral_state.get('ema', None)
+        if ema is None or not mem_spectral_state.get('warmed_up', False):
+            # Warm-start: first call — initialise EMA to current energy
+            mem_spectral_state['ema'] = spectral_change
+            mem_spectral_state['warmed_up'] = True
+            return 1.0  # always write on first frame
+
+        # Update EMA
+        ema = gamma * ema + (1 - gamma) * spectral_change
+        mem_spectral_state['ema'] = ema
+
+        # Soft gate: sigmoid centred at skip_ratio * ema
+        # ratio = spectral_change / (skip_ratio * ema + eps)
+        # g_mem = sigmoid(tau * (ratio - 1))
+        eps = 1e-6
+        ratio = spectral_change / (skip_ratio * ema + eps)
+        g_mem = torch.sigmoid(torch.tensor(tau * (ratio - 1.0))).item()
+        return g_mem
+
+    @staticmethod
     def compute_frame_spectral_change(img_prev, img_curr):
         """
         Compute the low-frequency structural energy of the inter-frame difference.
@@ -1279,7 +1319,9 @@ class ARCroco3DStereo(CroCoNet):
         ress = []
         all_state_args = []
         reset_mask = False
-        spectral_state = None  # initialized at frame 0
+        spectral_state = None      # initialized at frame 0
+        mem_spectral_state = {}    # for B2 memory gate
+        prev_img = None            # for B2 spectral_change computation
         for i, _view in enumerate(views):
             view = to_gpu(_view, device)
             device = view["img"].device
@@ -1402,6 +1444,9 @@ class ARCroco3DStereo(CroCoNet):
 
             # update with learning rate
             update_type = self.config.model_update_type
+
+            # B2: compute frame-level spectral_change for memory gate
+            curr_img = view["img"].float()
             if i == 0 or reset_mask:
                 update_mask1 = update_mask
                 # Initialize spectral state at frame 0
@@ -1412,6 +1457,10 @@ class ARCroco3DStereo(CroCoNet):
                             1, state_feat.shape[1], 1,
                             device=state_feat.device),
                     }
+                # Reset mem gate state on scene reset
+                if update_type in ("cut3r_memgate", "ttt3r_memgate"):
+                    mem_spectral_state = {}
+                prev_img = curr_img
             else:
                 if update_type == "cut3r":
                     update_mask1 = update_mask
@@ -1430,16 +1479,30 @@ class ARCroco3DStereo(CroCoNet):
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha
+                elif update_type == "cut3r_memgate":
+                    update_mask1 = update_mask  # state update: same as cut3r
+                elif update_type == "ttt3r_memgate":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
-            update_mask2 = update_mask
+            # B2: memory gate (applied for *_memgate types)
+            if update_type in ("cut3r_memgate", "ttt3r_memgate") and i > 0 and not reset_mask:
+                sc = self.compute_frame_spectral_change(prev_img, curr_img)
+                g_mem = self._mem_spectral_gate(sc, mem_spectral_state, self.config)
+                update_mask2 = update_mask * g_mem
+            else:
+                update_mask2 = update_mask
+            prev_img = curr_img
+
             state_feat = new_state_feat * update_mask1 + state_feat * (
                 1 - update_mask1
             )  # update global state
             mem = new_mem * update_mask2 + mem * (
                 1 - update_mask2
-            )  # then update local state
+            )  # then update local state (B2: gated by spectral_change for *_memgate types)
 
             reset_mask = view["reset"]
             if reset_mask is not None:
