@@ -1226,6 +1226,56 @@ class ARCroco3DStereo(CroCoNet):
         return g_mem
 
     @staticmethod
+    def _geo_consistency_gate(curr_depth, geo_state, config):
+        """
+        Compute a scalar geometric consistency gate g_geo ∈ (0, 1) based on
+        scale-invariant depth change between consecutive frames.
+
+        Stable depth structure → g_geo → 1.0 (allow state update).
+        Sudden depth inconsistency → g_geo → 0.0 (suppress state update).
+
+        Args:
+            curr_depth:  [H, W] tensor, predicted depth of current frame
+            geo_state:   dict {'prev_depth': Tensor, 'ema': float, 'warmed_up': bool}
+                         (mutated in-place)
+            config:      model config
+        Returns:
+            g_geo: float scalar ∈ (0, 1)
+        """
+        gamma = getattr(config, 'geo_gate_ema_gamma', 0.95)
+        tau   = getattr(config, 'geo_gate_tau', 3.0)
+
+        prev_depth = geo_state.get('prev_depth', None)
+        geo_state['prev_depth'] = curr_depth.detach().clone()
+
+        if prev_depth is None:
+            geo_state['warmed_up'] = True
+            return 1.0
+
+        # Scale-invariant log-depth change (robust to camera motion)
+        eps = 1e-4
+        valid = (prev_depth > eps) & (curr_depth > eps)
+        if valid.sum() < 100:
+            return 1.0
+
+        log_change = (torch.log(curr_depth[valid]) - torch.log(prev_depth[valid])).abs()
+        change = log_change.mean().item()
+
+        # EMA baseline
+        ema = geo_state.get('ema', None)
+        if ema is None:
+            geo_state['ema'] = change
+            return 1.0
+
+        ema = gamma * ema + (1 - gamma) * change
+        geo_state['ema'] = ema
+
+        # Gate: suppress when change >> baseline (geometric inconsistency)
+        ratio = change / (ema + 1e-6)
+        g_geo = torch.sigmoid(torch.tensor(-tau * (ratio - 1.0))).item()
+        return g_geo
+
+    @staticmethod
     def compute_frame_spectral_change(img_prev, img_curr):
         """
         Compute the low-frequency structural energy of the inter-frame difference.
@@ -1322,6 +1372,7 @@ class ARCroco3DStereo(CroCoNet):
         spectral_state = None      # initialized at frame 0
         mem_spectral_state = {}    # for B2 memory gate
         prev_img = None            # for B2 spectral_change computation
+        geo_state = {}             # for B3 geometric consistency gate
         for i, _view in enumerate(views):
             view = to_gpu(_view, device)
             device = view["img"].device
@@ -1445,6 +1496,9 @@ class ARCroco3DStereo(CroCoNet):
             # update with learning rate
             update_type = self.config.model_update_type
 
+            # B3: extract depth for geometric consistency gate
+            curr_depth = res['pts3d_in_self_view'][0, :, :, 2]  # [H, W], still on GPU
+
             # B2: compute frame-level spectral_change for memory gate
             curr_img = view["img"].float()
             if i == 0 or reset_mask:
@@ -1460,6 +1514,9 @@ class ARCroco3DStereo(CroCoNet):
                 # Reset mem gate state on scene reset
                 if update_type in ("cut3r_memgate", "ttt3r_memgate"):
                     mem_spectral_state = {}
+                # Reset geo gate state on scene reset
+                if update_type in ("cut3r_geogate", "ttt3r_geogate"):
+                    geo_state = {'prev_depth': curr_depth.detach().clone()}
                 prev_img = curr_img
             else:
                 if update_type == "cut3r":
@@ -1485,6 +1542,15 @@ class ARCroco3DStereo(CroCoNet):
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
+                elif update_type == "cut3r_geogate":
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * g_geo
+                elif update_type == "ttt3r_geogate":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * g_geo
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
