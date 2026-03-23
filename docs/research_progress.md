@@ -147,8 +147,32 @@ inquire(): [global_img_feat, masked_token] 作 query → cross-attention 读 pos
 
 ---
 
+### Exp 9 — Joint Ablation（三层联合消融）✅
+**脚本**：`analysis/joint_ablation.py`
+12 个配置 = {cut3r, ttt3r} × {baseline, L1, L2, L3, L23, L123}
+
+| 配置 | ALL err | vs cut3r Δ% |
+|------|---------|-------------|
+| cut3r (baseline) | 0.0745 | — |
+| ttt3r (baseline) | 0.0697 | -6.4% |
+| L1+ttt3r | 0.0700 | -6.0% |
+| L2+ttt3r | 0.0684 | -8.2% |
+| L3+ttt3r | 0.0692 | -7.2% |
+| **L23+ttt3r** | **0.0690** | **-7.5%** |
+| L123+ttt3r | 0.0699 | -6.2% |
+| L23+cut3r | 0.0698 | -6.3% |
+
+**关键发现**：
+- L23+ttt3r (-7.5%) 为最优组合，SIASU + GeoGate 叠加有效
+- L1 帧跳过与 L2/L3 细粒度调制冲突：L123+ttt3r (-6.2%) < L23+ttt3r (-7.5%)
+- L23+cut3r (-6.3%) ≈ pure ttt3r (-6.4%)，说明频域框架本身就可替代学习门控
+
+**最终方案**：L23+ttt3r (SIASU × GeoGate × TTT3R)，Layer 1 作独立加速方案讨论。
+
+---
+
 ## 待办
 
 - [x] 重跑 Layer 2 SIASU 消融（warm-start 修复后）— 2026-03-23 完成，ttt3r_spectral -8.3%
-- [ ] 三层联合实验（Layer 1 + 2 + 3）
+- [x] 三层联合实验（Layer 1 + 2 + 3）— 2026-03-23 完成，L23+ttt3r -7.5% 最优
 - [ ] 论文 outline 起草

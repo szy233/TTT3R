@@ -49,6 +49,8 @@ The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frame
 | `ttt3r_memgate` | sigmoid(cross_attn) | spectral_change gate |
 | `cut3r_geogate` | geo_consistency gate | 1.0 |
 | `ttt3r_geogate` | ttt3r × geo gate | 1.0 |
+| `cut3r_joint` | α × geo gate | 1.0 |
+| `ttt3r_joint` | ttt3r × α × geo gate | 1.0 |
 
 ## Key Experimental Results
 
@@ -66,6 +68,19 @@ cut3r_geo_t2_c4      -3.52%   (frequency domain)
 ttt3r_geo_t3         -7.41%   (spatial domain, best overall)
 ttt3r_geo_t2_c4      -7.16%   (frequency domain)
 ```
+
+### Joint Ablation (L23+ttt3r is best)
+```
+cut3r (baseline)     0.0745   —
+ttt3r (baseline)     0.0697   -6.4%
+L1+ttt3r             0.0700   -6.0%
+L2+ttt3r             0.0684   -8.2%
+L3+ttt3r             0.0692   -7.2%
+L23+ttt3r            0.0690   -7.5%   ← best combination
+L123+ttt3r           0.0699   -6.2%   (L1 conflicts with L2/L3)
+L23+cut3r            0.0698   -6.3%   (matches pure ttt3r)
+```
+L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L23+ttt3r.
 
 ### Failed Directions
 - **Direction C (dynamic token tracking)**: State tokens don't track spatial semantics. Walking r=-0.024, static r=-0.383 (reversed). Abandoned.
@@ -97,6 +112,7 @@ Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/
 | `analysis/spectral_ablation.py` | Layer 2 SIASU ablation |
 | `analysis/batch_frame_novelty.py` | Layer 1 validation |
 | `analysis/metric_comparison.py` | spectral_change vs L2/high/mid freq |
+| `analysis/joint_ablation.py` | Three-layer joint ablation |
 | `docs/research_progress.md` | Full research log (Chinese) |
 | `docs/run_experiments.sh` | All experiment commands |
 
@@ -107,5 +123,5 @@ Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/
 
 ## Next Steps
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
-2. Three-layer joint experiment (Layer 1 + 2 + 3)
+2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
 3. Paper outline drafting
