@@ -1527,7 +1527,8 @@ class ARCroco3DStereo(CroCoNet):
             if i == 0 or reset_mask:
                 update_mask1 = update_mask
                 # Initialize spectral state at frame 0
-                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                   "cut3r_joint", "ttt3r_joint"):
                     spectral_state = {
                         'ema': state_feat.clone(),
                         'running_energy': torch.zeros(
@@ -1538,7 +1539,8 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type in ("cut3r_memgate", "ttt3r_memgate"):
                     mem_spectral_state = {}
                 # Reset geo gate state on scene reset
-                if update_type in ("cut3r_geogate", "ttt3r_geogate"):
+                if update_type in ("cut3r_geogate", "ttt3r_geogate",
+                                   "cut3r_joint", "ttt3r_joint"):
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
                 prev_img = curr_img
             else:
@@ -1574,6 +1576,21 @@ class ARCroco3DStereo(CroCoNet):
                     ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
                     g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * g_geo
+                elif update_type == "cut3r_joint":
+                    # Layer 2 (SIASU) × Layer 3 (GeoGate)
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * alpha * g_geo
+                elif update_type == "ttt3r_joint":
+                    # TTT3R × Layer 2 (SIASU) × Layer 3 (GeoGate)
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -1601,7 +1618,8 @@ class ARCroco3DStereo(CroCoNet):
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
                 # Reset spectral state on scene reset
-                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                   "cut3r_joint", "ttt3r_joint"):
                     spectral_state = {
                         'ema': state_feat.clone(),
                         'running_energy': torch.zeros_like(
@@ -1764,14 +1782,24 @@ class ARCroco3DStereo(CroCoNet):
             update_type = self.config.model_update_type
             if i == 0 or reset_mask:
                 update_mask1 = update_mask
-                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                   "cut3r_joint", "ttt3r_joint"):
                     spectral_state = {
                         'ema': state_feat.clone(),
                         'running_energy': torch.zeros(
                             1, state_feat.shape[1], 1,
                             device=state_feat.device),
                     }
+                if update_type in ("cut3r_geogate", "ttt3r_geogate",
+                                   "cut3r_joint", "ttt3r_joint"):
+                    curr_depth = res['pts3d_in_self_view'][0, :, :, 2]
+                    geo_state = {'prev_depth': curr_depth.detach().clone()}
             else:
+                # Extract depth for geo gate types
+                if update_type in ("cut3r_geogate", "ttt3r_geogate",
+                                   "cut3r_joint", "ttt3r_joint"):
+                    curr_depth = res['pts3d_in_self_view'][0, :, :, 2]
+
                 if update_type == "cut3r":
                     update_mask1 = update_mask
                 elif update_type == "ttt3r":
@@ -1811,6 +1839,34 @@ class ARCroco3DStereo(CroCoNet):
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha
+                elif update_type == "cut3r_geogate":
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * g_geo
+                elif update_type == "ttt3r_geogate":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * g_geo
+                elif update_type == "cut3r_joint":
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * alpha * g_geo
+                elif update_type == "ttt3r_joint":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -1822,7 +1878,8 @@ class ARCroco3DStereo(CroCoNet):
                 reset_mask = reset_mask[:, None, None].float()
                 state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-                if update_type in ("ttt3r_spectral", "cut3r_spectral"):
+                if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                   "cut3r_joint", "ttt3r_joint"):
                     spectral_state = {
                         'ema': state_feat.clone(),
                         'running_energy': torch.zeros_like(
