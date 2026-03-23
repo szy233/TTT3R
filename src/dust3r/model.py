@@ -1229,14 +1229,22 @@ class ARCroco3DStereo(CroCoNet):
     def _geo_consistency_gate(curr_depth, geo_state, config):
         """
         Compute a scalar geometric consistency gate g_geo ∈ (0, 1) based on
-        scale-invariant depth change between consecutive frames.
+        the low-frequency energy of the log-depth difference between
+        consecutive frames (frequency-domain geometric consistency).
 
-        Stable depth structure → g_geo → 1.0 (allow state update).
-        Sudden depth inconsistency → g_geo → 0.0 (suppress state update).
+        Mirrors compute_frame_spectral_change but operates on predicted depth
+        maps instead of RGB, unifying all three layers under frequency-domain
+        analysis:
+          Layer 1: LFE(RGB diff) → frame filtering
+          Layer 2: token trajectory HF energy → state modulation
+          Layer 3: LFE(depth diff) → state update gating  (this method)
+
+        Stable depth structure → low LFE → g_geo → 1.0 (allow update).
+        Sudden geometric change → high LFE → g_geo → 0.0 (suppress update).
 
         Args:
             curr_depth:  [H, W] tensor, predicted depth of current frame
-            geo_state:   dict {'prev_depth': Tensor, 'ema': float, 'warmed_up': bool}
+            geo_state:   dict {'prev_depth': Tensor, 'ema': float}
                          (mutated in-place)
             config:      model config
         Returns:
@@ -1249,19 +1257,31 @@ class ARCroco3DStereo(CroCoNet):
         geo_state['prev_depth'] = curr_depth.detach().clone()
 
         if prev_depth is None:
-            geo_state['warmed_up'] = True
             return 1.0
 
-        # Scale-invariant log-depth change (robust to camera motion)
+        # Log-depth difference (scale-invariant)
         eps = 1e-4
         valid = (prev_depth > eps) & (curr_depth > eps)
         if valid.sum() < 100:
             return 1.0
 
-        log_change = (torch.log(curr_depth[valid]) - torch.log(prev_depth[valid])).abs()
-        change = log_change.mean().item()
+        # Build full-size log-depth diff map (zero where invalid)
+        log_diff = torch.zeros_like(curr_depth)
+        log_diff[valid] = torch.log(curr_depth[valid]) - torch.log(prev_depth[valid])
 
-        # EMA baseline
+        # Frequency-domain: low-frequency energy of depth diff
+        F = torch.fft.fft2(log_diff)
+        power = F.abs() ** 2
+        H, W = power.shape
+        h_cut = max(1, H // 8)
+        w_cut = max(1, W // 8)
+        low_freq_energy = (power[:h_cut, :w_cut].sum() +
+                           power[:h_cut, -w_cut:].sum() +
+                           power[-h_cut:, :w_cut].sum() +
+                           power[-h_cut:, -w_cut:].sum())
+        change = low_freq_energy.item()
+
+        # EMA baseline (warm-start)
         ema = geo_state.get('ema', None)
         if ema is None:
             geo_state['ema'] = change
