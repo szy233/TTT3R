@@ -244,7 +244,7 @@ def main():
     print("\n" + summary)
 
     summary_path = os.path.join(args.output_dir, "memgate_ablation_summary.txt")
-    with open(summary_path, "w") as f:
+    with open(summary_path, "w", encoding="utf-8") as f:
         f.write(summary + "\n")
 
     # ── Plot ──
