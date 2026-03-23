@@ -137,12 +137,18 @@ def main():
 
     # (label, update_type, extra_config)
     configs = [
-        ("cut3r",              "cut3r",         {}),
-        ("ttt3r",              "ttt3r",         {}),
-        ("cut3r_geo_t2",       "cut3r_geogate", {"geo_gate_tau": 2.0}),
-        ("cut3r_geo_t3",       "cut3r_geogate", {"geo_gate_tau": 3.0}),
-        ("cut3r_geo_t5",       "cut3r_geogate", {"geo_gate_tau": 5.0}),
-        ("ttt3r_geo_t3",       "ttt3r_geogate", {"geo_gate_tau": 3.0}),
+        ("cut3r",                "cut3r",         {}),
+        ("ttt3r",                "ttt3r",         {}),
+        # tau sweep (cutoff=4, i.e. top 25% freq)
+        ("cut3r_geo_t2_c4",     "cut3r_geogate", {"geo_gate_tau": 2.0, "geo_gate_freq_cutoff": 4}),
+        ("cut3r_geo_t3_c4",     "cut3r_geogate", {"geo_gate_tau": 3.0, "geo_gate_freq_cutoff": 4}),
+        ("cut3r_geo_t5_c4",     "cut3r_geogate", {"geo_gate_tau": 5.0, "geo_gate_freq_cutoff": 4}),
+        # cutoff sweep (tau=2)
+        ("cut3r_geo_t2_c8",     "cut3r_geogate", {"geo_gate_tau": 2.0, "geo_gate_freq_cutoff": 8}),
+        ("cut3r_geo_t2_c2",     "cut3r_geogate", {"geo_gate_tau": 2.0, "geo_gate_freq_cutoff": 2}),
+        # best combo + ttt3r
+        ("ttt3r_geo_t2_c4",     "ttt3r_geogate", {"geo_gate_tau": 2.0, "geo_gate_freq_cutoff": 4}),
+        ("ttt3r_geo_t3_c4",     "ttt3r_geogate", {"geo_gate_tau": 3.0, "geo_gate_freq_cutoff": 4}),
     ]
 
     all_results = {}

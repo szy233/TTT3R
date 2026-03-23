@@ -1269,12 +1269,15 @@ class ARCroco3DStereo(CroCoNet):
         log_diff = torch.zeros_like(curr_depth)
         log_diff[valid] = torch.log(curr_depth[valid]) - torch.log(prev_depth[valid])
 
-        # Frequency-domain: low-frequency energy of depth diff
+        # Frequency-domain: low+mid frequency energy of depth diff
+        # cutoff_ratio controls how much of the spectrum to include:
+        #   1/8 = only low-freq (structural), 1/4 = low+mid (structural + geometric detail)
+        cutoff_ratio = getattr(config, 'geo_gate_freq_cutoff', 4)  # denominator: H//4, W//4
         F = torch.fft.fft2(log_diff)
         power = F.abs() ** 2
         H, W = power.shape
-        h_cut = max(1, H // 8)
-        w_cut = max(1, W // 8)
+        h_cut = max(1, H // cutoff_ratio)
+        w_cut = max(1, W // cutoff_ratio)
         low_freq_energy = (power[:h_cut, :w_cut].sum() +
                            power[:h_cut, -w_cut:].sum() +
                            power[-h_cut:, :w_cut].sum() +
