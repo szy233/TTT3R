@@ -14,8 +14,8 @@ Usage
 -----
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/memgate_ablation.py \
     --model_path src/cut3r_512_dpt_4_64.pth \
-    --scannet_root /home/szy/research/dataset/scannet_seq \
-    --tum_root /home/szy/research/dataset/tum_dynamics \
+    --scannet_root /mnt/sda/szy/research/dataset/scannet_seq \
+    --tum_root /mnt/sda/szy/research/dataset/tum_dynamics \
     --output_dir analysis_results/memgate_ablation \
     --num_scannet 10 --seed 42
 """

@@ -120,8 +120,8 @@ inquire(): [global_img_feat, masked_token] 作 query → cross-attention 读 pos
 
 | 数据集      | 服务器路径                                     | 深度 scale | 特点        |
 |------------|----------------------------------------------|-----------|------------|
-| ScanNet    | `/home/szy/research/dataset/scannetv2/`       | 1000      | 室内静态     |
-| TUM-dynamics| `/home/szy/research/dataset/tum/`            | 5000      | 动态人物，8序列 |
+| ScanNet    | `/mnt/sda/szy/research/dataset/scannetv2/`       | 1000      | 室内静态     |
+| TUM-dynamics| `/mnt/sda/szy/research/dataset/tum/`            | 5000      | 动态人物，8序列 |
 
 ---
 

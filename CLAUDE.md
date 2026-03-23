@@ -92,8 +92,8 @@ All experiments share: `--seed 42 --size 512 --max_frames 200 --num_scannet 10`
 
 Server paths:
 - Model: `model/cut3r_512_dpt_4_64.pth`
-- ScanNet: `/home/szy/research/dataset/scannetv2`
-- TUM: `/home/szy/research/dataset/tum`
+- ScanNet: `/mnt/sda/szy/research/dataset/scannetv2`
+- TUM: `/mnt/sda/szy/research/dataset/tum`
 - Working dir: `/home/szy/research/TTT3R`
 
 Local paths:
@@ -116,12 +116,74 @@ Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/
 | `docs/research_progress.md` | Full research log (Chinese) |
 | `docs/run_experiments.sh` | All experiment commands |
 
+## Formal Evaluation
+
+### Eval Pipeline
+
+三类标准评测，脚本在 `eval/` 下：
+
+| 评测类型 | 数据集 | 脚本 | 预处理数据路径 |
+|---------|--------|------|--------------|
+| Camera Pose (relpose) | ScanNet, TUM, Sintel | `eval/relpose/launch.py` | `data/long_scannet_s3/`, `data/long_tum_s1/` |
+| Video Depth | KITTI, Bonn, Sintel | `eval/video_depth/launch.py` | `data/long_kitti_s1/`, `data/long_bonn_s1/` |
+| 3D Reconstruction | 7scenes | `eval/mv_recon/launch.py` | — |
+
+### 运行方式
+
+对比三个配置：`cut3r`（baseline）, `ttt3r`, `ttt3r_joint`（L23+ttt3r，最终方法）。
+
+```bash
+# 双卡并行: GPU0 跑 ScanNet, GPU1 跑 TUM
+conda activate ttt3r
+
+# GPU0 — ScanNet relpose
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src accelerate launch --num_processes 1 --main_process_port 29560 \
+    eval/relpose/launch.py \
+    --weights model/cut3r_512_dpt_4_64.pth --output_dir eval_results/relpose/scannet_s3_1000/<config> \
+    --eval_dataset scannet_s3_1000 --size 512 --model_update_type <config> \
+    --spectral_temperature 1.0 --geo_gate_tau 2.0 --geo_gate_freq_cutoff 4
+
+# GPU1 — TUM relpose
+CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main_process_port 29561 \
+    eval/relpose/launch.py \
+    --weights model/cut3r_512_dpt_4_64.pth --output_dir eval_results/relpose/tum_s1_1000/<config> \
+    --eval_dataset tum_s1_1000 --size 512 --model_update_type <config> \
+    --spectral_temperature 1.0 --geo_gate_tau 2.0 --geo_gate_freq_cutoff 4
+```
+
+并行脚本: `eval/run_parallel_eval.sh`（nohup 双卡，日志 `eval/gpu0_scannet.log`, `eval/gpu1_tum.log`）
+
+### 预处理
+
+```bash
+conda activate ttt3r
+python datasets_preprocess/prepare_scannet_local.py   # → data/long_scannet_s3/ (41 scenes)
+python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8 sequences)
+```
+
+原始数据在 `/mnt/sda/szy/research/dataset/`（从根分区迁出）。
+
+### 数据集状态（2026-03-24）
+
+| 数据集 | 原始数据 | 预处理 | 评测状态 |
+|--------|---------|--------|---------|
+| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` | ✅ `data/long_scannet_s3/` (41 scenes) | 🔄 运行中 |
+| TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | 🔄 运行中 |
+| Sintel | ❌ 未下载 | — | 待定 |
+| Bonn | ❌ 未下载 | — | 待定 |
+| KITTI | ❌ 未下载 | — | 待定 |
+| 7scenes | ❌ 未下载 | — | 待定 |
+
+结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
+
 ## Known Issues / Fixes Applied
 1. **SIASU warm-start**: `running_energy` init 0 → ratio explosion → state frozen. Fixed: warm-start on first call.
 2. **TUM depth matching**: Timestamp-based association needed (not stem-based).
 3. **Fair evaluation**: Compare full vs filtered on same `kept_indices`.
+4. **ScanNet pose 截断**: 根分区满时 `prepare_scannet_local.py` 写 pose 文件被截断（scene0707_00）。已修复重新生成。
 
 ## Next Steps
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
 2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
-3. Paper outline drafting
+3. 🔄 Formal relpose eval on ScanNet + TUM (2026-03-24, running)
+4. Paper outline drafting

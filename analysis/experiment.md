@@ -179,7 +179,7 @@ freq_map_2d = freq_map.reshape(H_p, W_p)
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/freq_error_analysis.py \
     --model_path /home/szy/research/TTT3R/model/cut3r_512_dpt_4_64.pth \
-    --seq_path /home/szy/research/dataset/scannetv2/scene0707_00/color \
+    --seq_path /mnt/sda/szy/research/dataset/scannetv2/scene0707_00/color \
     --output_dir analysis_results/expA_scannet_scene0707_ttt3r \
     --model_update_type ttt3r \
     --size 512 \
@@ -194,7 +194,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/freq_error_analysis.py \
 # ttt3r
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/freq_error_analysis.py \
     --model_path /home/szy/research/TTT3R/model/cut3r_512_dpt_4_64.pth \
-    --seq_path /home/szy/research/dataset/scannetv2/scene0707_00/color \
+    --seq_path /mnt/sda/szy/research/dataset/scannetv2/scene0707_00/color \
     --output_dir analysis_results/expA_scannet_ttt3r \
     --model_update_type ttt3r \
     --size 512 --frame_interval 5 --max_frames 200
@@ -202,7 +202,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/freq_error_analysis.py \
 # cut3r
 CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src python analysis/freq_error_analysis.py \
     --model_path /home/szy/research/TTT3R/model/cut3r_512_dpt_4_64.pth \
-    --seq_path /home/szy/research/dataset/scannetv2/scene0707_00/color \
+    --seq_path /mnt/sda/szy/research/dataset/scannetv2/scene0707_00/color \
     --output_dir analysis_results/expA_scannet_cut3r \
     --model_update_type cut3r \
     --size 512 --frame_interval 5 --max_frames 200

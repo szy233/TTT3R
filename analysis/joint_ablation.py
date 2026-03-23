@@ -12,8 +12,8 @@ Usage
 -----
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python analysis/joint_ablation.py \
     --model_path model/cut3r_512_dpt_4_64.pth \
-    --scannet_root /home/szy/research/dataset/scannetv2 \
-    --tum_root /home/szy/research/dataset/tum \
+    --scannet_root /mnt/sda/szy/research/dataset/scannetv2 \
+    --tum_root /mnt/sda/szy/research/dataset/tum \
     --output_dir analysis_results/joint_ablation \
     --num_scannet 10 --seed 42 --n_workers 4
 """
