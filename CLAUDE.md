@@ -23,11 +23,12 @@ The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frame
 - **Result**: Skip 35% frames, TTT3R depth -3.1% on ScanNet
 - **Code**: `compute_frame_spectral_change()`, `filter_views_by_spectral_change()`
 
-### Layer 2 — Token-Level State Modulation (SIASU, needs re-run)
+### Layer 2 — Token-Level State Modulation (SIASU, validated)
 - **Signal**: Per-token high-freq residual energy of state trajectory (EMA low-pass → residual)
 - **Action**: `alpha_k = sigmoid(-τ × (energy_k / running_mean - 1))` per token
 - **Code**: `_spectral_modulation()`, update types `cut3r_spectral` / `ttt3r_spectral`
-- **Status**: Bug fixed (warm-start), ablation needs re-run
+- **Result**: cut3r_spectral -5.0%, ttt3r_spectral -8.3% (vs cut3r). τ insensitive, use τ=1
+- **Status**: Validated (2026-03-23)
 
 ### Layer 3 — Geometric Consistency Gate (validated, best result)
 - **Signal**: `LFE(FFT2(log_depth_diff))` — low-freq energy of log-depth change
@@ -105,6 +106,6 @@ Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/
 3. **Fair evaluation**: Compare full vs filtered on same `kept_indices`.
 
 ## Next Steps
-1. Re-run Layer 2 SIASU ablation (warm-start fixed)
+1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
 2. Three-layer joint experiment (Layer 1 + 2 + 3)
 3. Paper outline drafting

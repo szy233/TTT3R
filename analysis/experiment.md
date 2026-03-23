@@ -53,10 +53,12 @@ python analysis/state_freq_analysis.py \
 ### ScanNet（室内，慢速运动）
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python analysis/state_freq_analysis.py \
-    --model_path src/cut3r_512_dpt_4_64.pth \
-    --seq_path /data/scannet/scans/scene0000_00/color \
-    --output_dir analysis_results/exp1_scannet_scene0000 \
+CUDA_VISIBLE_DEVICES=0 \
+    PYTHONPATH=/home/szy/research/TTT3R/src:$PYTHONPATH \
+    python analysis/state_freq_analysis.py \
+    --model_path model/cut3r_512_dpt_4_64.pth \
+    --seq_path /home/szy/research/TTT3R/tmp/taylor/color \
+    --output_dir analysis_results/westlake \
     --model_update_type ttt3r \
     --size 512 \
     --frame_interval 5 \

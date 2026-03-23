@@ -12,7 +12,7 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-MODEL_PATH="src/cut3r_512_dpt_4_64.pth"
+MODEL_PATH="model/cut3r_512_dpt_4_64.pth"
 SCANNET_ROOT="/home/szy/research/dataset/scannetv2"
 TUM_ROOT="/home/szy/research/dataset/tum"
 GPU_ID=0
