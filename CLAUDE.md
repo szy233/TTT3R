@@ -169,9 +169,9 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 |--------|---------|--------|---------|
 | ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` (100 test scenes) | ✅ `data/long_scannet_s3/` (96 scenes; 4 empty skipped) | ✅ 完成 (65 valid, 31 GT含-inf skip) |
 | TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | ✅ 完成 |
-| Sintel | ❌ 未下载 | — | 待定 |
-| Bonn | ❌ 未下载 | — | 待定 |
-| KITTI | ❌ 未下载 | — | 待定 |
+| Sintel | ✅ `data/sintel/` | — (直接使用) | ✅ 完成 |
+| Bonn | ✅ `data/long_bonn_s1/` | ✅ 预处理完成 | ✅ 完成 |
+| KITTI | ✅ `data/long_kitti_s1/` | ✅ 预处理完成 | ✅ 完成 |
 | 7scenes | ❌ 未下载 | — | 待定 |
 
 结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
@@ -196,6 +196,26 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 
 **分析**: ATE 大幅改善（ScanNet -68%, TUM -64%），RPE_t/RPE_r 略有上升，说明方法显著提升全局轨迹一致性，逐帧相对误差有小幅代价。31 个 Eigenvalue failure 在三配置间一致，不影响公平对比。
 
+### Video Depth 评测结果（2026-03-24）
+
+**Abs Rel ↓**
+
+| Config | KITTI | Bonn | Sintel |
+|--------|-------|------|--------|
+| cut3r (baseline) | 0.1515 | 0.0990 | 1.0217 |
+| ttt3r | 0.1319 (-12.9%) | 0.0997 (+0.7%) | 0.9776 (-4.3%) |
+| **ttt3r_joint** | **0.1344** (-11.3%) | **0.0941** (-5.0%) | **0.9173** (-10.2%) |
+
+**δ < 1.25 ↑**
+
+| Config | KITTI | Bonn | Sintel |
+|--------|-------|------|--------|
+| cut3r (baseline) | 0.8043 | 0.9061 | 0.2377 |
+| ttt3r | 0.8653 | 0.9214 | 0.2324 |
+| **ttt3r_joint** | 0.8577 | **0.9343** | **0.2472** |
+
+**分析**: ttt3r_joint 在三个数据集上 Abs Rel 全面优于 baseline（KITTI -11.3%, Bonn -5.0%, Sintel -10.2%）。KITTI 上纯 ttt3r 略优于 joint，Bonn 和 Sintel 上 joint 最佳。
+
 ## Known Issues / Fixes Applied
 1. **SIASU warm-start**: `running_energy` init 0 → ratio explosion → state frozen. Fixed: warm-start on first call.
 2. **TUM depth matching**: Timestamp-based association needed (not stem-based).
@@ -207,6 +227,6 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
 2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
 3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
-4. Video Depth eval (需下载 KITTI, Bonn, Sintel)
+4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
 5. 3D Reconstruction eval (需下载 7scenes)
 6. Paper outline drafting
