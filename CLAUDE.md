@@ -157,7 +157,7 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 
 ```bash
 conda activate ttt3r
-python datasets_preprocess/prepare_scannet_local.py   # → data/long_scannet_s3/ (41 scenes)
+python datasets_preprocess/prepare_scannet_local.py   # → data/long_scannet_s3/ (96 scenes, 4 empty skipped from 100 test scenes)
 python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8 sequences)
 ```
 
@@ -167,7 +167,7 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 
 | 数据集 | 原始数据 | 预处理 | 评测状态 |
 |--------|---------|--------|---------|
-| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` | ✅ `data/long_scannet_s3/` (41 scenes) | ✅ 完成 |
+| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` (100 test scenes) | ✅ `data/long_scannet_s3/` (96 scenes; 4 empty skipped) | ✅ 完成 (65 valid, 31 GT含-inf skip) |
 | TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | ✅ 完成 |
 | Sintel | ❌ 未下载 | — | 待定 |
 | Bonn | ❌ 未下载 | — | 待定 |
@@ -178,7 +178,7 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 
 ### Relpose 评测结果（2026-03-24）
 
-**ScanNet（65 scenes, 31 Eigenvalue convergence failures，三配置一致）**
+**ScanNet（96 scenes 中 65 valid, 31 skip — GT pose 含 -inf 导致 evo Umeyama eigh 不收敛，三配置一致，与原论文行为对齐）**
 
 | Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
 |--------|----------------|-------------------|-------------------|
@@ -201,6 +201,7 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 2. **TUM depth matching**: Timestamp-based association needed (not stem-based).
 3. **Fair evaluation**: Compare full vs filtered on same `kept_indices`.
 4. **ScanNet pose 截断**: 根分区满时 `prepare_scannet_local.py` 写 pose 文件被截断（scene0707_00）。已修复重新生成。
+5. **ScanNet 31 scene Eigenvalue failure**: GT pose 含 -inf（深度传感器丢失追踪），evo Umeyama `eigh()` 不收敛。与原论文行为一致（同样 skip），不影响公平对比。4 个 scene (0777-0780) .sens 未解压，预处理跳过。
 
 ## Next Steps
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
