@@ -167,14 +167,34 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 
 | 数据集 | 原始数据 | 预处理 | 评测状态 |
 |--------|---------|--------|---------|
-| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` | ✅ `data/long_scannet_s3/` (41 scenes) | 🔄 运行中 |
-| TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | 🔄 运行中 |
+| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` | ✅ `data/long_scannet_s3/` (41 scenes) | ✅ 完成 |
+| TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | ✅ 完成 |
 | Sintel | ❌ 未下载 | — | 待定 |
 | Bonn | ❌ 未下载 | — | 待定 |
 | KITTI | ❌ 未下载 | — | 待定 |
 | 7scenes | ❌ 未下载 | — | 待定 |
 
 结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
+
+### Relpose 评测结果（2026-03-24）
+
+**ScanNet（65 scenes, 31 Eigenvalue convergence failures，三配置一致）**
+
+| Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
+|--------|----------------|-------------------|-------------------|
+| cut3r (baseline) | 0.6713 | 0.0322 | 0.8987 |
+| ttt3r | 0.3519 (-47.6%) | 0.0350 | 0.9105 |
+| **ttt3r_joint** | **0.2143** (-68.1%) | 0.0449 | 1.0805 |
+
+**TUM（8 sequences，全部成功）**
+
+| Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
+|--------|----------------|-------------------|-------------------|
+| cut3r (baseline) | 0.1641 | 0.0072 | 0.5655 |
+| ttt3r | 0.1043 (-36.4%) | 0.0091 | 0.4859 |
+| **ttt3r_joint** | **0.0589** (-64.1%) | 0.0103 | 0.4758 |
+
+**分析**: ATE 大幅改善（ScanNet -68%, TUM -64%），RPE_t/RPE_r 略有上升，说明方法显著提升全局轨迹一致性，逐帧相对误差有小幅代价。31 个 Eigenvalue failure 在三配置间一致，不影响公平对比。
 
 ## Known Issues / Fixes Applied
 1. **SIASU warm-start**: `running_energy` init 0 → ratio explosion → state frozen. Fixed: warm-start on first call.
@@ -185,5 +205,7 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 ## Next Steps
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
 2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
-3. 🔄 Formal relpose eval on ScanNet + TUM (2026-03-24, running)
-4. Paper outline drafting
+3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
+4. Video Depth eval (需下载 KITTI, Bonn, Sintel)
+5. 3D Reconstruction eval (需下载 7scenes)
+6. Paper outline drafting
