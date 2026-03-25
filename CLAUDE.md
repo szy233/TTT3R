@@ -172,7 +172,7 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 | Sintel | ✅ `data/sintel/` | — (直接使用) | ✅ 完成 |
 | Bonn | ✅ `data/long_bonn_s1/` | ✅ 预处理完成 | ✅ 完成 |
 | KITTI | ✅ `data/long_kitti_s1/` | ✅ 预处理完成 | ✅ 完成 |
-| 7scenes | ✅ 已下载 | ✅ 预处理完成 (18 seqs, 7 scenes) | ⏳ cut3r/ttt3r 完成, ttt3r_joint 运行中 |
+| 7scenes | ✅ 已下载 | ✅ 预处理完成 (18 seqs, 7 scenes) | ✅ 完成 |
 
 结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
 
@@ -225,8 +225,8 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 | Config | Acc ↓ | Comp ↓ | NC ↑ | NC_med ↑ |
 |--------|-------|--------|------|----------|
 | cut3r (baseline) | 0.092 | 0.048 | 0.563 | 0.596 |
-| ttt3r | **0.027** (-70.7%) | **0.023** (-52.1%) | **0.581** (+3.2%) | **0.625** (+4.9%) |
-| ttt3r_joint | ⏳ 运行中 | ⏳ | ⏳ | ⏳ |
+| ttt3r | 0.027 (-70.7%) | 0.023 (-52.1%) | 0.581 (+3.2%) | 0.625 (+4.9%) |
+| **ttt3r_joint** | **0.021** (-77.2%) | **0.022** (-54.2%) | 0.579 (+2.8%) | 0.622 (+4.4%) |
 
 完整指标（mean）：
 
@@ -234,8 +234,9 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 |--------|-------|--------|-------|-------|-----------|------------|-----------|-----------|
 | cut3r | 0.092 | 0.048 | 0.582 | 0.545 | 0.054 | 0.018 | 0.627 | 0.566 |
 | ttt3r | 0.027 | 0.023 | 0.600 | 0.561 | 0.015 | 0.005 | 0.657 | 0.593 |
+| ttt3r_joint | 0.021 | 0.022 | 0.594 | 0.565 | 0.009 | 0.004 | 0.646 | 0.598 |
 
-**分析**: ttt3r 在 3D 重建上改善巨大，Accuracy -70.7%, Completeness -52.1%，法向一致性也有提升。
+**分析**: ttt3r_joint 在 3D 重建上表现最佳，Accuracy -77.2%, Completeness -54.2%。纯 ttt3r 也有大幅改善（Acc -70.7%）。法向一致性均有提升（NC +2~5%）。
 
 **Bug fix (2026-03-25)**: `_forward_impl()` 原先只支持 `cut3r`/`ttt3r`，`mv_recon/launch.py` 调用 `model(batch)` → `forward()` → `_forward_impl()`，导致 `ttt3r_joint` 报 `Invalid model type`。已补全所有 update type 支持（spectral, geogate, joint 等），与 `inference_step` 路径对齐。日志: `eval/7scenes_recon_joint.log`。
 
@@ -252,5 +253,5 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
 3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
 4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
-5. ~~3D Reconstruction eval (需下载 7scenes)~~ 部分完成 (2026-03-25). cut3r/ttt3r 完成; ttt3r_joint 运行中 (GPU1, ~3h).
+5. ~~3D Reconstruction eval (需下载 7scenes)~~ Done (2026-03-25). Acc -77.2%, Comp -54.2% (ttt3r_joint).
 6. Paper outline drafting
