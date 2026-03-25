@@ -40,6 +40,9 @@ def get_args_parser():
     parser.add_argument("--freeze", action="store_true")
     parser.add_argument("--max_frames", type=int, default=None, help="max frames limit")
     parser.add_argument("--model_update_type", type=str, default="cut3r", help="model update type")
+    parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
+    parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
+    parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
     parser.add_argument("--voxel_size", type=float, default=0.0, help="voxel size for voxel grid downsampling, 0 means no downsampling")
     return parser
 
@@ -58,7 +61,7 @@ def main(args):
     datasets_all = {
         "7scenes": SevenScenes(
             split="test",
-            ROOT="/home/share/Dataset/3D_scene/7scenes/", # "./data/7scenes",
+            ROOT="./data/7scenes",
             resolution=resolution,
             num_seq=1,
             full_video=True,
@@ -103,6 +106,9 @@ def main(args):
 
     model = ARCroco3DStereo.from_pretrained(args.weights).to(device)
     model.config.model_update_type = args.model_update_type
+    model.config.spectral_temperature = args.spectral_temperature
+    model.config.geo_gate_tau = args.geo_gate_tau
+    model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
 
     model.eval()
     # else:

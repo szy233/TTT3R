@@ -51,8 +51,11 @@ def get_args_parser():
         "--model_update_type",
         type=str,
         default="cut3r",
-        help="model type for state update strategy: cut3r or ttt3r",
+        help="model type for state update strategy: cut3r, ttt3r, ttt3r_joint, etc.",
     )
+    parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
+    parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
+    parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
 
     parser.add_argument(
         "--pose_eval_stride", default=1, type=int, help="stride for pose evaluation"
@@ -459,7 +462,10 @@ if __name__ == "__main__":
 
     model = ARCroco3DStereo.from_pretrained(args.weights)
     
-    # set model type
+    # set model type and frequency-domain hyperparameters
     model.config.model_update_type = args.model_update_type
+    model.config.spectral_temperature = args.spectral_temperature
+    model.config.geo_gate_tau = args.geo_gate_tau
+    model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
 
     eval_pose_estimation(args, model, save_dir=args.output_dir)
