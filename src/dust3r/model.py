@@ -895,17 +895,70 @@ class ARCroco3DStereo(CroCoNet):
             update_mask = update_mask[:, None, None].float()
 
             # update with learning rate
-            if i  == 0:
+            update_type = self.config.model_update_type
+
+            # Extract depth for geo gate types
+            if update_type in ("cut3r_geogate", "ttt3r_geogate",
+                               "cut3r_joint", "ttt3r_joint"):
+                curr_depth = res['pts3d_in_self_view'][0, :, :, 2]  # [H, W]
+
+            if i == 0:
                 update_mask1 = update_mask
+                # Initialize spectral state
+                if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                   "cut3r_joint", "ttt3r_joint"):
+                    spectral_state = {
+                        'ema': state_feat.clone(),
+                        'running_energy': torch.zeros(
+                            1, state_feat.shape[1], 1,
+                            device=state_feat.device),
+                    }
+                # Initialize geo gate state
+                if update_type in ("cut3r_geogate", "ttt3r_geogate",
+                                   "cut3r_joint", "ttt3r_joint"):
+                    geo_state = {'prev_depth': curr_depth.detach().clone()}
             else:
-                if self.config.model_update_type == "cut3r":
+                if update_type == "cut3r":
                     update_mask1 = update_mask
-                elif self.config.model_update_type == "ttt3r":
+                elif update_type == "ttt3r":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)') # [12, 16, 768, 1 + 576] -> [1, 768, 1 + 576, 12*16]
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
+                elif update_type == "cut3r_spectral":
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    update_mask1 = update_mask * alpha
+                elif update_type == "ttt3r_spectral":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha
+                elif update_type == "cut3r_geogate":
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * g_geo
+                elif update_type == "ttt3r_geogate":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * g_geo
+                elif update_type == "cut3r_joint":
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * alpha * g_geo
+                elif update_type == "ttt3r_joint":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._spectral_modulation(
+                        state_feat, new_state_feat, spectral_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
                 else:
-                    raise ValueError(f"Invalid model type: {self.config.model_update_type}")
+                    raise ValueError(f"Invalid model type: {update_type}")
 
             update_mask2 = update_mask
             state_feat = new_state_feat * update_mask1 + state_feat * (
@@ -921,6 +974,14 @@ class ARCroco3DStereo(CroCoNet):
                     1 - reset_mask
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
+                # Reset spectral state on scene reset
+                if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                   "cut3r_joint", "ttt3r_joint"):
+                    spectral_state = {
+                        'ema': state_feat.clone(),
+                        'running_energy': torch.zeros_like(
+                            spectral_state['running_energy']),
+                    }
             all_state_args.append(
                 (state_feat, state_pos, init_state_feat, mem, init_mem)
             )

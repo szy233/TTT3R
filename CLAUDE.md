@@ -172,7 +172,7 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 | Sintel | ✅ `data/sintel/` | — (直接使用) | ✅ 完成 |
 | Bonn | ✅ `data/long_bonn_s1/` | ✅ 预处理完成 | ✅ 完成 |
 | KITTI | ✅ `data/long_kitti_s1/` | ✅ 预处理完成 | ✅ 完成 |
-| 7scenes | ❌ 未下载 | — | 待定 |
+| 7scenes | ✅ 已下载 | ✅ 预处理完成 (18 seqs, 7 scenes) | ⏳ cut3r/ttt3r 完成, ttt3r_joint 运行中 |
 
 结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
 
@@ -216,17 +216,41 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 
 **分析**: ttt3r_joint 在三个数据集上 Abs Rel 全面优于 baseline（KITTI -11.3%, Bonn -5.0%, Sintel -10.2%）。KITTI 上纯 ttt3r 略优于 joint，Bonn 和 Sintel 上 joint 最佳。
 
+### 3D Reconstruction 评测结果（2026-03-25）
+
+**7scenes（18 sequences, 7 scenes, 每 seq 限 200 帧）**
+
+结果路径: `eval_results/video_recon/7scenes_200/<config>/7scenes/logs_all.txt`
+
+| Config | Acc ↓ | Comp ↓ | NC ↑ | NC_med ↑ |
+|--------|-------|--------|------|----------|
+| cut3r (baseline) | 0.092 | 0.048 | 0.563 | 0.596 |
+| ttt3r | **0.027** (-70.7%) | **0.023** (-52.1%) | **0.581** (+3.2%) | **0.625** (+4.9%) |
+| ttt3r_joint | ⏳ 运行中 | ⏳ | ⏳ | ⏳ |
+
+完整指标（mean）：
+
+| Config | Acc ↓ | Comp ↓ | NC1 ↑ | NC2 ↑ | Acc_med ↓ | Comp_med ↓ | NC1_med ↑ | NC2_med ↑ |
+|--------|-------|--------|-------|-------|-----------|------------|-----------|-----------|
+| cut3r | 0.092 | 0.048 | 0.582 | 0.545 | 0.054 | 0.018 | 0.627 | 0.566 |
+| ttt3r | 0.027 | 0.023 | 0.600 | 0.561 | 0.015 | 0.005 | 0.657 | 0.593 |
+
+**分析**: ttt3r 在 3D 重建上改善巨大，Accuracy -70.7%, Completeness -52.1%，法向一致性也有提升。
+
+**Bug fix (2026-03-25)**: `_forward_impl()` 原先只支持 `cut3r`/`ttt3r`，`mv_recon/launch.py` 调用 `model(batch)` → `forward()` → `_forward_impl()`，导致 `ttt3r_joint` 报 `Invalid model type`。已补全所有 update type 支持（spectral, geogate, joint 等），与 `inference_step` 路径对齐。日志: `eval/7scenes_recon_joint.log`。
+
 ## Known Issues / Fixes Applied
 1. **SIASU warm-start**: `running_energy` init 0 → ratio explosion → state frozen. Fixed: warm-start on first call.
 2. **TUM depth matching**: Timestamp-based association needed (not stem-based).
 3. **Fair evaluation**: Compare full vs filtered on same `kept_indices`.
 4. **ScanNet pose 截断**: 根分区满时 `prepare_scannet_local.py` 写 pose 文件被截断（scene0707_00）。已修复重新生成。
 5. **ScanNet 31 scene Eigenvalue failure**: GT pose 含 -inf（深度传感器丢失追踪），evo Umeyama `eigh()` 不收敛。与原论文行为一致（同样 skip），不影响公平对比。4 个 scene (0777-0780) .sens 未解压，预处理跳过。
+6. **`_forward_impl` 缺少扩展 update type**: 只支持 cut3r/ttt3r，导致 mv_recon 评测 ttt3r_joint 失败。已补全所有类型（spectral, geogate, memgate, joint）并添加 spectral_state/geo_state 的 reset 逻辑。
 
 ## Next Steps
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
 2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
 3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
 4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
-5. 3D Reconstruction eval (需下载 7scenes)
+5. ~~3D Reconstruction eval (需下载 7scenes)~~ 部分完成 (2026-03-25). cut3r/ttt3r 完成; ttt3r_joint 运行中 (GPU1, ~3h).
 6. Paper outline drafting
