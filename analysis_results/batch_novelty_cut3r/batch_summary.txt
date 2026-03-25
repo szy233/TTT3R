@@ -1,0 +1,50 @@
+======================================================================
+BATCH LAYER 1 VALIDATION SUMMARY
+======================================================================
+
+Model: cut3r  |  skip_ratio=0.3
+Scenes: 18 (10 ScanNet, 8 TUM)
+
+[ALL]  n=18
+  Skip rate          : 22.7% ± 17.5%
+  r(sc, oscillation) : +0.259 ± 0.162
+  Depth err (full)   : 0.0436 ± 0.0100
+  Depth err (filt)   : 0.0460 ± 0.0134
+  Depth err change   : +5.6%
+
+[ScanNet]  n=10
+  Skip rate          : 35.3% ± 13.5%
+  r(sc, oscillation) : +0.384 ± 0.018
+  Depth err (full)   : 0.0436 ± 0.0100
+  Depth err (filt)   : 0.0460 ± 0.0134
+  Depth err change   : +5.6%
+
+[TUM]  n=8
+  Skip rate          : 7.0% ± 4.8%
+  r(sc, oscillation) : +0.104 ± 0.124
+  Depth err (full)   : nan ± nan
+  Depth err (filt)   : nan ± nan
+  Depth err change   : +nan%
+
+--- Per-scene ---
+Scene                                          dataset   skip  r_sc_osc  err_full  err_filt    chg%
+----------------------------------------------------------------------------------------------------
+rgbd_dataset_freiburg3_sitting_halfsphere          tum 10.3%    +0.170       nan       nan    +nan%
+rgbd_dataset_freiburg3_sitting_rpy                 tum  5.3%    -0.160       nan       nan    +nan%
+rgbd_dataset_freiburg3_sitting_static              tum 18.0%    +0.319       nan       nan    +nan%
+rgbd_dataset_freiburg3_sitting_xyz                 tum  7.0%    +0.088       nan       nan    +nan%
+rgbd_dataset_freiburg3_walking_halfsphere          tum  2.3%    +0.130       nan       nan    +nan%
+rgbd_dataset_freiburg3_walking_rpy                 tum  4.0%    +0.126       nan       nan    +nan%
+rgbd_dataset_freiburg3_walking_static              tum  6.3%    +0.080       nan       nan    +nan%
+rgbd_dataset_freiburg3_walking_xyz                 tum  3.0%    +0.075       nan       nan    +nan%
+scene0707_00                                   scannet 33.7%    +0.408    0.0384    0.0373    -2.9%
+scene0717_00                                   scannet 37.7%    +0.369    0.0434    0.0420    -3.2%
+scene0740_00                                   scannet 46.7%    +0.391    0.0643    0.0807   +25.5%
+scene0749_00                                   scannet 12.3%    +0.368    0.0314    0.0314    +0.1%
+scene0776_00                                   scannet 38.7%    +0.387    0.0416    0.0442    +6.3%
+scene0784_00                                   scannet 49.7%    +0.419    0.0451    0.0478    +6.0%
+scene0788_00                                   scannet 17.3%    +0.355    0.0562    0.0554    -1.4%
+scene0790_00                                   scannet 19.7%    +0.385    0.0365    0.0374    +2.7%
+scene0791_00                                   scannet 51.0%    +0.375    0.0478    0.0481    +0.6%
+scene0805_00                                   scannet 46.0%    +0.379    0.0311    0.0357   +14.9%
+======================================================================

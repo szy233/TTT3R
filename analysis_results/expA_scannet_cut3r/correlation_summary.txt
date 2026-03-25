@@ -1,0 +1,18 @@
+============================================================
+Experiment A: Frequency vs Reconstruction Error Correlation
+============================================================
+Sequence:          /home/szy/research/dataset/scannetv2/scene0707_00/color
+Model:             cut3r
+Frames processed:  157
+Valid frames:      157/157
+Mean valid ratio:  0.912
+
+--- Aggregate correlation (all patches pooled) ---
+  Pearson r  = 0.0267
+  Spearman ρ = 0.0218
+  N patches  = 115032
+
+--- Per-frame correlation (mean ± std) ---
+  Pearson r  = 0.0304 ± 0.0740
+  Spearman ρ = 0.0216 ± 0.1647
+============================================================

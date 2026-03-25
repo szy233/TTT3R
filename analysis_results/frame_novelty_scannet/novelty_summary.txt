@@ -1,0 +1,10 @@
+seq_path: /home/szy/research/dataset/scannetv2/scene0707_00/color
+model_update_type: cut3r
+skip_ratio=0.3 warmup=10
+total_frames=300 kept=199 skip_rate=0.337
+osc_full=4.3565±3.1601
+osc_filt=5.2535±3.4847
+osc_reduction=-20.6%
+r_novelty_oscillation=0.4082 p=0.0000
+depth_err_full=0.0384
+depth_err_filt=0.0373

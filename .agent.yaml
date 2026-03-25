@@ -1,0 +1,41 @@
+project:
+  name: TTT3R
+  description: 'TTT3R: 3D Reconstruction as Test-Time Training - A simple state update
+    rule to enhance length generalization for CUT3R'
+  conda_env: ttt3r
+train:
+  command: python src/train.py
+  work_dir: .
+  gpu_count: 1
+  tmux_session: ttt3r_train
+params:
+  config_file: null
+  format: yaml
+  tunable:
+  - learning_rate
+  - batch_size
+  - num_epochs
+  - dataset
+logging:
+  path: logs/train.log
+  format: text
+  patterns:
+    loss: 'Loss: ([\d\.]+)'
+    epoch: 'Epoch: (\d+)'
+    accuracy: 'Accuracy: ([\d\.]+)'
+    val_loss: 'Val Loss: ([\d\.]+)'
+    reconstruction_error: 'Reconstruction Error: ([\d\.]+)'
+    pose_error: 'Pose Error: ([\d\.]+)'
+  key_metrics:
+  - loss
+  - val_loss
+  - reconstruction_error
+  - pose_error
+  finish_markers:
+  - training complete
+  - best model saved
+  - Training finished
+output:
+  checkpoint_dir: checkpoints/
+  results_dir: results/
+  best_model: checkpoints/best.pth

@@ -1,0 +1,13 @@
+============================================================
+Experiment A2: Frame-Level State Dynamics vs Reconstruction
+============================================================
+Sequence:          /home/szy/research/dataset/scannetv2/scene0707_00/color
+Model:             cut3r
+Frames processed:  157
+
+--- Correlations with depth error ---
+  state_change        : Pearson r=+0.0811 (p=0.313), Spearman ρ=+0.0095 (p=0.906)
+  state_drift         : Pearson r=+0.0403 (p=0.617), Spearman ρ=-0.2024 (p=0.011)
+  attn_entropy        : Pearson r=-0.0207 (p=0.797), Spearman ρ=-0.0347 (p=0.666)
+  confidence          : Pearson r=-0.5013 (p=2.27e-11), Spearman ρ=-0.5215 (p=2.51e-12)
+============================================================

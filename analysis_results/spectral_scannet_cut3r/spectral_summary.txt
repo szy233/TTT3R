@@ -1,0 +1,22 @@
+======================================================================
+Spectral Analysis of State Token Dynamics
+======================================================================
+Sequence:  /home/szy/research/dataset/scannetv2/scene0707_00/color
+Model:     cut3r
+Frames:    157
+Tokens:    768, Dim: 768
+Window:    32 frames
+
+--- Token spectral statistics ---
+  Mean total energy:     5280.0448
+  Mean high-freq ratio:  0.0319
+  Mean low-freq ratio:   0.5144
+
+--- Correlations with depth error ---
+  high_freq_windowed       : r=-0.1975 (p=0.0266), ρ=-0.2781
+  high_freq_online         : r=+0.0321 (p=0.69), ρ=-0.0738
+  low_freq_windowed        : r=-0.2111 (p=0.0177), ρ=-0.1325
+  high_total_ratio         : r=-0.1150 (p=0.2), ρ=-0.2080
+  state_change             : r=+0.0811 (p=0.313), ρ=+0.0095
+  confidence               : r=-0.5013 (p=2.27e-11), ρ=-0.5215
+======================================================================

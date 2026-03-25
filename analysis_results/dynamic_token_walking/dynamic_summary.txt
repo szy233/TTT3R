@@ -1,0 +1,6 @@
+seq_path: /home/szy/research/dataset/tum/rgbd_dataset_freiburg3_walking_xyz/rgb
+model_update_type: cut3r
+T=150  n_state=768
+temporal_r_pearson=-0.0237  p=0.7737
+temporal_r_spearman=-0.0395
+mean_spatial_r=-0.0032

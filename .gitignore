@@ -59,3 +59,10 @@ tmp
 eval_results
 
 .vscode
+# Large data files in analysis_results
+analysis_results/**/*.npz
+analysis_results/**/*.npy
+analysis_results/**/*.ply
+analysis_results/**/*.pt
+analysis_results/**/*.pth
+analysis_results/**/*.pkl

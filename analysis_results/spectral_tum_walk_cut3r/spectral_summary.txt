@@ -1,0 +1,22 @@
+======================================================================
+Spectral Analysis of State Token Dynamics
+======================================================================
+Sequence:  /home/szy/research/dataset/tum/rgbd_dataset_freiburg3_walking_xyz/rgb
+Model:     cut3r
+Frames:    200
+Tokens:    768, Dim: 768
+Window:    32 frames
+
+--- Token spectral statistics ---
+  Mean total energy:     6358.1055
+  Mean high-freq ratio:  0.0254
+  Mean low-freq ratio:   0.5587
+
+--- Correlations with depth error ---
+  high_freq_windowed       : r=+0.0730 (p=0.345), ρ=+0.2153
+  high_freq_online         : r=+0.0825 (p=0.246), ρ=+0.1406
+  low_freq_windowed        : r=+0.1143 (p=0.139), ρ=+0.1022
+  high_total_ratio         : r=-0.0594 (p=0.443), ρ=+0.0602
+  state_change             : r=+0.1262 (p=0.0751), ρ=+0.2943
+  confidence               : r=-0.2301 (p=0.00105), ρ=-0.0638
+======================================================================
