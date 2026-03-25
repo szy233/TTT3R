@@ -506,7 +506,7 @@ def run_inference(args):
         port = args.port,
         downsample_factor=args.downsample_factor
     )
-    viewer.run()
+    return
 
 
 def main():

@@ -1,13 +1,42 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+# numpy data
+*.npz
+*.npy
 
+# images
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tiff
+
+# datasets
+data/
+datasets/
+dataset/
+
+# experiment outputs
+eval_results/
+analysis_results/
+logs/
+outputs/
 # Analysis results (large images, npz, logs)
 analysis_results/
 
 # C extensions
 *.so
+# numpy / intermediate data
+*.npz
+*.npy
 
+# images
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tiff
 # Distribution / packaging
 bin/
 build/
@@ -56,10 +85,52 @@ docs/_build/
 *.pth
 data
 src/checkpoints
-
+*.npz
 # Ignore results
 tmp
 eval_results
 
 .vscode
 model/
+# datasets
+data/
+datasets/
+dataset/
+rgb/
+depth/
+images/
+
+# image files
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tiff
+
+# depth / pointcloud
+*.exr
+*.pfm
+*.ply
+*.pcd
+
+# numpy data
+*.npz
+*.npy
+
+# databases
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+
+# model weights
+*.pth
+*.pt
+*.ckpt
+
+# experiment outputs
+eval_results/
+analysis_results/
+logs/
+tmp/
+outputs/
