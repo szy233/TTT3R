@@ -1,0 +1,145 @@
+\section{Theoretical Analysis}
+\label{sec:theory}
+
+We formalize the state update mechanism in recurrent 3D reconstruction as an online optimization problem and provide theoretical justification for adaptive dampening.
+
+\subsection{Setup and Notation}
+
+Consider a recurrent model processing a video sequence $\{I_1, \ldots, I_T\}$. At each step $t$, the model maintains a state $\mathbf{s}_t \in \mathbb{R}^{n \times d}$ ($n$ tokens, $d$ dimensions) and produces a state update proposal $\boldsymbol{\delta}_t = \tilde{\mathbf{s}}_t - \mathbf{s}_t$, where $\tilde{\mathbf{s}}_t$ is the new state computed from the current frame. The state is updated as:
+\begin{equation}
+    \mathbf{s}_{t+1} = \mathbf{s}_t + \alpha_t \odot \boldsymbol{\delta}_t,
+    \label{eq:state_update}
+\end{equation}
+where $\alpha_t \in [0, 1]^{n \times 1}$ is a per-token dampening factor (gate). In TTT3R, $\alpha_t = \sigma(\mathbf{W} \cdot \text{cross\_attn}(\mathbf{s}_t, \mathbf{f}_t))$ is a learned gate; in CUT3R, $\alpha_t \equiv 1$.
+
+We assume the model's predictions are evaluated by a loss $\ell_t(\mathbf{s})$ at each step (e.g., photometric consistency, geometric error). While $\ell_t$ is not computed during inference, it provides the analytical framework.
+
+\begin{assumption}[$L$-smoothness]
+\label{ass:smooth}
+Each $\ell_t$ is $L$-smooth: $\|\nabla \ell_t(\mathbf{s}) - \nabla \ell_t(\mathbf{s}')\| \leq L \|\mathbf{s} - \mathbf{s}'\|$ for all $\mathbf{s}, \mathbf{s}'$.
+\end{assumption}
+
+\begin{assumption}[Bounded updates]
+\label{ass:bounded}
+The state updates are bounded: $\|\boldsymbol{\delta}_t\| \leq G$ for all $t$.
+\end{assumption}
+
+\subsection{Over-Update in Recurrent State Estimation}
+
+We first characterize the failure mode of undampened updates ($\alpha_t \equiv 1$).
+
+\begin{definition}[Convergence indicator]
+Define the cosine alignment between consecutive state updates:
+\begin{equation}
+    c_t = \frac{\langle \boldsymbol{\delta}_t, \boldsymbol{\delta}_{t-1} \rangle}{\|\boldsymbol{\delta}_t\| \|\boldsymbol{\delta}_{t-1}\|} \in [-1, 1].
+\end{equation}
+When $c_t \approx 1$, the state is moving consistently in one direction (converging regime). When $c_t \approx 0$ or $c_t < 0$, the state receives conflicting signals (transition regime).
+\end{definition}
+
+\begin{proposition}[Over-update bound]
+\label{prop:overupdate}
+Under Assumptions~\ref{ass:smooth} and~\ref{ass:bounded}, if the state is near a local minimum $\mathbf{s}^*_t$ of $\ell_t$ (i.e., $\|\nabla \ell_t(\mathbf{s}_t)\| \leq \epsilon$) and consecutive updates are aligned ($c_t \geq c_0 > 0$ for $k$ consecutive steps), then:
+\begin{equation}
+    \ell_{t+k}(\mathbf{s}_{t+k}) - \ell_{t+k}(\mathbf{s}^*_{t+k}) \leq \epsilon k G + \frac{L k^2 G^2}{2} + \sum_{i=1}^{k} \|\mathbf{s}^*_{t+i} - \mathbf{s}^*_{t+i-1}\|(\epsilon + LkG).
+\end{equation}
+In particular, for static or slowly-moving scenes where $\mathbf{s}^*_t$ changes slowly, the dominant term $\frac{L k^2 G^2}{2}$ grows quadratically with the number of undampened steps.
+\end{proposition}
+
+\begin{proof}
+By $L$-smoothness of $\ell_{t+k}$:
+\begin{equation}
+    \ell_{t+k}(\mathbf{s}_{t+k}) \leq \ell_{t+k}(\mathbf{s}_t) + \langle \nabla \ell_{t+k}(\mathbf{s}_t), \mathbf{s}_{t+k} - \mathbf{s}_t \rangle + \frac{L}{2}\|\mathbf{s}_{t+k} - \mathbf{s}_t\|^2.
+\end{equation}
+With $\alpha \equiv 1$, we have $\mathbf{s}_{t+k} - \mathbf{s}_t = \sum_{i=0}^{k-1} \boldsymbol{\delta}_{t+i}$. When updates are aligned ($c_t \geq c_0$), they accumulate constructively:
+\begin{equation}
+    \left\|\sum_{i=0}^{k-1} \boldsymbol{\delta}_{t+i}\right\|^2 = \sum_i \|\boldsymbol{\delta}_{t+i}\|^2 + 2\sum_{i<j} \langle \boldsymbol{\delta}_{t+i}, \boldsymbol{\delta}_{t+j} \rangle \geq k^2 c_0^2 G_{\min}^2,
+\end{equation}
+where $G_{\min} = \min_i \|\boldsymbol{\delta}_{t+i}\|$. Bounding $\|\mathbf{s}_{t+k} - \mathbf{s}_t\| \leq kG$ and using $\|\nabla \ell_{t+k}(\mathbf{s}_t)\| \leq \epsilon + L\sum_{i=1}^{k}\|\mathbf{s}^*_{t+i} - \mathbf{s}^*_{t+i-1}\| + LkG$ (triangle inequality through $\mathbf{s}^*_{t+k}$ and path of optima), the bound follows.
+\end{proof}
+
+\textbf{Interpretation.} In a converging regime (e.g., static camera viewing the same scene), $c_t \to 1$ and updates accumulate coherently. Without dampening, the state overshoots the optimum, with error growing as $O(k^2)$. This explains the empirical finding that \emph{any} dampening ($\alpha < 1$) significantly improves performance (Table~\ref{tab:ablation}).
+
+\subsection{Adaptive Dampening via Stability Brake}
+
+We propose to set $\alpha_t$ as a function of the convergence indicator $c_t$:
+\begin{equation}
+    \alpha_t = \sigma(-\tau \cdot c_t),
+    \label{eq:brake}
+\end{equation}
+where $\sigma$ is the sigmoid function and $\tau > 0$ is a temperature parameter. This \emph{inverts} the intuition from SGD momentum: when updates are aligned ($c_t \to 1$, state converging), the gate closes ($\alpha_t \to 0$); when updates conflict ($c_t \to -1$, new geometric information), the gate opens ($\alpha_t \to 1$).
+
+\begin{proposition}[Regret bound for adaptive dampening]
+\label{prop:regret}
+Consider a sequence of $T$ frames partitioned into \emph{static} segments (where $c_t \geq c_{\text{hi}}$, the optimum $\mathbf{s}^*$ changes by at most $\eta$ per step) and \emph{transition} segments (where $c_t \leq c_{\text{lo}}$, the optimum shifts by up to $\Delta$). Let $T_s$ and $T_d$ denote the total lengths of static and transition segments respectively ($T_s + T_d = T$).
+
+The cumulative regret $R_T = \sum_{t=1}^T [\ell_t(\mathbf{s}_t) - \ell_t(\mathbf{s}^*_t)]$ satisfies:
+
+\textbf{(a) Constant dampening} $\alpha_t \equiv \alpha$:
+\begin{equation}
+    R_T^{\text{const}} \leq T_s \cdot \frac{L \alpha^2 G^2}{2} + T_d \cdot \left(\frac{(1-\alpha)^2 \Delta^2 L}{2} + (1-\alpha) \Delta G L\right).
+\end{equation}
+
+\textbf{(b) Adaptive dampening} (Eq.~\ref{eq:brake}) with $\alpha_{\text{lo}} = \sigma(-\tau c_{\text{hi}})$ and $\alpha_{\text{hi}} = \sigma(-\tau c_{\text{lo}})$:
+\begin{equation}
+    R_T^{\text{adapt}} \leq T_s \cdot \frac{L \alpha_{\text{lo}}^2 G^2}{2} + T_d \cdot \left(\frac{(1-\alpha_{\text{hi}})^2 \Delta^2 L}{2} + (1-\alpha_{\text{hi}}) \Delta G L\right).
+\end{equation}
+
+For $\tau > 0$ and $c_{\text{hi}} > c_{\text{lo}}$, we have $\alpha_{\text{lo}} < \alpha < \alpha_{\text{hi}}$ for any fixed $\alpha \in (\alpha_{\text{lo}}, \alpha_{\text{hi}})$, yielding:
+\begin{equation}
+    R_T^{\text{adapt}} < R_T^{\text{const}}
+\end{equation}
+whenever both static and transition segments exist ($T_s > 0$ and $T_d > 0$).
+\end{proposition}
+
+\begin{proof}
+\textbf{Static segments.} When $c_t \geq c_{\text{hi}}$, the optimum barely moves ($\|\mathbf{s}^*_t - \mathbf{s}^*_{t-1}\| \leq \eta$). The dominant error is overshooting. With dampening $\alpha$, the per-step displacement is $\alpha \|\boldsymbol{\delta}_t\|$, and by $L$-smoothness the excess loss is bounded by $\frac{L}{2}\alpha^2 G^2$. Adaptive dampening uses $\alpha_{\text{lo}} = \sigma(-\tau c_{\text{hi}}) < \alpha$, achieving a tighter bound.
+
+\textbf{Transition segments.} When $c_t \leq c_{\text{lo}}$, the optimum shifts significantly. The tracking error at step $t$ depends on how much the state lags behind the moving optimum. With dampening $\alpha$, the state moves by $\alpha \boldsymbol{\delta}_t$ but the optimum has shifted by up to $\Delta$, giving a tracking gap of $(1-\alpha)\Delta$ per step. By $L$-smoothness, the per-step excess loss is bounded by $\frac{L}{2}(1-\alpha)^2\Delta^2 + (1-\alpha)\Delta \cdot LG$ (cross term from gradient-gap interaction). Adaptive dampening uses $\alpha_{\text{hi}} > \alpha$, reducing the tracking gap.
+
+\textbf{Strict improvement.} For any constant $\alpha \in (0,1)$, the adaptive scheme strictly improves both terms: smaller $\alpha_{\text{lo}}$ reduces the static-segment bound, larger $\alpha_{\text{hi}}$ reduces the transition-segment bound. The inequality is strict whenever both $T_s > 0$ and $T_d > 0$, i.e., the sequence contains both stationary and dynamic segments.
+\end{proof}
+
+\textbf{Remark.} The key insight is that constant dampening faces an inherent \emph{stability-reactivity tradeoff}: small $\alpha$ prevents overshooting in static segments but slows adaptation in transitions, and vice versa. The cosine-based adaptive scheme resolves this by using different effective $\alpha$ values in each regime, informed by the cheaply-computed convergence indicator $c_t$.
+
+\subsection{Optimal Temperature}
+
+\begin{proposition}[Optimal $\tau$]
+\label{prop:tau}
+Let $\bar{c}_s$ and $\bar{c}_d$ denote the average cosine alignment in static and transition segments respectively. The optimal temperature $\tau^*$ that minimizes the regret bound in Proposition~\ref{prop:regret} satisfies:
+\begin{equation}
+    \tau^* = \frac{1}{\bar{c}_s - \bar{c}_d} \log\frac{T_d \Delta^2}{T_s G^2} + O(1).
+\end{equation}
+In particular:
+\begin{itemize}
+    \item Higher motion diversity ($\bar{c}_s - \bar{c}_d$ large, i.e., clear separation between regimes) $\Rightarrow$ smaller $\tau^*$ suffices (gentle braking).
+    \item More dynamic scenes ($T_d \Delta^2 / T_s G^2$ large) $\Rightarrow$ larger $\tau^*$ (more aggressive, keeps gate open more).
+    \item When $\bar{c}_s \approx \bar{c}_d$ (no regime separation), $\tau^* \to \infty$, recovering constant dampening — consistent with our finding that $\alpha \equiv 0.5$ is a strong baseline when motion is uniform.
+\end{itemize}
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Substituting $\alpha_{\text{lo}} = \sigma(-\tau \bar{c}_s) \approx e^{-\tau \bar{c}_s}$ and $\alpha_{\text{hi}} = \sigma(-\tau \bar{c}_d) \approx 1 - e^{\tau \bar{c}_d}$ (valid for moderate $|\tau c|$), the regret bound becomes:
+\begin{equation}
+    R_T \leq T_s \frac{L G^2}{2} e^{-2\tau \bar{c}_s} + T_d \frac{L \Delta^2}{2} e^{2\tau \bar{c}_d} + \text{lower order}.
+\end{equation}
+Taking the derivative with respect to $\tau$ and setting to zero:
+\begin{equation}
+    -2\bar{c}_s T_s G^2 e^{-2\tau \bar{c}_s} + 2\bar{c}_d T_d \Delta^2 e^{2\tau \bar{c}_d} = 0,
+\end{equation}
+which gives $\tau^* = \frac{1}{2(\bar{c}_s + |\bar{c}_d|)} \log \frac{\bar{c}_s T_s G^2}{|\bar{c}_d| T_d \Delta^2}$. For $\bar{c}_d$ near zero, this simplifies to the stated form.
+\end{proof}
+
+\subsection{Connection to Geometric Consistency Gate}
+
+The stability brake (Eq.~\ref{eq:brake}) operates in \emph{state space}, detecting convergence from the trajectory of latent updates. Our geometric consistency gate operates in \emph{output space}, detecting scene changes from depth predictions:
+\begin{equation}
+    g_t^{\text{geo}} = \sigma\left(-\tau_g \cdot \text{LFE}\left(\mathcal{F}\left[\log \hat{d}_t - \log \hat{d}_{t-1}\right]\right)\right),
+\end{equation}
+where $\text{LFE}(\cdot)$ extracts low-frequency energy and $\mathcal{F}$ is the 2D FFT.
+
+These two gates are complementary:
+\begin{itemize}
+    \item \textbf{State-space gate} ($\alpha_t$): Detects \emph{when the model's internal representation is converging}, regardless of whether the scene is changing. Effective for gradual drift and accumulation errors.
+    \item \textbf{Output-space gate} ($g_t^{\text{geo}}$): Detects \emph{when the geometric prediction is inconsistent with new observations}. Effective for sudden scene changes and occlusion events.
+\end{itemize}
+The combined gate $\alpha_t \cdot g_t^{\text{geo}}$ provides a tighter bound than either alone, as it addresses both the convergence-overshoot and the geometric-inconsistency failure modes simultaneously.

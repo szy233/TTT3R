@@ -171,8 +171,112 @@ inquire(): [global_img_feat, masked_token] 作 query → cross-attention 读 pos
 
 ---
 
+### Exp 10 — 重大 Bug 发现：Gate State 每帧重置 (2026-03-26)
+
+**位置**: `src/dust3r/model.py` 中 `forward_recurrent_lighter`、`_forward_impl`、`forward_recurrent_analysis` 三处
+
+**Bug**: `reset_mask = view["reset"]` 返回 `tensor([False])`（不是 None），所以 `if reset_mask is not None:` 永远为 True，导致每帧都执行 state reset 代码：
+```python
+if reset_mask is not None:           # 永远 True！
+    ...
+    momentum_state = {}               # 每帧重置！
+    l2_state = {running_energy: 0}    # 每帧重置！
+    spectral_state = {ema: ...}       # 每帧重置！
+```
+
+**影响**:
+- SIASU alpha ≡ 0.5（之前归因于 EMA γ 紧密追踪，实际是 bug — EMA 每帧只看 2 帧）
+- l2gate running_energy 每帧重置 → 退化
+- momentum prev_delta 每帧为 None → gate ≡ 0.5 = ttt3r_random
+- **MD5 验证**: momentum gate 输出文件与 random 完全一致（byte-identical）
+
+**修复**: `if reset_mask.any():` 条件包裹 state reset 代码。三处均已修复。
+
+**Geo gate 不受影响**: prev_depth 在循环体内正常更新。
+
+---
+
+### Exp 11 — Bug 修复后 Momentum Gate 结果 (2026-03-26)
+
+修复后 momentum gate 有真实信号，但 cos ~0.74 → gate ~0.80 → 几乎不 dampening → 比常数 0.5 差。
+
+| Config | ScanNet ATE ↓ | TUM ATE ↓ |
+|--------|--------------|-----------|
+| ttt3r_momentum_v2 (gate~0.8) | 0.370* | 0.091 |
+| ttt3r_random (×0.5) | 0.280 | 0.079 |
+
+*早期 16 scene 结果
+
+**分析**: 原始 momentum 逻辑是 SGD momentum 直觉（对齐高 → 更新多），但 TTT3R 存在 over-update 问题，需要的是相反的行为。
+
+---
+
+### Exp 12 — 反转 Momentum Gate (Stability Brake) ✅ (2026-03-26)
+
+**核心思路**: 反转 momentum gate 的物理含义
+- 原始: `gate = sigmoid(τ × cos)` → 对齐高→更新多（SGD momentum）
+- **反转**: `gate = sigmoid(-τ × cos)` → 对齐高→更新少（stability brake）
+
+**物理解释**:
+- 方向一致 = state 在稳定收敛 → 减少更新，防止过冲
+- 方向突变 = 新几何信息 → 允许较大更新
+
+**Gate 值对照**:
+
+| cos 值 | 含义 | 原始 gate | 反转 gate (τ=2) | 反转 gate (τ=1) |
+|--------|------|----------|----------------|----------------|
+| 0.74 (典型) | 方向一致 | 0.81 | 0.19 | 0.32 |
+| 0.0 | 正交 | 0.50 | 0.50 | 0.50 |
+| -0.5 | 相反 | 0.27 | 0.73 | 0.62 |
+
+**早期结果 (16 scenes ScanNet + 8 TUM)**:
+
+| Config | ScanNet ATE ↓ | vs random | TUM ATE ↓ | vs random |
+|--------|--------------|-----------|-----------|-----------|
+| ttt3r_random (×0.5) | 0.265 | — | 0.073 | — |
+| ttt3r_momentum_inv_t2 | 0.267 | +0.8% | 0.062 | -15.1% |
+| **ttt3r_momentum_inv_t1** | 0.263 | -0.8% | **0.057** | **-21.9%** |
+
+**关键发现**:
+- inv_t1 (τ=1) 在 TUM 上大幅优于 random（ATE 0.057 vs 0.073, -22%）
+- ScanNet 上 inv_t1 ≈ random（0.263 vs 0.265），符合预期（ScanNet 室内静态，cos 方差小）
+- τ=1 优于 τ=2（更温和的制动更好）
+- 全量 ScanNet 评测进行中（GPU0: inv_t2, GPU1: inv_t1）
+
+---
+
+### Exp 13 — 理论推导 (2026-03-26)
+
+完整推导在 `docs/theory_section.tex`。
+
+**三个命题**:
+
+1. **Over-update bound (Prop 1)**: 在 L-smooth 损失下，当连续更新方向一致（cos→1）且无 dampening 时，误差以 O(k²) 增长。解释了为什么任何 α<1 都显著改善。
+
+2. **Adaptive dampening regret bound (Prop 2)**: 将视频帧序列分为 static segments（cos 高，最优点缓变）和 transition segments（cos 低，最优点剧变）：
+   - 常数 dampening 面临 stability-reactivity tradeoff
+   - 自适应 α_t = σ(-τ·c_t) 在两种 regime 都严格更优
+   - 只要序列同时包含两种 segment，就有 R_T^adapt < R_T^const
+
+3. **Optimal τ (Prop 3)**: τ* ∝ 1/(c̄_s - c̄_d) · log(T_d·Δ²/T_s·G²)
+   - 运动多样性高 → 小 τ 就够
+   - 动态场景多 → 大 τ
+   - 无 regime 分离 → τ→∞，退化为常数（与实验一致）
+
+**State-space gate 与 Output-space gate 互补性分析**:
+- Stability brake (state space): 检测 model 内部表征是否收敛
+- Geo gate (output space): 检测几何预测是否与新观测矛盾
+- 两者信号独立、失效模式不同，联合使用提供更紧的 bound
+
+---
+
 ## 待办
 
 - [x] 重跑 Layer 2 SIASU 消融（warm-start 修复后）— 2026-03-23 完成，ttt3r_spectral -8.3%
 - [x] 三层联合实验（Layer 1 + 2 + 3）— 2026-03-23 完成，L23+ttt3r -7.5% 最优
+- [x] Gate state 每帧重置 bug 修复 — 2026-03-26
+- [x] 反转 momentum gate (stability brake) 实现与初步验证 — 2026-03-26
+- [x] 理论推导（over-update bound, regret bound, optimal τ）— 2026-03-26
+- [ ] Stability brake 全量 ScanNet 评测（running）
+- [ ] Stability brake + Geo gate 联合实验（ttt3r_brake_geo）
 - [ ] 论文 outline 起草

@@ -917,6 +917,16 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
                                    "cut3r_joint", "ttt3r_joint"):
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
+                # Initialize L2 norm gate state
+                if update_type == "ttt3r_l2gate":
+                    l2_state = {
+                        'running_energy': torch.zeros(
+                            1, state_feat.shape[1], 1,
+                            device=state_feat.device),
+                    }
+                # Initialize momentum gate state
+                if update_type == "ttt3r_momentum":
+                    momentum_state = {}
             else:
                 if update_type == "cut3r":
                     update_mask1 = update_mask
@@ -924,6 +934,39 @@ class ARCroco3DStereo(CroCoNet):
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)') # [12, 16, 768, 1 + 576] -> [1, 768, 1 + 576, 12*16]
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
+                elif update_type == "ttt3r_conf":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    conf_scale = getattr(self.config, 'conf_gate_scale', 10.0)
+                    if "conf_self" in res:
+                        mean_conf = res["conf_self"].mean()
+                    elif "conf" in res:
+                        mean_conf = res["conf"].mean()
+                    else:
+                        mean_conf = torch.tensor(conf_scale, device=feat.device)
+                    conf_gate = torch.clamp(mean_conf / conf_scale, 0.0, 1.0)
+                    update_mask1 = update_mask * ttt3r_mask * conf_gate
+                elif update_type == "ttt3r_l2gate":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._l2_norm_gate(
+                        state_feat, new_state_feat, l2_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha
+                elif update_type == "ttt3r_random":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    update_mask1 = update_mask * ttt3r_mask * random_p
+                elif update_type == "ttt3r_momentum":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * m_gate
                 elif update_type == "cut3r_spectral":
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
@@ -974,14 +1017,22 @@ class ARCroco3DStereo(CroCoNet):
                     1 - reset_mask
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-                # Reset spectral state on scene reset
-                if update_type in ("ttt3r_spectral", "cut3r_spectral",
-                                   "cut3r_joint", "ttt3r_joint"):
-                    spectral_state = {
-                        'ema': state_feat.clone(),
-                        'running_energy': torch.zeros_like(
-                            spectral_state['running_energy']),
-                    }
+                # Only reset gate states when scene actually resets
+                if reset_mask.any():
+                    if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                       "cut3r_joint", "ttt3r_joint"):
+                        spectral_state = {
+                            'ema': state_feat.clone(),
+                            'running_energy': torch.zeros_like(
+                                spectral_state['running_energy']),
+                        }
+                    if update_type == "ttt3r_l2gate":
+                        l2_state = {
+                            'running_energy': torch.zeros_like(
+                                l2_state['running_energy']),
+                        }
+                    if update_type == "ttt3r_momentum":
+                        momentum_state = {}
             all_state_args.append(
                 (state_feat, state_pos, init_state_feat, mem, init_mem)
             )
@@ -1206,9 +1257,10 @@ class ARCroco3DStereo(CroCoNet):
         """
         Compute per-token spectral modulation factor α ∈ [0, 1].
 
-        Maintains EMA of state trajectory (low-pass) and running mean of
-        high-freq oscillation energy.  Tokens currently oscillating above
-        their historical average get suppressed (α → 0).
+        Maintains EMA of state trajectory (low-pass).  Within each frame,
+        tokens are ranked by high-freq residual energy: high-energy tokens
+        (unstable) get suppressed (α → 0), low-energy tokens (stable) pass
+        through (α → 1).
 
         Args:
             state_feat:     [1, n_state, D]  current state BEFORE update
@@ -1219,7 +1271,6 @@ class ARCroco3DStereo(CroCoNet):
             alpha: [1, n_state, 1]  modulation factor per token
         """
         mu = getattr(config, 'spectral_ema_momentum', 0.95)
-        gamma = getattr(config, 'spectral_running_momentum', 0.95)
         tau = getattr(config, 'spectral_temperature', 2.0)
 
         # Update EMA with current (pre-update) state
@@ -1231,19 +1282,11 @@ class ARCroco3DStereo(CroCoNet):
         high_freq = new_state_feat - ema                  # [1, n_state, D]
         energy = high_freq.norm(dim=-1, keepdim=True)     # [1, n_state, 1]
 
-        # Running mean of energy — warm-start on first call to avoid ratio explosion
-        running_e = spectral_state['running_energy']
-        if not spectral_state.get('warmed_up', False):
-            running_e = energy.clone()
-            spectral_state['warmed_up'] = True
-        else:
-            running_e = gamma * running_e + (1 - gamma) * energy
-        spectral_state['running_energy'] = running_e
-
-        # Modulation: suppress when current energy >> running mean
-        # ratio > 1 → oscillating more than usual → alpha ↓
-        ratio = energy / (running_e + 1e-6)               # [1, n_state, 1]
-        alpha = torch.sigmoid(-tau * (ratio - 1.0))       # ∈ (0, 1)
+        # Cross-token ranking: normalize energy within each frame
+        # High energy (unstable) → high percentile → alpha ↓
+        e_max = energy.max(dim=1, keepdim=True).values    # [1, 1, 1]
+        percentile = energy / (e_max + 1e-6)              # [1, n_state, 1] ∈ [0, 1]
+        alpha = torch.sigmoid(-tau * (percentile - 0.5))  # ∈ (0, 1)
         return alpha
 
     @staticmethod
@@ -1285,6 +1328,75 @@ class ARCroco3DStereo(CroCoNet):
         ratio = spectral_change / (skip_ratio * ema + eps)
         g_mem = torch.sigmoid(torch.tensor(tau * (ratio - 1.0))).item()
         return g_mem
+
+    @staticmethod
+    def _l2_norm_gate(state_feat, new_state_feat, l2_state, config):
+        """
+        Naive baseline: gate using L2 norm of state delta instead of
+        frequency-domain decomposition.  Same running-mean + sigmoid
+        structure as _spectral_modulation, but without EMA low-pass.
+
+        Args:
+            state_feat:     [1, n_state, D]
+            new_state_feat: [1, n_state, D]
+            l2_state:       dict  (mutated in-place)
+            config:         model config
+        Returns:
+            alpha: [1, n_state, 1]
+        """
+        gamma = getattr(config, 'spectral_running_momentum', 0.95)
+        tau = getattr(config, 'spectral_temperature', 2.0)
+
+        delta = new_state_feat - state_feat               # [1, n_state, D]
+        energy = delta.norm(dim=-1, keepdim=True)          # [1, n_state, 1]
+
+        running_e = l2_state['running_energy']
+        if not l2_state.get('warmed_up', False):
+            running_e = energy.clone()
+            l2_state['warmed_up'] = True
+        else:
+            running_e = gamma * running_e + (1 - gamma) * energy
+        l2_state['running_energy'] = running_e
+
+        ratio = energy / (running_e + 1e-6)
+        alpha = torch.sigmoid(-tau * (ratio - 1.0))
+        return alpha
+
+    @staticmethod
+    def _momentum_gate(state_feat, new_state_feat, momentum_state, config):
+        """
+        Momentum-inspired gate: use cosine similarity between consecutive
+        state deltas as a per-token gate.  When consecutive updates are
+        aligned (cos > 0), the gate opens (accelerate); when they conflict
+        (cos < 0), the gate closes (brake).
+
+        Analogous to SGD momentum: reinforce consistent update directions.
+
+        Args:
+            state_feat:      [1, n_state, D]
+            new_state_feat:  [1, n_state, D]
+            momentum_state:  dict (mutated in-place, holds prev_delta)
+            config:          model config
+        Returns:
+            gate: [1, n_state, 1]  values in (0, 1)
+        """
+        tau = getattr(config, 'momentum_tau', 2.0)
+        delta = new_state_feat - state_feat  # [1, n_state, D]
+
+        prev_delta = momentum_state.get('prev_delta', None)
+        if prev_delta is None:
+            momentum_state['prev_delta'] = delta.detach().clone()
+            # First frame: no prior delta, use neutral gate
+            return torch.ones(1, delta.shape[1], 1, device=delta.device) * 0.5
+
+        cosine = torch.nn.functional.cosine_similarity(
+            delta, prev_delta, dim=-1
+        ).unsqueeze(-1)  # [1, n_state, 1]
+
+        momentum_state['prev_delta'] = delta.detach().clone()
+        # Inverted: high alignment → brake (state converging, don't disturb)
+        #           low alignment  → update (new geometric info)
+        return torch.sigmoid(-tau * cosine)
 
     @staticmethod
     def _geo_consistency_gate(curr_depth, geo_state, config):
@@ -1603,6 +1715,16 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
                                    "cut3r_joint", "ttt3r_joint"):
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
+                # Initialize L2 norm gate state
+                if update_type == "ttt3r_l2gate":
+                    l2_state = {
+                        'running_energy': torch.zeros(
+                            1, state_feat.shape[1], 1,
+                            device=state_feat.device),
+                    }
+                # Initialize momentum gate state
+                if update_type == "ttt3r_momentum":
+                    momentum_state = {}
                 prev_img = curr_img
             else:
                 if update_type == "cut3r":
@@ -1611,6 +1733,39 @@ class ARCroco3DStereo(CroCoNet):
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)') # [12, 16, 768, 1 + 576] -> [1, 768, 1 + 576, 12*16]
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
+                elif update_type == "ttt3r_conf":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    conf_scale = getattr(self.config, 'conf_gate_scale', 10.0)
+                    if "conf_self" in res:
+                        mean_conf = res["conf_self"].mean()
+                    elif "conf" in res:
+                        mean_conf = res["conf"].mean()
+                    else:
+                        mean_conf = torch.tensor(conf_scale, device=device)
+                    conf_gate = torch.clamp(mean_conf / conf_scale, 0.0, 1.0)
+                    update_mask1 = update_mask * ttt3r_mask * conf_gate
+                elif update_type == "ttt3r_l2gate":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._l2_norm_gate(
+                        state_feat, new_state_feat, l2_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha
+                elif update_type == "ttt3r_random":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    update_mask1 = update_mask * ttt3r_mask * random_p
+                elif update_type == "ttt3r_momentum":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * m_gate
                 elif update_type == "cut3r_spectral":
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
@@ -1652,6 +1807,16 @@ class ARCroco3DStereo(CroCoNet):
                         state_feat, new_state_feat, spectral_state, self.config)
                     g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
+                    # Optional gate logging for S4 visualization
+                    if hasattr(self, '_gate_log') and self._gate_log is not None:
+                        g_geo_cpu = g_geo.detach().cpu() if isinstance(g_geo, torch.Tensor) else torch.tensor(g_geo)
+                        self._gate_log.append({
+                            'frame': i,
+                            'ttt3r_mask': ttt3r_mask.detach().cpu(),    # [1, 768, 1]
+                            'alpha': alpha.detach().cpu(),               # [1, 768, 1]
+                            'g_geo': g_geo_cpu,                          # scalar or [1]
+                            'effective': update_mask1.detach().cpu(),     # [1, 768, 1]
+                        })
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -1678,14 +1843,25 @@ class ARCroco3DStereo(CroCoNet):
                     1 - reset_mask
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-                # Reset spectral state on scene reset
-                if update_type in ("ttt3r_spectral", "cut3r_spectral",
-                                   "cut3r_joint", "ttt3r_joint"):
-                    spectral_state = {
-                        'ema': state_feat.clone(),
-                        'running_energy': torch.zeros_like(
-                            spectral_state['running_energy']),
-                    }
+                # Only reset gate states when scene actually resets
+                if reset_mask.any():
+                    if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                       "cut3r_joint", "ttt3r_joint"):
+                        spectral_state = {
+                            'ema': state_feat.clone(),
+                            'running_energy': torch.zeros_like(
+                                spectral_state['running_energy']),
+                        }
+                    if update_type == "ttt3r_l2gate":
+                        l2_state = {
+                            'running_energy': torch.zeros_like(
+                                l2_state['running_energy']),
+                        }
+                    if update_type == "ttt3r_momentum":
+                        momentum_state = {}
+                    if update_type in ("cut3r_geogate", "ttt3r_geogate",
+                                       "cut3r_joint", "ttt3r_joint"):
+                        geo_state = {'prev_depth': curr_depth.detach().clone()}
 
         if ret_state:
             return ress, views, all_state_args
@@ -1855,6 +2031,14 @@ class ARCroco3DStereo(CroCoNet):
                                    "cut3r_joint", "ttt3r_joint"):
                     curr_depth = res['pts3d_in_self_view'][0, :, :, 2]
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
+                if update_type == "ttt3r_l2gate":
+                    l2_state = {
+                        'running_energy': torch.zeros(
+                            1, state_feat.shape[1], 1,
+                            device=state_feat.device),
+                    }
+                if update_type == "ttt3r_momentum":
+                    momentum_state = {}
             else:
                 # Extract depth for geo gate types
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
@@ -1886,6 +2070,35 @@ class ARCroco3DStereo(CroCoNet):
                         mean_conf = torch.tensor(conf_scale, device=device)
                     conf_gate = torch.clamp(mean_conf / conf_scale, 0.0, 1.0)
                     update_mask1 = update_mask * ttt3r_mask * conf_gate
+                elif update_type == "ttt3r_l2gate":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    alpha = self._l2_norm_gate(
+                        state_feat, new_state_feat, l2_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * alpha
+                elif update_type == "ttt3r_random":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    update_mask1 = update_mask * ttt3r_mask * random_p
+                elif update_type == "ttt3r_momentum":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * m_gate
                 elif update_type == "cut3r_spectral":
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
@@ -1939,13 +2152,22 @@ class ARCroco3DStereo(CroCoNet):
                 reset_mask = reset_mask[:, None, None].float()
                 state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-                if update_type in ("ttt3r_spectral", "cut3r_spectral",
-                                   "cut3r_joint", "ttt3r_joint"):
-                    spectral_state = {
-                        'ema': state_feat.clone(),
-                        'running_energy': torch.zeros_like(
-                            spectral_state['running_energy']),
-                    }
+                # Only reset gate states when scene actually resets
+                if reset_mask.any():
+                    if update_type in ("ttt3r_spectral", "cut3r_spectral",
+                                       "cut3r_joint", "ttt3r_joint"):
+                        spectral_state = {
+                            'ema': state_feat.clone(),
+                            'running_energy': torch.zeros_like(
+                                spectral_state['running_energy']),
+                        }
+                    if update_type == "ttt3r_l2gate":
+                        l2_state = {
+                            'running_energy': torch.zeros_like(
+                                l2_state['running_energy']),
+                        }
+                    if update_type == "ttt3r_momentum":
+                        momentum_state = {}
 
         analysis_data = {
             'state_history': state_history,        # list[T] of [n_state, dec_dim]

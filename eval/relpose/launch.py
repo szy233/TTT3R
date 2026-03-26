@@ -56,6 +56,8 @@ def get_args_parser():
     parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
     parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
     parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
+    parser.add_argument("--random_gate_p", type=float, default=0.5, help="Random gate constant probability")
+    parser.add_argument("--momentum_tau", type=float, default=2.0, help="Momentum gate temperature")
 
     parser.add_argument(
         "--pose_eval_stride", default=1, type=int, help="stride for pose evaluation"
@@ -467,5 +469,7 @@ if __name__ == "__main__":
     model.config.spectral_temperature = args.spectral_temperature
     model.config.geo_gate_tau = args.geo_gate_tau
     model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
+    model.config.random_gate_p = args.random_gate_p
+    model.config.momentum_tau = args.momentum_tau
 
     eval_pose_estimation(args, model, save_dir=args.output_dir)
