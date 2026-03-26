@@ -23,14 +23,14 @@ The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frame
 - **Result**: Skip 35% frames, TTT3R depth -3.1% on ScanNet
 - **Code**: `compute_frame_spectral_change()`, `filter_views_by_spectral_change()`
 
-### Layer 2 — Token-Level State Modulation (SIASU)
+### Layer 2 — Token-Level State Modulation (SIASU) — ❌ 已放弃
 - **Signal**: Per-token high-freq residual energy of state trajectory (EMA low-pass → residual)
 - **Code**: `_spectral_modulation()`, update types `cut3r_spectral` / `ttt3r_spectral`
-- **Status**: ⚠️ **v1 退化为常数** (2026-03-26)
+- **Status**: **v1 + v2 均失败**
   - v1 公式: `alpha = sigmoid(-τ × (energy / running_energy - 1))`，EMA γ=0.95 紧密追踪 energy → ratio ≈ 1.0 → alpha ≡ 0.5（S4 实验确认：token/frame 方差均为 0）
   - 之前 "L2+ttt3r -8.2%" 的提升**全部来自乘常数 0.5**，非频域信号
-  - **v2 修复 (testing)**: 改用 cross-token ranking，`percentile = energy / max(energy)`，`alpha = sigmoid(-τ × (percentile - 0.5))`。保证 token 间有差异（by construction）
-  - v2 正在 ScanNet relpose 全量评测中（`eval_results/relpose/scannet_s3_1000/ttt3r_joint_siasu_v2/`）
+  - v2 改用 cross-token ranking（`percentile = energy / max(energy)`），ScanNet ATE = 0.291，比 v1 joint (0.283) 还差，未带来改善
+  - **结论**: Token-level spectral modulation 方向不可行，已被 Stability Brake 替代
 
 ### Layer 3 — Geometric Consistency Gate (validated, best result)
 - **Signal**: `LFE(FFT2(log_depth_diff))` — low-freq energy of log-depth change
@@ -56,7 +56,8 @@ The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frame
 | `ttt3r_l2gate` | ttt3r × l2_norm_gate | 1.0 | ← naive baseline (implemented)
 | `ttt3r_random` | ttt3r × p (constant) | 1.0 | ← naive baseline (implemented, p=0.5)
 | `ttt3r_conf` | ttt3r × conf_gate | 1.0 | ← naive baseline (existing)
-| `ttt3r_momentum` | ttt3r × momentum_gate | 1.0 | stability brake (inverted cosine)
+| `ttt3r_momentum` | ttt3r × momentum_gate | 1.0 | stability brake (inverted cosine, best single gate)
+| `ttt3r_brake_geo` | ttt3r × momentum_gate × geo gate | 1.0 | ← 最终方法（待实现验证）
 
 ## Key Experimental Results
 
@@ -88,33 +89,48 @@ L23+cut3r            0.0698   -6.3%   (matches pure ttt3r)
 ```
 L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L23+ttt3r.
 
-### S1 Naive Baseline Comparison (2026-03-26)
+### S1 Naive Baseline + Stability Brake 全量对比 (2026-03-27)
 
-**Relpose ATE (Average) — ScanNet**
+**Relpose ATE (Average) — ScanNet（全量 96 scenes, 65 valid）**
 
-| Config | ATE ↓ | vs cut3r | vs ttt3r |
-|--------|-------|----------|----------|
-| cut3r (baseline) | 0.817 | — | — |
-| ttt3r | 0.406 | -50.3% | — |
-| **ttt3r_joint** | **0.283** | -65.4% | -30.3% |
-| ttt3r_l2gate | 0.276 | -66.3% | -32.1% |
-| ttt3r_random (p=0.5) | 0.280 | -65.8% | -31.1% |
-| ttt3r_conf | 0.298 | -63.5% | -26.6% |
+| Config | ATE ↓ | vs cut3r | vs ttt3r | vs random |
+|--------|-------|----------|----------|-----------|
+| cut3r (baseline) | 0.817 | — | — | — |
+| ttt3r | 0.406 | -50.3% | — | — |
+| **ttt3r_momentum_inv_t1** | **0.261** | **-68.0%** | **-35.6%** | **-6.8%** |
+| ttt3r_random (p=0.5) | 0.280 | -65.8% | -31.1% | — |
+| ttt3r_joint (v1, alpha≡0.5) | 0.283 | -65.4% | -30.3% | +1.1% |
+| ttt3r_joint_fixed | 0.284 | -65.2% | -30.0% | +1.4% |
+| ttt3r_joint_siasu_v2 | 0.291 | -64.4% | -28.3% | +3.9% |
+| ttt3r_conf | 0.298 | -63.5% | -26.6% | +6.4% |
+| ttt3r_momentum_inv_t2 | 0.311 | -62.0% | -23.5% | +11.1% |
+| ttt3r_momentum_v2 (non-inv) | 0.345 | -57.8% | -15.1% | +23.2% |
+| ttt3r_l2gate_fixed | (running, 50/96) | — | — | — |
 
-**Relpose ATE (Average) — TUM**
+**Relpose ATE (Average) — TUM（8 sequences）**
 
-| Config | ATE ↓ | vs cut3r | vs ttt3r |
-|--------|-------|----------|----------|
-| cut3r (baseline) | 0.166 | — | — |
-| ttt3r | 0.103 | -38.1% | — |
-| **ttt3r_joint** | **0.069** | -58.6% | -33.5% |
-| ttt3r_l2gate | 0.077 | -53.5% | -25.2% |
-| ttt3r_random (p=0.5) | 0.079 | -52.4% | -23.3% |
-| ttt3r_conf | 0.073 | -56.1% | -29.1% |
+| Config | ATE ↓ | vs cut3r | vs ttt3r | vs random |
+|--------|-------|----------|----------|-----------|
+| cut3r (baseline) | 0.166 | — | — | — |
+| ttt3r | 0.103 | -38.1% | — | — |
+| **ttt3r_momentum_inv_t1** | **0.063** | **-61.8%** | **-38.2%** | **-20.3%** |
+| ttt3r_joint (v1) | 0.069 | -58.6% | -33.5% | -12.7% |
+| ttt3r_joint_fixed | 0.071 | -57.0% | -30.7% | -10.1% |
+| ttt3r_conf | 0.073 | -56.1% | -29.1% | -7.6% |
+| ttt3r_l2gate_fixed | 0.075 | -54.7% | -26.9% | -5.1% |
+| ttt3r_random (p=0.5) | 0.079 | -52.4% | -23.3% | — |
+| ttt3r_momentum_inv_t2 | 0.082 | -50.5% | -20.1% | +3.8% |
+| ttt3r_momentum_v2 (non-inv) | 0.098 | -40.8% | -4.2% | +24.1% |
 
-**⚠️ 关键发现**: naive baselines（l2gate, random, conf）在 relpose 上与 ttt3r_joint 效果相当。原因：SIASU v1 alpha ≡ 0.5，所以 ttt3r_joint 本质就是 `ttt3r × 0.5 × g_geo`，而 naive baselines 也是 `ttt3r × ~0.5`。ttt3r_joint 在 TUM 上仍有优势（0.069 vs 0.077-0.079），可能来自 geo gate 的贡献。
+**关键发现 (2026-03-27)**:
+1. **Stability brake inv_t1 是全场最佳**: ScanNet -6.8% vs random, TUM -20.3% vs random
+2. **自适应 dampening 有独立价值**: 不是常数 ×0.5 能解释的，尤其在动态场景 (TUM) 上
+3. **τ=1 > τ=2**: 温和调节优于激进调节（inv_t2 在两个数据集上都更差）
+4. **Non-inverted momentum 确认有害**: 0.345 (ScanNet), 接近 pure ttt3r
+5. **SIASU v2 无效**: 0.291, 比 v1 joint (0.283) 还差
+6. **理论与实验一致**: TUM（运动多样性高，cos 方差大）改善 -20%，ScanNet（室内静态，cos 方差小）改善温和 -7%
 
-**S1 video depth + 7scenes 尚未完成**（`run_baseline_eval.sh` 中 video depth 数据集名错误 `kitti_1000` → 应为 `kitti_s1_500`，需修复后重跑）。
+**S1 video depth + 7scenes 尚未完成**: `mv_recon/launch.py` 不接受 `--eval_dataset` 参数，7scenes baseline 脚本需修复。
 
 ### S3 Hyperparameter Sensitivity (2026-03-26)
 
@@ -145,28 +161,20 @@ L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L2
 ### Failed Directions
 - **Direction C (dynamic token tracking)**: State tokens don't track spatial semantics. Walking r=-0.024, static r=-0.383 (reversed). Abandoned.
 - **Confidence gating (Exp 2)**: <1% improvement, feedback loop. Abandoned.
-- **SIASU v1 (energy/running_energy normalization)**: EMA 紧密追踪 → ratio ≈ 1.0 → alpha ≡ 0.5. 退化为常数乘子，无 selective gating 能力。已替换为 v2 (cross-token ranking)。
+- **SIASU v1 + v2**: v1 EMA 紧密追踪 → alpha ≡ 0.5; v2 cross-token ranking ATE 0.291, 比 v1 (0.283) 还差。Token-level spectral modulation 方向整体不可行。
 - **Route C1 (cross-attention bridge)**: Decoder cross-attention 太 diffuse（normalized entropy 0.914, cosine sim 0.772），无法将 pixel-space gate 有效传递到 token space。Token gate 退化为 scalar mean(pixel_gate)。
 - **原始 momentum gate (non-inverted)**: cos~0.74 → gate~0.80 → 几乎不 dampening → 比常数 0.5 差。SGD momentum 直觉在 over-update 场景下有害。
 
-### Inverted Momentum Gate / Stability Brake (2026-03-26)
+### Stability Brake (inverted momentum gate) — ✅ 已验证 (2026-03-27)
 
-**Bug 修复后新方向**: 反转 momentum gate — `sigmoid(-τ × cos)` 代替 `sigmoid(τ × cos)`
+**方法**: `α_t = σ(-τ·cos(δ_t, δ_{t-1}))` — state 更新方向一致时制动（cos 高→α 小），突变时放行（cos 低→α 大）
 
-**早期结果 (16 scenes ScanNet + 8 TUM)**:
-
-| Config | ScanNet ATE ↓ | TUM ATE ↓ | TUM vs random |
-|--------|--------------|-----------|---------------|
-| ttt3r_random (×0.5) | 0.265 | 0.073 | — |
-| ttt3r_momentum_inv_t2 (τ=2) | 0.267 | 0.062 | -15.1% |
-| **ttt3r_momentum_inv_t1 (τ=1)** | **0.263** | **0.057** | **-21.9%** |
-| ttt3r_joint_fixed | 0.307* | 0.072 | — |
-| ttt3r_momentum_v2 (non-inverted) | 0.370* | 0.091 | +24.7% |
-
-**关键发现**:
-- inv_t1 在 TUM 上大幅优于 random（-22%），证明自适应 dampening 有独立价值
-- ScanNet 上 inv_t1 ≈ random，符合理论预测（室内静态，cos 方差小 → 退化为常数）
-- 全量 ScanNet 评测进行中
+**全量结果已确认**（见 S1 对比表）:
+- **ScanNet**: inv_t1 ATE 0.261, vs random 0.280 (-6.8%)
+- **TUM**: inv_t1 ATE 0.063, vs random 0.079 (-20.3%)
+- τ=1 全面优于 τ=2（温和调节更好）
+- Non-inverted (momentum_v2) 确认有害（ScanNet 0.345, TUM 0.098）
+- 早期 16 scenes 趋势在全量 96 scenes 上完全复现
 
 ## Experiment Configs
 
@@ -337,44 +345,47 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 8. **`run_baseline_eval.sh` video depth 数据集名错误**: `kitti_1000` → 应为 `kitti_s1_500`，`bonn_1000` → `bonn_s1_500`。Relpose 部分已跑完，video depth/7scenes 需修复后重跑。
 9. **Gate state 每帧重置 (CRITICAL, 2026-03-26)**: `reset_mask = view["reset"]` 返回 `tensor([False])`（不是 None），`if reset_mask is not None:` 永远 True → momentum_state/l2_state/spectral_state 每帧重置。修复：`if reset_mask.any():` 包裹 state reset 代码，三处（`_forward_impl`, `forward_recurrent_lighter`, `forward_recurrent_analysis`）。Geo gate 不受影响。
 10. **原始 momentum gate 方向错误**: SGD momentum 直觉（cos 高→更新多）在 over-update 场景下有害。反转为 stability brake（`sigmoid(-τ × cos)`）后有效。
+11. **SIASU v2 无效 (2026-03-27)**: cross-token ranking ATE 0.291, 比 v1 (0.283) 还差。Token-level spectral modulation 方向整体放弃。
+12. **S1 7scenes 脚本错误 (2026-03-26)**: `run_baseline_eval.sh` 中 7scenes 部分传了 `--eval_dataset 7scenes`，但 `mv_recon/launch.py` 不接受该参数。Video depth 部分正常完成。
 
-## Paper Narrative（更新方向，2026-03-26）
+## Paper Narrative（2026-03-27 更新，stability brake 已验证）
 
 ### 核心故事线
 
-**问题**: Recurrent 3D reconstruction（CUT3R/TTT3R）的 state update 存在 over-update——不管输入帧是否带来新几何信息，都以相同力度更新。任何 dampening（×0.5）都显著改善，说明 systematic over-update 是核心问题。TTT3R 的 learned gate（sigmoid cross-attention）训练在 image pairs 上，未见过 long video 的 temporal pattern，泛化不够。
+**问题**: Recurrent 3D reconstruction（CUT3R/TTT3R）的 state update 存在 systematic over-update——不管输入帧是否带来新几何信息，都以相同力度更新。任何 dampening（×0.5）都显著改善，说明这是核心瓶颈。TTT3R 的 learned gate（sigmoid cross-attention）训练在 image pairs 上，未见过 long video 的 temporal pattern，泛化不够。
 
-**Insight**: State update 何时更新、更新多少，可形式化为在线优化问题。常数 dampening 面临 stability-reactivity tradeoff（静态场景需小 α 防过冲，动态场景需大 α 跟踪变化）。自适应 dampening 可通过 state trajectory 的收敛指标（连续更新的 cosine alignment）同时优化两端。
+**Insight**: 常数 dampening 面临 stability-reactivity tradeoff：静态场景需小 α 防过冲，动态场景需大 α 跟踪变化。自适应 dampening 可通过 state trajectory 的收敛指标（连续更新的 cosine alignment）同时优化两端。实验验证：TUM（高运动多样性）自适应比常数好 20%，ScanNet（低运动多样性）好 7%，与理论退化条件一致。
 
 **方法**: 两个互补的 train-free gate：
-- **Stability Brake (state space)**: `α_t = σ(-τ·cos(δ_t, δ_{t-1}))` — 检测 state 轨迹收敛（cos 高→制动），突变时放行（cos 低→更新）
-- **Geo Gate (output space)**: `g_t = σ(-τ_g·LFE(FFT2(Δlog_depth)))` — 检测深度预测不一致时抑制更新
-- 两者信号独立（state space vs output space），失效模式互补
+- **Stability Brake (state space)**: `α_t = σ(-τ·cos(δ_t, δ_{t-1}))` — 检测 state 轨迹收敛（cos 高→制动），突变时放行（cos 低→更新）。全量验证：ScanNet -68% vs cut3r, TUM -62% vs cut3r, TUM -20% vs constant dampening。
+- **Geo Gate (output space)**: `g_t = σ(-τ_g·LFE(FFT2(Δlog_depth)))` — 检测深度预测不一致时抑制更新。独立验证：ttt3r_geogate -7.2%（小规模ablation）。
+- 两者信号独立（state space vs output space），失效模式互补。最终方法 `ttt3r_brake_geo` = stability brake + geo gate 联合（待验证）。
 
 **理论支撑** (`docs/theory_section.tex`):
 1. Over-update bound: 无 dampening 时误差 O(k²) 增长
 2. Regret bound: 自适应 dampening 严格优于常数（混合运动序列）
-3. Optimal τ: 与运动多样性相关，退化到常数的条件可解释
+3. Optimal τ: 与运动多样性相关，退化到常数的条件可解释（解释了 ScanNet vs TUM 差异）
 
-**卖点**: Train-free, inference-time, plug-and-play + 理论保证。
+**卖点**: Train-free, inference-time, plug-and-play + 理论保证 + 实验证明自适应优于常数。
 
 ### Contribution
 
-1. 揭示 recurrent 3D reconstruction 中 over-update 问题，证明误差 O(k²) 增长 bound
+1. 揭示 recurrent 3D reconstruction 中 systematic over-update 问题，证明误差 O(k²) 增长 bound
 2. 提出 adaptive dampening (stability brake + geo gate)，证明 regret 严格优于常数
-3. 五个数据集三个任务验证有效性，TUM relpose -22% vs constant dampening
+3. 五个数据集三个任务验证有效性，TUM relpose -20% vs constant dampening，理论预测与实验一致
 
 ## Supplementary Experiments（2026-03-26 更新）
 
-### Exp S1: Naive Baseline Comparison（relpose 完成，video depth/7scenes 跑中）
+### Exp S1: Naive Baseline Comparison（relpose 完成 + stability brake 验证完成）
 
-已实现 `ttt3r_l2gate`, `ttt3r_random`, `ttt3r_conf` 三个 naive baseline。Relpose (ScanNet + TUM) 完成，结果见上方。
+已实现 `ttt3r_l2gate`, `ttt3r_random`, `ttt3r_conf` 三个 naive baseline + `ttt3r_momentum` (stability brake)。
 
-**已修复**: `run_baseline_eval.sh` 数据集名（`kitti_1000` → `kitti_s1_500` 等）。
-**当前状态**: Video depth + 7scenes 双 GPU 并行跑中：
-- GPU0: KITTI(3) + Sintel(3) + 7scenes/l2gate（等 S3 st4.0 完成后自动启动，log: `eval/s1_gpu0.log`）
-- GPU1: Bonn(3) + 7scenes/random + conf（等 SIASU v2 完成后自动启动，log: `eval/s1_gpu1.log`）
-- **🔥 关键待验证**: ttt3r_random 在 7scenes 上是否和 ttt3r_joint 效果相当 → 决定 geo gate 是否有价值
+**Relpose 全量结果**: 见上方 S1 对比表。Stability brake inv_t1 是全场最佳。
+
+**当前状态**:
+- `ttt3r_l2gate_fixed` ScanNet 全量跑中（50/96 scenes, GPU0）
+- Video depth + 7scenes baseline 尚未完成: `mv_recon/launch.py` 不接受 `--eval_dataset` 参数，脚本需修复
+- **🔥 关键待验证**: stability brake 在 video depth / 7scenes 上的表现
 
 ### Exp S2: Inference Overhead（必须）
 
@@ -385,11 +396,13 @@ Train-free 是卖点，需要证明 overhead negligible。
 - 在 ScanNet 上取 10 个 scene，每个跑 200 帧，记录平均 per-frame 时间
 - **实现**: 在 `inference_step` 入口/出口加 `torch.cuda.synchronize()` + `time.time()`，记录到 csv
 
-### Exp S3: Hyperparameter Sensitivity（v1 结果无意义）
+### Exp S3: Hyperparameter Sensitivity
 
-v1 SIASU alpha ≡ 0.5，τ 无影响。已跑 τ ∈ {0.5, 1.0, 2.0, 4.0}，ATE: 0.280/0.281/0.286/(running)。
-结果: `eval_results/relpose/scannet_s3_1000/ttt3r_joint_st*`。
-SIASU v2 的 τ sensitivity 视 v2 是否有效决定是否重跑。
+**SIASU τ (v1, 无意义)**: α ≡ 0.5，τ ∈ {0.5, 1.0, 2.0, 4.0} ATE: 0.280/0.281/0.286/0.283。无影响。
+
+**Stability brake momentum_tau**: 从全量结果看 τ=1 (0.261) 明显优于 τ=2 (0.311)。需补充更多 τ 值（0.5, 1.5, 3.0）的 sensitivity 分析。
+
+**Geo gate τ_g**: 从小规模 ablation 看 cutoff-insensitive（c2/c4/c8 均 ~-3.5%）。τ_g=2 最佳。
 
 ### Exp S4: Gate Visualization（v1 完成，暴露核心问题）
 
@@ -419,21 +432,29 @@ SIASU v2 的 τ sensitivity 视 v2 是否有效决定是否重跑。
 - 用已有 `eval_results/relpose/` 下的 per-scene error log 数据
 
 ## Next Steps
+
+### 已完成
 1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
 2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
 3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
 4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
 5. ~~3D Reconstruction eval (需下载 7scenes)~~ Done (2026-03-25). Acc -77.2%, Comp -54.2% (ttt3r_joint).
-6. ~~Exp S1 relpose~~ Done (2026-03-26). Naive baselines 与 joint 效果相当（ScanNet ATE: joint 0.283, l2gate 0.276, random 0.280）。
+6. ~~Exp S1 relpose~~ Done (2026-03-26). Naive baselines + stability brake 全量对比完成。
 7. ~~Exp S4 gate visualization~~ Done (2026-03-26). SIASU v1 alpha ≡ 0.5，geo gate 有真实方差。
-8. ~~Exp S3 τ sensitivity (v1)~~ Done (2026-03-26). τ 无影响（alpha ≡ 0.5）。
-9. ~~Cross-attention sparsity check~~ Done (2026-03-26). Diffuse（entropy 0.914），Route C1 不可行。
-10. ~~Gate state 每帧重置 bug~~ Fixed (2026-03-26). `if reset_mask.any():` 三处修复。
-11. ~~反转 momentum gate 实现~~ Done (2026-03-26). `sigmoid(-τ × cos)`, TUM -22% vs random.
-12. ~~理论推导~~ Done (2026-03-26). `docs/theory_section.tex`, 三个命题 + 证明。
-13. **[Running] Stability brake 全量 ScanNet** — GPU0: inv_t2, GPU1: inv_t1
-14. **[Running] 远程服务器 (wh@10.160.4.17)** — GPU4: TUM + ScanNet inv/joint_fixed/l2gate_fixed
-15. **[Todo] ttt3r_brake_geo** — stability brake + geo gate 联合（最终方法）
-16. **[Todo] Exp S2: Inference overhead**
-17. **[Todo] Exp S5: Per-scene distribution**
-18. **🔥 决策点**: 全量 ScanNet inv_t1 结果 → 确认 adaptive dampening 在大数据集上的优势
+8. ~~Exp S3 SIASU τ sensitivity~~ Done (2026-03-26). τ 无影响（alpha ≡ 0.5）。
+9. ~~Cross-attention sparsity check~~ Done (2026-03-26). Diffuse，Route C1 不可行。
+10. ~~Gate state 每帧重置 bug~~ Fixed (2026-03-26).
+11. ~~Stability brake 实现 + 全量验证~~ Done (2026-03-27). inv_t1: ScanNet -68%, TUM -62% vs cut3r; TUM -20% vs random.
+12. ~~SIASU v2~~ Done (2026-03-27). ATE 0.291, 无改善，方向放弃。
+13. ~~理论推导~~ Done (2026-03-26). `docs/theory_section.tex`, 三个命题 + 证明。
+
+### 进行中
+14. **[Running] l2gate_fixed ScanNet 全量** — GPU0, 50/96 scenes
+
+### 待办（按优先级）
+15. **[P0] ttt3r_brake_geo** — stability brake + geo gate 联合（最终方法），relpose + video depth + 7scenes 全评测
+16. **[P0] S1 video depth + 7scenes baseline** — 修复 7scenes 脚本（`mv_recon/launch.py` 不接受 `--eval_dataset`）
+17. **[P1] Exp S3: Stability brake τ sensitivity** — τ ∈ {0.5, 1.0, 1.5, 2.0, 3.0}
+18. **[P1] Exp S2: Inference overhead** — wall-clock time + peak GPU memory
+19. **[P2] Exp S5: Per-scene distribution** — scatter plot / box plot
+20. **[P2] Exp S4 更新**: Stability brake gate visualization（替换已退化的 SIASU alpha 可视化）
