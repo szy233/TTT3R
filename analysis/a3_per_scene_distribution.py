@@ -31,6 +31,7 @@ CONFIG_LABELS = {
     "cut3r": "CUT3R (baseline)",
     "ttt3r": "TTT3R (no dampening)",
     "ttt3r_random": "TTT3R + constant 0.5",
+    "ttt3r_random_p033": "TTT3R + constant 0.33",
     "ttt3r_momentum_inv_t1": "TTT3R + stability brake",
 }
 # Colors for each config
@@ -38,7 +39,15 @@ CONFIG_COLORS = {
     "cut3r": "#888888",
     "ttt3r": "#4477AA",
     "ttt3r_random": "#EE7733",
+    "ttt3r_random_p033": "#CC6600",
     "ttt3r_momentum_inv_t1": "#228833",
+}
+
+# Per-dataset: which constant baseline to use for the scatter plot
+# Use p=0.33 when available (TUM), else fall back to p=0.5 (ScanNet)
+RANDOM_BASELINE = {
+    "ScanNet": "ttt3r_random",
+    "TUM": "ttt3r_random_p033",
 }
 
 
@@ -237,37 +246,67 @@ def format_stats(stats, dataset_name):
 def process_dataset(base_dir, dataset_name):
     """Process one dataset: load data, make plots, return stats text."""
     print(f"\n--- {dataset_name} ---")
-    data = load_dataset(base_dir, CONFIGS)
-    common_scenes = get_common_scenes(data, CONFIGS)
+
+    # Determine which configs actually exist for this dataset
+    available = [cfg for cfg in CONFIGS
+                 if (base_dir / cfg / "_error_log.txt").exists()]
+    # Also try p033 variant
+    p033_key = "ttt3r_random_p033"
+    if (base_dir / p033_key / "_error_log.txt").exists() and p033_key not in available:
+        available.append(p033_key)
+    print(f"  Available configs: {available}")
+
+    data = load_dataset(base_dir, available)
+    common_scenes = get_common_scenes(data, available)
     print(f"  Common scenes: {len(common_scenes)}")
 
     if len(common_scenes) == 0:
         return f"=== {dataset_name}: No common scenes found ===\n"
 
+    # Choose which random baseline to use for scatter plot
+    random_key = RANDOM_BASELINE.get(dataset_name, "ttt3r_random")
+    if random_key not in data or len(data[random_key]) == 0:
+        random_key = "ttt3r_random"  # fallback
+    print(f"  Using random baseline: {random_key}")
+
+    # Common scenes for scatter: must have both random and brake
+    scatter_scenes = sorted(
+        set(data.get(random_key, {}).keys()) &
+        set(data.get("ttt3r_momentum_inv_t1", {}).keys())
+    )
+
+    if len(scatter_scenes) == 0:
+        return f"=== {dataset_name}: No common scenes for scatter ===\n"
+
     # Extract arrays for scatter
-    random_ates = np.array([data["ttt3r_random"][s] for s in common_scenes])
-    brake_ates = np.array([data["ttt3r_momentum_inv_t1"][s] for s in common_scenes])
+    random_ates = np.array([data[random_key][s] for s in scatter_scenes])
+    brake_ates = np.array([data["ttt3r_momentum_inv_t1"][s] for s in scatter_scenes])
 
     # Scatter plot
-    plot_scatter(random_ates, brake_ates, common_scenes, dataset_name,
+    plot_scatter(random_ates, brake_ates, scatter_scenes, dataset_name,
                  OUT_DIR / f"scatter_{dataset_name.lower()}.png")
 
-    # Box plot
-    plot_boxplot(data, common_scenes, CONFIGS, dataset_name,
+    # Box plot (use the available configs that are in common_scenes)
+    box_configs = [c for c in available if c in data and len(data[c]) >= len(common_scenes)//2]
+    plot_boxplot(data, common_scenes, box_configs, dataset_name,
                  OUT_DIR / f"boxplot_{dataset_name.lower()}.png")
 
     # Statistics
-    stats = compute_stats(random_ates, brake_ates, common_scenes)
+    stats = compute_stats(random_ates, brake_ates, scatter_scenes)
     stats_text = format_stats(stats, dataset_name)
 
     # Also add per-config summary (mean/median ATE)
     config_lines = [f"--- {dataset_name}: Per-Config ATE Summary ---", ""]
-    config_lines.append(f"{'Config':<35s}  {'Mean ATE':>10s}  {'Median ATE':>10s}")
-    config_lines.append("-" * 60)
-    for cfg in CONFIGS:
-        ates = np.array([data[cfg][s] for s in common_scenes])
+    config_lines.append(f"{'Config':<35s}  {'Mean ATE':>10s}  {'Median ATE':>10s}  {'N':>4s}")
+    config_lines.append("-" * 65)
+    for cfg in available:
+        scenes_for_cfg = [s for s in scatter_scenes if s in data.get(cfg, {})]
+        if not scenes_for_cfg:
+            continue
+        ates = np.array([data[cfg][s] for s in scenes_for_cfg])
+        label = CONFIG_LABELS.get(cfg, cfg)
         config_lines.append(
-            f"{CONFIG_LABELS[cfg]:<35s}  {np.mean(ates):10.5f}  {np.median(ates):10.5f}"
+            f"{label:<35s}  {np.mean(ates):10.5f}  {np.median(ates):10.5f}  {len(ates):>4d}"
         )
     config_lines.append("")
 
