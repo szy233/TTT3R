@@ -34,24 +34,47 @@ def parse_args():
     return parser.parse_args()
 
 
-def find_depth_dirs(source_root):
-    pattern = os.path.join(
-        source_root, "*", "proj_depth", "groundtruth", "image_02"
-    )
-    return sorted(glob.glob(pattern))
+def find_sequence_pairs(source_root):
+    source_root = Path(source_root)
+
+    # Official KITTI depth-selection package layout:
+    # depth_selection/val_selection_cropped/{groundtruth_depth,image}/<seq_name>/*.png
+    selection_root = source_root
+    if (selection_root / "depth_selection" / "val_selection_cropped").exists():
+        selection_root = selection_root / "depth_selection" / "val_selection_cropped"
+    if (selection_root / "groundtruth_depth").exists() and (
+        selection_root / "image"
+    ).exists():
+        pairs = []
+        for depth_dir in sorted((selection_root / "groundtruth_depth").glob("*")):
+            if not depth_dir.is_dir():
+                continue
+            image_dir = selection_root / "image" / depth_dir.name
+            if not image_dir.is_dir():
+                print(f"missing image directory for {depth_dir.name}: {image_dir}")
+                continue
+            pairs.append((depth_dir.name, depth_dir, image_dir))
+        return pairs
+
+    # Legacy layout used by older project-local exports:
+    # <seq>/proj_depth/groundtruth/image_02/*.png with sibling raw images
+    pattern = os.path.join(source_root.as_posix(), "*", "proj_depth", "groundtruth", "image_02")
+    pairs = []
+    for depth_dir in sorted(glob.glob(pattern)):
+        depth_path = Path(depth_dir)
+        seq_root = depth_path.parents[3]
+        seq_name = seq_root.name
+        stem_parts = seq_root.name.split("_")
+        raw_seq_name = "_".join(stem_parts[:3]) if len(stem_parts) >= 3 else seq_root.name
+        image_dir = seq_root.parents[0] / raw_seq_name / "image_02" / "data"
+        if not image_dir.is_dir():
+            print(f"missing image directory for {seq_name}: {image_dir}")
+            continue
+        pairs.append((seq_name, depth_path, image_dir))
+    return pairs
 
 
-def infer_image_dir(depth_dir):
-    depth_path = Path(depth_dir)
-    seq_root = depth_path.parents[3]
-    stem_parts = seq_root.name.split("_")
-    raw_seq_name = "_".join(stem_parts[:3]) if len(stem_parts) >= 3 else seq_root.name
-    return seq_root.parents[0] / raw_seq_name / "image_02" / "data"
-
-
-def copy_subset(depth_dir, output_root, target_frames):
-    depth_path = Path(depth_dir)
-    seq_name = depth_path.parents[3].name
+def copy_subset(seq_name, depth_path, image_dir, output_root, target_frames):
     output_root = Path(output_root)
     depth_out = (
         output_root
@@ -77,7 +100,6 @@ def copy_subset(depth_dir, output_root, target_frames):
         f"available={len(all_depth_files)}, processed={actual_frames}"
     )
 
-    image_dir = infer_image_dir(depth_dir)
     for depth_file in all_depth_files[:target_frames]:
         shutil.copy(depth_file, depth_out / depth_file.name)
         image_file = image_dir / depth_file.name
@@ -89,16 +111,18 @@ def copy_subset(depth_dir, output_root, target_frames):
 
 def main():
     args = parse_args()
-    depth_dirs = find_depth_dirs(args.source_root)
-    if not depth_dirs:
+    sequence_pairs = find_sequence_pairs(args.source_root)
+    if not sequence_pairs:
         raise FileNotFoundError(
-            "No KITTI depth directories found under "
-            f"{args.source_root}. Expected */proj_depth/groundtruth/image_02."
+            "No KITTI sequence directories found under "
+            f"{args.source_root}. Expected either "
+            "depth_selection/val_selection_cropped/{groundtruth_depth,image} "
+            "or */proj_depth/groundtruth/image_02."
         )
 
     for target_frames in args.target_frames:
-        for depth_dir in depth_dirs:
-            copy_subset(depth_dir, args.output_root, target_frames)
+        for seq_name, depth_path, image_dir in sequence_pairs:
+            copy_subset(seq_name, depth_path, image_dir, args.output_root, target_frames)
 
 
 if __name__ == "__main__":
