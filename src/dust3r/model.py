@@ -899,7 +899,8 @@ class ARCroco3DStereo(CroCoNet):
 
             # Extract depth for geo gate types
             if update_type in ("cut3r_geogate", "ttt3r_geogate",
-                               "cut3r_joint", "ttt3r_joint"):
+                               "cut3r_joint", "ttt3r_joint",
+                               "ttt3r_brake_geo"):
                 curr_depth = res['pts3d_in_self_view'][0, :, :, 2]  # [H, W]
 
             if i == 0:
@@ -915,7 +916,8 @@ class ARCroco3DStereo(CroCoNet):
                     }
                 # Initialize geo gate state
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
-                                   "cut3r_joint", "ttt3r_joint"):
+                                   "cut3r_joint", "ttt3r_joint",
+                                   "ttt3r_brake_geo"):
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
                 # Initialize L2 norm gate state
                 if update_type == "ttt3r_l2gate":
@@ -925,7 +927,7 @@ class ARCroco3DStereo(CroCoNet):
                             device=state_feat.device),
                     }
                 # Initialize momentum gate state
-                if update_type == "ttt3r_momentum":
+                if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                     momentum_state = {}
             else:
                 if update_type == "cut3r":
@@ -967,6 +969,14 @@ class ARCroco3DStereo(CroCoNet):
                     m_gate = self._momentum_gate(
                         state_feat, new_state_feat, momentum_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * m_gate
+                elif update_type == "ttt3r_brake_geo":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * m_gate * g_geo
                 elif update_type == "cut3r_spectral":
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
@@ -1031,7 +1041,7 @@ class ARCroco3DStereo(CroCoNet):
                             'running_energy': torch.zeros_like(
                                 l2_state['running_energy']),
                         }
-                    if update_type == "ttt3r_momentum":
+                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                         momentum_state = {}
             all_state_args.append(
                 (state_feat, state_pos, init_state_feat, mem, init_mem)
@@ -1713,7 +1723,8 @@ class ARCroco3DStereo(CroCoNet):
                     mem_spectral_state = {}
                 # Reset geo gate state on scene reset
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
-                                   "cut3r_joint", "ttt3r_joint"):
+                                   "cut3r_joint", "ttt3r_joint",
+                                   "ttt3r_brake_geo"):
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
                 # Initialize L2 norm gate state
                 if update_type == "ttt3r_l2gate":
@@ -1723,7 +1734,7 @@ class ARCroco3DStereo(CroCoNet):
                             device=state_feat.device),
                     }
                 # Initialize momentum gate state
-                if update_type == "ttt3r_momentum":
+                if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                     momentum_state = {}
                 prev_img = curr_img
             else:
@@ -1766,6 +1777,14 @@ class ARCroco3DStereo(CroCoNet):
                     m_gate = self._momentum_gate(
                         state_feat, new_state_feat, momentum_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * m_gate
+                elif update_type == "ttt3r_brake_geo":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * m_gate * g_geo
                 elif update_type == "cut3r_spectral":
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
@@ -1857,10 +1876,11 @@ class ARCroco3DStereo(CroCoNet):
                             'running_energy': torch.zeros_like(
                                 l2_state['running_energy']),
                         }
-                    if update_type == "ttt3r_momentum":
+                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                         momentum_state = {}
                     if update_type in ("cut3r_geogate", "ttt3r_geogate",
-                                       "cut3r_joint", "ttt3r_joint"):
+                                       "cut3r_joint", "ttt3r_joint",
+                                       "ttt3r_brake_geo"):
                         geo_state = {'prev_depth': curr_depth.detach().clone()}
 
         if ret_state:
@@ -2028,7 +2048,8 @@ class ARCroco3DStereo(CroCoNet):
                             device=state_feat.device),
                     }
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
-                                   "cut3r_joint", "ttt3r_joint"):
+                                   "cut3r_joint", "ttt3r_joint",
+                                   "ttt3r_brake_geo"):
                     curr_depth = res['pts3d_in_self_view'][0, :, :, 2]
                     geo_state = {'prev_depth': curr_depth.detach().clone()}
                 if update_type == "ttt3r_l2gate":
@@ -2042,7 +2063,8 @@ class ARCroco3DStereo(CroCoNet):
             else:
                 # Extract depth for geo gate types
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
-                                   "cut3r_joint", "ttt3r_joint"):
+                                   "cut3r_joint", "ttt3r_joint",
+                                   "ttt3r_brake_geo"):
                     curr_depth = res['pts3d_in_self_view'][0, :, :, 2]
 
                 if update_type == "cut3r":
@@ -2099,6 +2121,17 @@ class ARCroco3DStereo(CroCoNet):
                     m_gate = self._momentum_gate(
                         state_feat, new_state_feat, momentum_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * m_gate
+                elif update_type == "ttt3r_brake_geo":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * m_gate * g_geo
                 elif update_type == "cut3r_spectral":
                     alpha = self._spectral_modulation(
                         state_feat, new_state_feat, spectral_state, self.config)
@@ -2166,7 +2199,7 @@ class ARCroco3DStereo(CroCoNet):
                             'running_energy': torch.zeros_like(
                                 l2_state['running_energy']),
                         }
-                    if update_type == "ttt3r_momentum":
+                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                         momentum_state = {}
 
         analysis_data = {
