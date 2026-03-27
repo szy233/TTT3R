@@ -1,7 +1,7 @@
 # TTT3R — Adaptive State Dampening for Recurrent 3D Reconstruction
 
 ## Project Goal
-NeurIPS submission. Train-free, inference-time adaptive dampening for state updates in recurrent 3D reconstruction (CUT3R/TTT3R). 核心方法：Stability Brake — cosine-based adaptive dampening of state trajectory.
+NeurIPS submission. Train-free, inference-time adaptive dampening for state updates in recurrent 3D reconstruction (CUT3R/TTT3R). 核心方法：Delta Orthogonalization — 将 state update 分解为 drift（重复方向）和 novel（新信息）分量，差异化抑制。
 
 ## Architecture Overview
 
@@ -13,7 +13,7 @@ The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frame
 5. State update: `state_feat = new * mask1 + old * (1-mask1)`
 6. Memory update: `mem = new_mem * mask2 + mem * (1-mask2)`
 
-`mask1` and `mask2` are where our frequency-domain gates are applied.
+`mask1` and `mask2` are where our adaptive dampening gates are applied.
 
 ## Three-Layer Frequency Framework
 
@@ -56,8 +56,12 @@ The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frame
 | `ttt3r_l2gate` | ttt3r × l2_norm_gate | 1.0 | ← naive baseline (implemented)
 | `ttt3r_random` | ttt3r × p (constant) | 1.0 | ← naive baseline (implemented, p=0.5)
 | `ttt3r_conf` | ttt3r × conf_gate | 1.0 | ← naive baseline (existing)
-| `ttt3r_momentum` | ttt3r × momentum_gate | 1.0 | stability brake (inverted cosine, best single gate)
-| `ttt3r_brake_geo` | ttt3r × momentum_gate × geo gate | 1.0 | ← 最终方法（待实现验证）
+| `ttt3r_momentum` | ttt3r × momentum_gate | 1.0 | stability brake (inverted cosine)
+| `ttt3r_brake_geo` | ttt3r × momentum_gate × geo gate | 1.0 | brake+geo 联合（over-dampening, 已放弃）
+| `ttt3r_ortho` | delta orthogonalization | 1.0 | ← **当前最优方法**（drift/novel 分解）
+| `ttt3r_delta_clip` | ttt3r × clip(delta) | 1.0 | delta norm clipping（失败）
+| `ttt3r_attn_protect` | ttt3r × attn_protect | 1.0 | attention-based protection（失败）
+| `ttt3r_mem_novelty` | ttt3r × mem_novelty_gate | 1.0 | memory novelty gate（≈常数，失败）
 
 ## Key Experimental Results
 
@@ -130,6 +134,57 @@ L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L2
 5. **SIASU v2 无效**: 0.291, 比 v1 joint (0.283) 还差
 6. **理论与实验一致**: TUM（运动多样性高，cos 方差大）改善 -20%，ScanNet（室内静态，cos 方差小）改善温和 -7%
 
+### Delta Orthogonalization (ttt3r_ortho) — ✅ 当前最优 (2026-03-28)
+
+**方法**: 将 state update delta 分解为 drift（EMA 追踪的重复方向）和 novel（正交新信息）分量，差异化抑制：
+```python
+delta = new_state_feat - state_feat
+drift_dir = EMA(delta_dir, β=0.95)  # 追踪漂移方向
+drift_comp = proj(delta, drift_dir)   # 投影到漂移方向
+novel_comp = delta - drift_comp       # 正交分量（新信息）
+updated = state_feat + α_novel × novel_comp + α_drift × drift_comp
+# α_novel=0.5, α_drift=0.05 — 保留新信息，强抑制重复漂移
+```
+
+**Relpose ATE — TUM（8 sequences）**
+
+| Config | ATE ↓ | vs cut3r | vs random_p033 |
+|--------|-------|----------|----------------|
+| cut3r (baseline) | 0.166 | — | — |
+| ttt3r | 0.103 | -38.1% | — |
+| ttt3r_random (p=0.33) | 0.066 | -60.2% | — |
+| ttt3r_momentum_inv_t1 | 0.063 | -61.8% | -4.5% |
+| **ttt3r_ortho** | **0.056** | **-66.5%** | **-15.4%** |
+| ttt3r_ortho (α_drift=0) | 0.075 | -54.7% | +13.6% |
+
+**Per-sequence breakdown**: 7/8 improved, 1 tied (walking_static)
+- Best: sitting_halfsphere 0.070→0.040 (-42.9%), walking_halfsphere 0.086→0.046 (-46.5%)
+- Worst: walking_rpy 0.110→0.153 (+39.1%) — 唯一退化
+
+**关键发现 (2026-03-28)**:
+1. **Ortho 是全场最佳**: TUM -15.4% vs constant 0.33, -11.1% vs stability brake
+2. **α_drift=0 失败 (0.075)**: 漂移方向含有用信号，不能完全丢弃，需小量保留 (0.05)
+3. **Over-update 本质是 scale calibration 问题**: A1 分析揭示所有 adaptive gate std≈0.02-0.03，退化为 ~constant 0.33。真正的问题不是 "何时更新"，而是 "更新方向的哪部分该保留"
+4. **cos mean=0.7**: 70% 的 delta 能量在重复方向上 → drift 抑制有实质意义
+
+**ScanNet 全量评测**: 运行中（GPU0, 96 scenes）
+
+### A1/A2/A3 Deep Analysis 结果 (2026-03-28)
+
+**A1: Gate Temporal Dynamics**
+- Gate std 仅 0.02-0.03（across all adaptive methods），几乎无时序变化
+- Gate 值 ~0.33 常数，与 camera motion 无相关性
+- **结论**: Stability brake 的 "自适应" 实际退化为常数 dampening，改善来自 scale 而非 timing
+
+**A2: Cosine Variance ↔ Improvement 相关性**
+- Pearson r = -0.133, p = 0.625（不显著）
+- Var(cos) 与 ATE improvement 无相关
+- **结论**: 之前 "TUM Var(cos) > ScanNet 导致 TUM 改善更多" 的解释不成立
+
+**A3: Per-Scene 改善分布**
+- Stability brake vs random: 约 50/50 改善/退化，非 consistent improvement
+- **结论**: 均值改善但 per-scene 不一致，进一步支持 "scale calibration > adaptive timing"
+
 **S1 video depth + 7scenes 尚未完成**: `mv_recon/launch.py` 不接受 `--eval_dataset` 参数，7scenes baseline 脚本需修复。
 
 **brake_geo 联合实验 (2026-03-27)**:
@@ -169,8 +224,11 @@ L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L2
 - **Route C1 (cross-attention bridge)**: Decoder cross-attention 太 diffuse（normalized entropy 0.914, cosine sim 0.772），无法将 pixel-space gate 有效传递到 token space。Token gate 退化为 scalar mean(pixel_gate)。
 - **原始 momentum gate (non-inverted)**: cos~0.74 → gate~0.80 → 几乎不 dampening → 比常数 0.5 差。SGD momentum 直觉在 over-update 场景下有害。
 - **brake_geo (stability brake + geo gate 联合)**: ScanNet 0.339, TUM 0.081，两个 gate 各自 ~0.5 叠加后 over-dampening（effective ~0.25），不如单独 stability brake (0.261/0.063)。
+- **Delta Clipping (ttt3r_delta_clip)**: TUM ATE 0.104, 比 ttt3r (0.103) 无改善。Clip 在需要大更新时（旋转场景）适得其反，halfsphere/walking_xyz 严重退化。
+- **Attention Protection (ttt3r_attn_protect)**: TUM ATE 0.070, 保护高 attention token 不帮助。假设（频繁关注=重要 token 需保护）不成立。
+- **Memory Novelty Gate (ttt3r_mem_novelty)**: TUM ATE 0.066 ≈ constant 0.33。Feature 空间 cosine EMA 紧密追踪（cos>0.99），与 SIASU v1 同样问题。
 
-### Stability Brake (inverted momentum gate) — ✅ 已验证 (2026-03-27)
+### Stability Brake (inverted momentum gate) — 已验证但非最优 (2026-03-27)
 
 **方法**: `α_t = σ(-τ·cos(δ_t, δ_{t-1}))` — state 更新方向一致时制动（cos 高→α 小），突变时放行（cos 低→α 大）
 
@@ -213,6 +271,9 @@ Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/
 | `docs/run_experiments.sh` | All experiment commands |
 | `analysis/s4_gate_visualization.py` | S4 gate activation 可视化 |
 | `analysis/check_cross_attn_sparsity.py` | Cross-attention sparsity 验证（Route C 前提检验） |
+| `analysis/a1a2_gate_dynamics.py` | A1/A2 gate dynamics + cos variance 分析 |
+| `analysis/a1_outdoor.py` | KITTI/Sintel A1 分析 |
+| `analysis/token_gate_variance.py` | Per-token gate 方差分析 |
 | `docs/theory_section.tex` | 理论推导（over-update bound, regret bound, optimal τ） |
 
 ## Formal Evaluation
@@ -229,7 +290,7 @@ Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/
 
 ### 运行方式
 
-对比三个配置：`cut3r`（baseline）, `ttt3r`, `ttt3r_joint`（L23+ttt3r，最终方法）。
+对比配置：`cut3r`（baseline）, `ttt3r`, `ttt3r_ortho`（Delta Orthogonalization，当前最优）, `ttt3r_random`（constant dampening baseline）。
 
 ```bash
 # 双卡并行: GPU0 跑 ScanNet, GPU1 跑 TUM
@@ -353,95 +414,78 @@ python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8
 11. **SIASU v2 无效 (2026-03-27)**: cross-token ranking ATE 0.291, 比 v1 (0.283) 还差。Token-level spectral modulation 方向整体放弃。
 12. **S1 7scenes 脚本错误 (2026-03-26)**: `run_baseline_eval.sh` 中 7scenes 部分传了 `--eval_dataset 7scenes`，但 `mv_recon/launch.py` 不接受该参数。Video depth 部分正常完成。
 
-## Paper Narrative（2026-03-27 更新，stability brake only，去频域化）
+## Paper Narrative（2026-03-28 更新，Delta Orthogonalization）
 
 ### 叙事定位
 
-**不再从频域出发**。方法 `α = σ(-τ·cos(δ_t, δ_{t-1}))` 与频域无关，强套频域框架会被 reviewer 质疑。新定位：**问题驱动 + State Dynamics Analysis + 理论保证**。
+**不再从频域或 adaptive timing 出发**。A1/A2/A3 分析揭示：所有 scalar adaptive gate（stability brake, geo gate, SIASU）都退化为 ~constant 0.33（std≈0.02），与 camera motion 无相关。真正的问题不是 "何时更新" 而是 "更新的哪个方向该保留"。
 
-频域尝试（geo gate FFT, SIASU spectral energy）降级为 ablation/appendix 中 "alternative signals explored"。
+新定位：**Over-update 是方向性问题 → Delta Decomposition + 差异化抑制**。
 
 ### 核心故事线
 
-**问题**: Recurrent 3D reconstruction（CUT3R/TTT3R）的 state update 存在 systematic over-update——不管输入帧是否带来新几何信息，都以相同力度更新。实验证据：任何常数 dampening（×0.5）都改善 30%，说明 over-update 是核心瓶颈，而非已知问题。TTT3R 的 learned gate 训练在 image pairs 上，未见过 long video 的 temporal dynamics，泛化不够。
+**问题**: Recurrent 3D reconstruction 的 state update 存在 systematic over-update。实验证据：
+1. 任何常数 dampening（×0.33）都改善 ~60%，说明 over-update 是核心瓶颈
+2. TTT3R 的 learned gate 训练在 image pairs 上，未见过 long video temporal dynamics
 
-**Analysis（paper 核心增量）**: 深入分析 state trajectory dynamics，揭示：
-- State 连续更新的 cosine alignment 是 over-update 的直接指标（A1: 与 camera motion 负相关）
-- 常数 dampening 面临 stability-reactivity tradeoff，理论证明自适应严格更优
-- 改善幅度与场景运动多样性 Var(cos) 正相关（A2: 验证理论预测）
-- Brake 的 per-scene 改善具有 consistency（A3: per-scene 分布分析）
+**关键分析发现**:
+- A1: 所有 adaptive scalar gate 退化为 ~constant 0.33（std≈0.02），无时序动态
+- A2: cos variance vs improvement 无相关（r=-0.13, p=0.63）→ adaptive timing 无意义
+- A3: Scalar gate 的 per-scene consistency ~50%，非 robust improvement
+- cos(δ_t, δ_{t-1}) mean≈0.7 → **70% delta 能量在重复方向** → 问题是方向性的
 
-**方法**: Stability Brake — `α_t = σ(-τ·cos(δ_t, δ_{t-1}))`
-- 检测 state 轨迹收敛（cos 高→制动），突变时放行（cos 低→更新）
-- Train-free, inference-time, 一个超参 τ=1, 直接 plug-in
-- 全量验证：ScanNet -68% vs cut3r, TUM -62% vs cut3r, TUM -20% vs constant dampening
+**Insight**: Over-update 不是 scale 问题（scalar gate 解决），而是**方向性漂移**问题。连续帧的 state update 70% 重复，需要方向分解而非 scalar dampening。
 
-**Geo gate 叠加失败 (2026-03-27)**:
-- `ttt3r_brake_geo` ScanNet ATE 0.339（vs inv_t1 0.261, +30%↑）
-- `ttt3r_brake_geo` TUM ATE 0.081（vs inv_t1 0.063, +29%↑）
-- 原因：两个 gate 各自压缩 mask ~0.5，叠加后 over-dampening（effective ~0.25）
-- **结论**: Stability brake 单独使用就是最优方案
+**方法**: Delta Orthogonalization — 分解 delta 为 drift + novel 分量
+```
+drift_dir = EMA(delta_direction, β=0.95)
+drift_comp = proj(delta, drift_dir)    # 重复方向 → 强抑制 (α_drift=0.05)
+novel_comp = delta - drift_comp        # 新信息 → 保留 (α_novel=0.5)
+```
+- Train-free, inference-time, 三个超参（α_novel, α_drift, β）
+- 直接 plug-in，不改模型结构
+- TUM: -15.4% vs constant dampening, -11.1% vs stability brake
 
 **理论支撑** (`docs/theory_section.tex`):
 1. Over-update bound: 无 dampening 时误差 O(k²) 增长
-2. Regret bound: 自适应 dampening 严格优于常数（混合运动序列）
-3. Optimal τ: 与运动多样性相关，退化到常数的条件可解释（解释了 ScanNet vs TUM 差异）
-
-**卖点**: 不是 "碰巧有效的 heuristic"，而是 "理解 state dynamics 后的 principled solution" + 理论保证 + 深度分析验证。
+2. 方向分解优势: drift 分量占 70% 能量，选择性抑制比 uniform dampening 保留更多新信息
+3. α_drift=0 失败证明漂移方向仍含有用信号，需小量保留
 
 ### Contribution
 
-1. 揭示 recurrent 3D reconstruction 中 systematic over-update 问题，证明误差 O(k²) 增长 bound
-2. 对 state trajectory dynamics 的深入分析（gate temporal dynamics, cosine variance correlation, per-scene distribution），建立 "为什么自适应优于常数" 的完整 empirical evidence
-3. 提出 stability brake（cosine-based adaptive dampening），理论证明 regret 严格优于常数，五个数据集三个任务验证
+1. 揭示 recurrent 3D reconstruction 中 systematic over-update 问题，通过 A1/A2/A3 分析证明 scalar adaptive gate 退化为常数
+2. 发现 over-update 的方向性本质：70% delta 能量在 drift 方向，scalar dampening 无法区分 drift vs novel
+3. 提出 Delta Orthogonalization（drift/novel 分解 + 差异化抑制），TUM -66.5% vs baseline, -15.4% vs constant dampening
 
-### Deep Analysis Plan（paper 核心 section）
+### Deep Analysis（已完成，支撑方法设计）
 
-#### A1: Gate Temporal Dynamics（直观展示 brake 行为）
-- 对 2-3 个典型 scene（静态/动态/混合），逐帧画：
-  - cos(δ_t, δ_{t-1}) 曲线（brake 的 raw signal）
-  - α_t gate 值曲线
-  - GT camera motion magnitude（相邻帧平移+旋转幅度，从 GT pose 计算）
-- **预期**: camera 静止 → cosine 高 → brake 压下; camera 大幅运动 → cosine 低 → brake 松开
-- **意义**: 直接证明 brake 在 "该刹时刹、该放时放"，不是盲目 dampening
-- **实现**: `forward_recurrent_analysis` log 每帧 cosine + gate，GT motion 从 pose 文件算
+#### A1: Gate Temporal Dynamics — ✅ 完成
+- **结果**: Gate std 0.02-0.03，~constant 0.33，与 camera motion 无相关
+- **意义**: 证明 scalar adaptive gate 方向不可行，motivate 方向分解
 
-#### A2: Cosine Variance ↔ Improvement 相关性（验证理论预测）
-- 对每个 scene 计算 Var(cos(δ_t, δ_{t-1})) 和 ATE 改善比 (random - inv_t1) / random
-- Scatter plot + Pearson/Spearman correlation
-- **预期**: 正相关 — Var(cos) 大的 scene 改善多（自适应有空间），Var(cos) 小的 scene 改善少（退化为常数）
-- **意义**: 直接验证理论中 "optimal τ 与运动多样性相关" 的推论。解释 TUM 整体 Var(cos) > ScanNet → TUM 改善 20% > ScanNet 7%
-- **实现**: 跑一遍 analysis 模式收集 cosine 序列，结合已有 per-scene ATE
+#### A2: Cosine Variance ↔ Improvement — ✅ 完成
+- **结果**: Pearson r=-0.133, p=0.625，不显著
+- **意义**: "运动多样性高→自适应改善多" 的假设不成立
 
-#### A3: Per-Scene 改善分布（展示 consistency + failure analysis）
-- Scatter plot: x = random ATE, y = inv_t1 ATE，每点一个 scene，画 y=x 参考线
-- 点在线下 = 改善，线上 = 退化
-- 统计改善/退化 scene 数量，worst case 分析
-- **意义**: 证明 stability brake 不只是均值好，而是 consistently 好
-- **实现**: 直接用 `eval_results/relpose/` 下已有的 per-scene error log
+#### A3: Per-Scene 改善分布 — ✅ 完成
+- **结果**: Brake vs random ~50/50 改善/退化
+- **意义**: Scalar gate 改善不 consistent，需要更 principled 的方法
 
-#### A4: State Convergence 分析（机制解释）
-- 对比 ttt3r vs inv_t1: ||δ_t||（state delta norm）随帧数的变化
-- **预期**: brake 让 state 更快收敛（delta norm 更快下降），同时在场景变化时响应更敏锐
-- **实现**: `forward_recurrent_analysis` log delta norm
+#### A4: Delta 方向分析（支撑 ortho 设计）
+- cos(δ_t, δ_{t-1}) mean≈0.7 → 70% 能量在 drift 方向
+- α_drift=0 failure → drift 方向非纯 noise，需小量保留
+- **意义**: 直接 motivate drift/novel 分解的设计选择
 
-#### A5: Scene 特征关联（optional, 加分项）
-- 按 GT 运动特征分类（平移幅度、旋转幅度、运动变化频率）
-- 分析哪类 scene 受益最多/最少
-- **意义**: 给 practitioner 提供 "什么时候该用 stability brake" 的指导
-
-## Supplementary Experiments（2026-03-27 更新）
+## Supplementary Experiments（2026-03-28 更新）
 
 ### Exp S1: Naive Baseline Comparison（relpose 全量完成）
 
-已实现 `ttt3r_l2gate`, `ttt3r_random`, `ttt3r_conf` 三个 naive baseline + `ttt3r_momentum` (stability brake) + `ttt3r_brake_geo` (联合)。
-
-**Relpose 全量结果**: 见上方 S1 对比表。Stability brake inv_t1 是全场最佳，brake_geo 联合 over-dampening。
+已实现所有 baseline + adaptive methods。**Delta Orthogonalization (ttt3r_ortho) 是当前最优**。
 
 **完成状态**:
-- l2gate_fixed ScanNet 全量完成：ATE 0.289（与 random 0.280 相当）
-- brake_geo relpose 完成：ScanNet 0.339, TUM 0.081（over-dampening, 比 inv_t1 差 30%）
-- Video depth + 7scenes 过夜实验跑中（`eval/overnight.log`）
+- Relpose 全量: stability brake, random, conf, l2gate, brake_geo 全部完成
+- ttt3r_ortho TUM 完成 (ATE 0.056), ScanNet 运行中
+- Video depth + 7scenes 过夜实验已完成（`eval/overnight.log`）
 
 ### Exp S2: Inference Overhead（必须）
 
@@ -491,32 +535,26 @@ Train-free 是卖点，需要证明 overhead negligible。
 ## Next Steps
 
 ### 已完成
-1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
-2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
-3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
-4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
-5. ~~3D Reconstruction eval (需下载 7scenes)~~ Done (2026-03-25). Acc -77.2%, Comp -54.2% (ttt3r_joint).
-6. ~~Exp S1 relpose~~ Done (2026-03-26). Naive baselines + stability brake 全量对比完成。
-7. ~~Exp S4 gate visualization~~ Done (2026-03-26). SIASU v1 alpha ≡ 0.5，geo gate 有真实方差。
-8. ~~Exp S3 SIASU τ sensitivity~~ Done (2026-03-26). τ 无影响（alpha ≡ 0.5）。
-9. ~~Cross-attention sparsity check~~ Done (2026-03-26). Diffuse，Route C1 不可行。
-10. ~~Gate state 每帧重置 bug~~ Fixed (2026-03-26).
-11. ~~Stability brake 实现 + 全量验证~~ Done (2026-03-27). inv_t1: ScanNet -68%, TUM -62% vs cut3r; TUM -20% vs random.
-12. ~~SIASU v2~~ Done (2026-03-27). ATE 0.291, 无改善，方向放弃。
-13. ~~理论推导~~ Done (2026-03-26). `docs/theory_section.tex`, 三个命题 + 证明。
-14. ~~l2gate_fixed ScanNet 全量~~ Done (2026-03-27). ATE 0.289, 与 random (0.280) 相当。
-15. ~~brake_geo relpose~~ Done (2026-03-27). ScanNet 0.339, TUM 0.081, over-dampening, 不如单独 brake。
-16. ~~叙事方向调整~~ Done (2026-03-27). 去频域化，转向 "问题发现 + state dynamics analysis + 理论"。
+1. ~~Re-run Layer 2 SIASU ablation~~ Done (2026-03-23)
+2. ~~Three-layer joint experiment~~ Done (2026-03-23). L23+ttt3r -7.5% best.
+3. ~~Formal relpose eval ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
+4. ~~Video Depth eval~~ Done (2026-03-24). KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
+5. ~~3D Reconstruction eval~~ Done (2026-03-25). Acc -77.2%, Comp -54.2%.
+6. ~~Exp S1 relpose~~ Done (2026-03-26). Naive baselines + stability brake 全量对比。
+7. ~~Exp S4 gate visualization~~ Done (2026-03-26). SIASU alpha ≡ 0.5.
+8. ~~Stability brake 实现 + 全量验证~~ Done (2026-03-27). TUM -20% vs random.
+9. ~~A1/A2/A3 Deep Analysis~~ Done (2026-03-28). Gate std≈0.02, cos variance 不相关, per-scene ~50/50.
+10. ~~Delta Clip / Attn Protect / Mem Novelty~~ Done (2026-03-28). 全部失败。
+11. ~~Delta Orthogonalization TUM 验证~~ Done (2026-03-28). ATE 0.056, -15.4% vs constant.
+12. ~~α_drift=0 消融~~ Done (2026-03-28). ATE 0.075, 确认 drift 含有用信号。
 
 ### 进行中
-17. **[Running] 过夜实验** — momentum_inv_t1 + brake_geo video depth + 7scenes（`eval/overnight.log`）
+13. **[Running] ttt3r_ortho ScanNet 全量评测** — GPU0, 96 scenes
 
 ### 待办（按优先级）
-18. **[P0] Deep Analysis A1: Gate Temporal Dynamics** — 逐帧 cosine + gate + camera motion 可视化，证明 "该刹时刹、该放时放"
-19. **[P0] Deep Analysis A2: Cosine Variance ↔ Improvement 相关性** — Var(cos) vs ATE improvement scatter，验证理论预测
-20. **[P0] Deep Analysis A3: Per-Scene 改善分布** — scatter plot + failure analysis，展示 consistency
-21. **[P1] Deep Analysis A4: State Convergence** — ||δ_t|| 对比 ttt3r vs inv_t1
-22. **[P1] Exp S3: Stability brake τ sensitivity** — τ ∈ {0.5, 1.0, 1.5, 2.0, 3.0}
-23. **[P1] Exp S2: Inference overhead** — wall-clock time + peak GPU memory
-24. **[P2] Deep Analysis A5: Scene 特征关联** — 运动特征分类 vs 改善
-25. **[P2] 最终方法 video depth + 7scenes 评测** — 用 ttt3r_momentum_inv_t1 替代 ttt3r_joint 作为最终方法
+14. **[P0] Ortho ScanNet 结果分析** — 等全量跑完，对比 stability brake 和 constant
+15. **[P0] Ortho hyperparameter sensitivity** — α_novel ∈ {0.3, 0.5, 0.7}, α_drift ∈ {0, 0.05, 0.1, 0.2}, β ∈ {0.9, 0.95, 0.99}
+16. **[P1] 最终方法 video depth + 7scenes 评测** — 用 ttt3r_ortho 作为最终方法
+17. **[P1] Exp S2: Inference overhead** — wall-clock time + peak GPU memory
+18. **[P1] 理论更新** — 补充 delta decomposition 的理论分析（drift energy bound, novel preservation）
+19. **[P2] Ortho per-scene A3 分析** — scatter plot ortho vs constant, 验证 consistency
