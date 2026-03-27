@@ -993,13 +993,14 @@ class ARCroco3DStereo(CroCoNet):
                 1 - update_mask2
             )  # then update local state
             reset_mask = views[i]["reset"]
-            if reset_mask is not None:
+            has_reset = reset_mask is not None and bool(torch.any(reset_mask).item())
+            if has_reset:
                 reset_mask = reset_mask[:, None, None].float()
                 state_feat = init_state_feat * reset_mask + state_feat * (
                     1 - reset_mask
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-                # Reset spectral state on scene reset
+                # Reset spectral/brake states only when a reset is actually triggered.
                 if update_type in ("ttt3r_spectral", "cut3r_spectral",
                                    "cut3r_joint", "ttt3r_joint"):
                     spectral_state = {
@@ -1751,13 +1752,14 @@ class ARCroco3DStereo(CroCoNet):
             )  # then update local state (B2: gated by spectral_change for *_memgate types)
 
             reset_mask = view["reset"]
-            if reset_mask is not None:
+            has_reset = reset_mask is not None and bool(torch.any(reset_mask).item())
+            if has_reset:
                 reset_mask = reset_mask[:, None, None].float()
                 state_feat = init_state_feat * reset_mask + state_feat * (
                     1 - reset_mask
                 )
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-                # Reset spectral state on scene reset
+                # Reset spectral/brake states only when a reset is actually triggered.
                 if update_type in ("ttt3r_spectral", "cut3r_spectral",
                                    "cut3r_joint", "ttt3r_joint"):
                     spectral_state = {
@@ -2035,7 +2037,8 @@ class ARCroco3DStereo(CroCoNet):
             mem = new_mem * update_mask + mem * (1 - update_mask)
 
             reset_mask = view["reset"]
-            if reset_mask is not None:
+            has_reset = reset_mask is not None and bool(torch.any(reset_mask).item())
+            if has_reset:
                 reset_mask = reset_mask[:, None, None].float()
                 state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
