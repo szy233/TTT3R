@@ -153,13 +153,14 @@ Use state-trajectory consistency as an online control signal:
 2. Generated official local A3 figures for ScanNet/TUM
 3. Generated local S3 tau summaries from available exported runs
 4. Wrote a readable summary in `analysis_results/formal_export_summary.md`
-5. Pushed these artifacts to branch `zjc`
+5. Built and ran `A2` proxy analysis on local CO3D windows
+6. Pushed these artifacts to branch `zjc`
 
 ## Suggested Next Steps
 
 ### P0
 
-1. Finish **A2: cosine variance vs improvement**
+1. Upgrade **A2** from local proxy to formal relpose-based analysis
 2. Finish **A4: state convergence** on real scenes, not just smoke tests
 3. Turn current A3/S3 outputs into paper-quality combined figures
 
