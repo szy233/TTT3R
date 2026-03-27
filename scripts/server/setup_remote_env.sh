@@ -14,11 +14,11 @@ source "$VENV_DIR/bin/activate"
 
 python -m pip install --upgrade pip wheel setuptools
 pip install -r "$REPO_ROOT/requirements.txt"
-pip install evo open3d gdown
+pip install evo open3d gdown scikit-image
 
 echo "[setup] compiling RoPE CUDA extension"
 pushd "$REPO_ROOT/src/croco/models/curope" >/dev/null
-python setup.py build_ext --inplace
+python setup.py build_ext --inplace || true
 popd >/dev/null
 
 echo "[setup] verifying torch/cuda"
