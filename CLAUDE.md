@@ -154,14 +154,15 @@ Use state-trajectory consistency as an online control signal:
 3. Generated local S3 tau summaries from available exported runs
 4. Wrote a readable summary in `analysis_results/formal_export_summary.md`
 5. Built and ran `A2` proxy analysis on local CO3D windows
-6. Pushed these artifacts to branch `zjc`
+6. Consolidated local A4 state-convergence results on CO3D apple/bottle sequences
+7. Pushed these artifacts to branch `zjc`
 
 ## Suggested Next Steps
 
 ### P0
 
 1. Upgrade **A2** from local proxy to formal relpose-based analysis
-2. Finish **A4: state convergence** on real scenes, not just smoke tests
+2. Upgrade **A4** from local CO3D evidence to formal relpose/video benchmark analysis
 3. Turn current A3/S3 outputs into paper-quality combined figures
 
 ### P1
