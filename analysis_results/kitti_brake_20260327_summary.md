@@ -1,39 +1,66 @@
-# KITTI Outdoor Validation (March 27, 2026)
+# KITTI Outdoor Validation and Bugfix Report (March 27, 2026)
 
-This run compares `ttt3r` and `ttt3r_momentum_inv_t1` on `kitti_s1_500`.
+## 1) Initial result on `kitti_s1_500` (before bugfix)
 
-Data/model:
+The first comparison between `ttt3r` and `ttt3r_momentum_inv_t1` produced identical numbers:
 
-- Dataset: `data_depth_selection.zip` (official KITTI depth selection), preprocessed to `data/long_kitti_s1`
-- Eval split: `kitti_s1_500`
-- Weight: `src/cut3r_512_dpt_4_64.pth`
-- Image size: `512`
+- `result_metric.json`: same
+- `result_scale.json`: same
+- `result_scale&shift.json`: same
 
-## Metrics
+This was treated as a bug signal (not a valid method conclusion).
 
-### `result_metric.json`
+## 2) Root cause
+
+In `src/dust3r/model.py`, reset-related side states (`brake_state` and spectral state) were being reset whenever `reset_mask` existed, instead of only when reset was actually triggered.
+
+Since `reset_mask` tensor exists on every frame, this caused:
+
+- `brake_state` to be cleared every step
+- `_stability_brake()` to repeatedly hit `prev_delta is None`
+- `alpha = 1` effectively on every frame
+
+So `ttt3r_momentum_inv_t1` degenerated to `ttt3r` behavior.
+
+## 3) Fix
+
+Committed fix:
+
+- `fix: only reset brake state on true reset mask`
+- commit: `4e3e14e`
+
+Implemented condition:
+
+- `has_reset = reset_mask is not None and bool(torch.any(reset_mask).item())`
+- reset side states only when `has_reset` is true
+
+Applied in three inference paths:
+
+- `_forward_impl`
+- `forward_recurrent_lighter`
+- `forward_recurrent_analysis`
+
+## 4) Post-fix sanity check (`kitti_s1_50`, align=`scale&shift`)
+
+After fix, results are no longer identical:
 
 | model | Abs Rel | Sq Rel | RMSE | Log RMSE | δ < 1.25 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `ttt3r` | 0.128815 | 0.912491 | 5.700562 | 0.180974 | 0.850601 |
-| `ttt3r_momentum_inv_t1` | 0.128815 | 0.912491 | 5.700562 | 0.180974 | 0.850601 |
+| `ttt3r` | 0.098075 | 0.553454 | 4.513370 | 0.146409 | 0.914084 |
+| `ttt3r_momentum_inv_t1` | 0.093137 | 0.543719 | 4.538340 | 0.143319 | 0.917186 |
 
-### `result_scale.json`
+Observations:
 
-| model | Abs Rel | Sq Rel | RMSE | Log RMSE | δ < 1.25 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `ttt3r` | 0.125868 | 0.853534 | 5.495092 | 0.173581 | 0.867252 |
-| `ttt3r_momentum_inv_t1` | 0.125868 | 0.853534 | 5.495092 | 0.173581 | 0.867252 |
+- `Abs Rel` improved with brake (`0.0981 -> 0.0931`)
+- `Sq Rel` improved with brake (`0.5535 -> 0.5437`)
+- `Log RMSE` improved with brake (`0.1464 -> 0.1433`)
+- `δ < 1.25` improved with brake (`0.9141 -> 0.9172`)
+- `RMSE` is slightly worse (`4.5134 -> 4.5383`)
 
-### `result_scale&shift.json`
+This confirms the brake path is active after the fix.
 
-| model | Abs Rel | Sq Rel | RMSE | Log RMSE | δ < 1.25 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `ttt3r` | 0.116942 | 0.835753 | 5.547695 | 0.171391 | 0.873662 |
-| `ttt3r_momentum_inv_t1` | 0.116942 | 0.835753 | 5.547695 | 0.171391 | 0.873662 |
+## 5) Current status
 
-## Conclusion
-
-For this KITTI run, both models produced numerically identical metrics under all three align modes (`metric`, `scale`, `scale&shift`).
-
-This strongly suggests the current video-depth path does not expose a measurable brake gain on this setting.
+- Bug is fixed in branch `zjc`.
+- The old identical-result conclusion on `kitti_s1_500` should be considered invalid due to the reset bug.
+- Next recommended step: rerun the full `kitti_s1_500` comparison after fix for final outdoor conclusions.
