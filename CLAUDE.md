@@ -1,256 +1,188 @@
-# TTT3R — Frequency-Guided State & Memory Update Framework
+# TTT3R — zjc Branch Working Notes
 
 ## Project Goal
-NeurIPS submission. Train-free, inference-time frequency-domain framework for selective state/memory updates in recurrent 3D reconstruction (CUT3R/TTT3R).
 
-## Architecture Overview
+NeurIPS-style project log for train-free, inference-time state dampening in recurrent 3D reconstruction.  
+Current branch focus: organize exported evaluation results, formalize the stability-brake story, and keep a clean local record for follow-up experiments on `zjc`.
 
-The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frames recurrently:
-1. Encode frame → `feat_i`
-2. `_recurrent_rollout(state_feat, feat_i)` → `new_state_feat`, `dec`
-3. `pose_retriever.update_mem(mem, feat, pose)` → `new_mem`
-4. `_downstream_head(dec)` → `res` (pts3d, conf)
-5. State update: `state_feat = new * mask1 + old * (1-mask1)`
-6. Memory update: `mem = new_mem * mask2 + mem * (1-mask2)`
+## Current Position
 
-`mask1` and `mask2` are where our frequency-domain gates are applied.
+The main story on this branch is no longer "frequency gating".  
+The strongest validated direction is:
 
-## Three-Layer Frequency Framework
+- **Stability Brake**: `alpha_t = sigmoid(-tau * cos(delta_t, delta_{t-1}))`
+- Problem framing: **systematic over-update** in recurrent state updates
+- Core claim: adaptive dampening is better than constant dampening when scene dynamics vary over time
 
-### Layer 1 — Frame Filtering (validated)
-- **Signal**: `LFE(FFT2(RGB_diff))` — low-freq energy of inter-frame RGB difference
-- **Action**: Skip frames where LFE < threshold × EMA(LFE)
-- **Result**: Skip 35% frames, TTT3R depth -3.1% on ScanNet
-- **Code**: `compute_frame_spectral_change()`, `filter_views_by_spectral_change()`
+The exported formal results were synced from `origin/szy` into `eval_results_export/`, then summarized and visualized locally on this branch.
 
-### Layer 2 — Token-Level State Modulation (SIASU, validated)
-- **Signal**: Per-token high-freq residual energy of state trajectory (EMA low-pass → residual)
-- **Action**: `alpha_k = sigmoid(-τ × (energy_k / running_mean - 1))` per token
-- **Code**: `_spectral_modulation()`, update types `cut3r_spectral` / `ttt3r_spectral`
-- **Result**: cut3r_spectral -5.0%, ttt3r_spectral -8.3% (vs cut3r). τ insensitive, use τ=1
-- **Status**: Validated (2026-03-23)
-
-### Layer 3 — Geometric Consistency Gate (validated, best result)
-- **Signal**: `LFE(FFT2(log_depth_diff))` — low-freq energy of log-depth change
-- **Action**: Gate state update when depth prediction is geometrically inconsistent
-- **Result**: cut3r_geogate -3.5%, ttt3r_geogate -7.2% (vs ttt3r -6.4%)
-- **Code**: `_geo_consistency_gate()`, update types `cut3r_geogate` / `ttt3r_geogate`
-- **Best config**: τ=2, freq_cutoff=4 (25% bandwidth). Cutoff-insensitive (c2/c4/c8 all ~-3.5%)
-
-## Update Types in model.py
-
-| `model_update_type` | `mask1` (state) | `mask2` (memory) |
-|---------------------|-----------------|------------------|
-| `cut3r` | 1.0 (baseline) | 1.0 |
-| `ttt3r` | sigmoid(cross_attn) | 1.0 |
-| `cut3r_spectral` | spectral_modulation α | 1.0 |
-| `ttt3r_spectral` | ttt3r × α | 1.0 |
-| `cut3r_memgate` | 1.0 | spectral_change gate |
-| `ttt3r_memgate` | sigmoid(cross_attn) | spectral_change gate |
-| `cut3r_geogate` | geo_consistency gate | 1.0 |
-| `ttt3r_geogate` | ttt3r × geo gate | 1.0 |
-| `cut3r_joint` | α × geo gate | 1.0 |
-| `ttt3r_joint` | ttt3r × α × geo gate | 1.0 |
-
-## Key Experimental Results
-
-### B2 Memory Gate (weak, ~1% improvement)
-```
-cut3r_mg_t3_sr0.3   -1.75%   (best memgate variant)
-ttt3r_mg_t3_sr0.5   -6.25%   (no gain over pure ttt3r -6.40%)
-```
-Memory's soft cross-attention write already handles redundancy. Direction deprioritized.
-
-### B3 Geometric Consistency Gate (strong)
-```
-cut3r_geo_t2         -3.83%   (spatial domain, best)
-cut3r_geo_t2_c4      -3.52%   (frequency domain)
-ttt3r_geo_t3         -7.41%   (spatial domain, best overall)
-ttt3r_geo_t2_c4      -7.16%   (frequency domain)
-```
-
-### Joint Ablation (L23+ttt3r is best)
-```
-cut3r (baseline)     0.0745   —
-ttt3r (baseline)     0.0697   -6.4%
-L1+ttt3r             0.0700   -6.0%
-L2+ttt3r             0.0684   -8.2%
-L3+ttt3r             0.0692   -7.2%
-L23+ttt3r            0.0690   -7.5%   ← best combination
-L123+ttt3r           0.0699   -6.2%   (L1 conflicts with L2/L3)
-L23+cut3r            0.0698   -6.3%   (matches pure ttt3r)
-```
-L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L23+ttt3r.
-
-### Failed Directions
-- **Direction C (dynamic token tracking)**: State tokens don't track spatial semantics. Walking r=-0.024, static r=-0.383 (reversed). Abandoned.
-- **Confidence gating (Exp 2)**: <1% improvement, feedback loop. Abandoned.
-
-## Experiment Configs
-
-All experiments share: `--seed 42 --size 512 --max_frames 200 --num_scannet 10`
-
-Server paths:
-- Model: `model/cut3r_512_dpt_4_64.pth`
-- ScanNet: `/mnt/sda/szy/research/dataset/scannetv2`
-- TUM: `/mnt/sda/szy/research/dataset/tum`
-- Working dir: `/home/szy/research/TTT3R`
-
-Local paths:
-- Working dir: `/Users/shaozhengyu/code/TTT3R`
-- Results synced to `analysis_results/` (gitignored)
-
-Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/<exp>/ analysis_results/<exp>/`
-
-## Key Files
+## Main Files on zjc
 
 | File | Purpose |
 |------|---------|
-| `src/dust3r/model.py` | All update types, gate methods, LocalMemory |
-| `analysis/geogate_ablation.py` | B3 geo gate ablation |
-| `analysis/memgate_ablation.py` | B2 memory gate ablation |
-| `analysis/spectral_ablation.py` | Layer 2 SIASU ablation |
-| `analysis/batch_frame_novelty.py` | Layer 1 validation |
-| `analysis/metric_comparison.py` | spectral_change vs L2/high/mid freq |
-| `analysis/joint_ablation.py` | Three-layer joint ablation |
-| `docs/research_progress.md` | Full research log (Chinese) |
-| `docs/run_experiments.sh` | All experiment commands |
+| `analysis/per_scene_improvement_analysis.py` | A3 per-scene relpose comparison |
+| `analysis/s3_brake_sensitivity.py` | S3 tau sensitivity summary |
+| `analysis/state_convergence_analysis.py` | A4 state convergence logging and plots |
+| `analysis/a3_per_scene_distribution.py` | Original per-scene plotting script from `szy` |
+| `analysis_results/formal_export_summary.md` | Human-readable summary of exported results |
+| `eval_results_export/` | Exported formal logs and metrics from `szy` branch |
 
-## Formal Evaluation
+## Exported Formal Results
 
-### Eval Pipeline
+### A3 Per-Scene Relpose
 
-三类标准评测，脚本在 `eval/` 下：
+#### ScanNet: `ttt3r_random` vs `ttt3r_momentum_inv_t1`
 
-| 评测类型 | 数据集 | 脚本 | 预处理数据路径 |
-|---------|--------|------|--------------|
-| Camera Pose (relpose) | ScanNet, TUM, Sintel | `eval/relpose/launch.py` | `data/long_scannet_s3/`, `data/long_tum_s1/` |
-| Video Depth | KITTI, Bonn, Sintel | `eval/video_depth/launch.py` | `data/long_kitti_s1/`, `data/long_bonn_s1/` |
-| 3D Reconstruction | 7scenes | `eval/mv_recon/launch.py` | — |
+- Common scenes: 65
+- Improved scenes: 31
+- Degraded scenes: 34
+- Median ATE: `0.20304 -> 0.19217`
+- Mean relative improvement: `+0.92%`
+- Median relative improvement: `-1.35%`
 
-### 运行方式
+#### TUM: `ttt3r_random` vs `ttt3r_momentum_inv_t1`
 
-对比三个配置：`cut3r`（baseline）, `ttt3r`, `ttt3r_joint`（L23+ttt3r，最终方法）。
+- Common scenes: 8
+- Improved scenes: 7
+- Degraded scenes: 1
+- Median ATE: `0.08224 -> 0.065545`
+- Mean relative improvement: `+14.90%`
+- Median relative improvement: `+10.21%`
 
-```bash
-# 双卡并行: GPU0 跑 ScanNet, GPU1 跑 TUM
-conda activate ttt3r
+#### ScanNet: `ttt3r_random` vs `ttt3r_brake_geo`
 
-# GPU0 — ScanNet relpose
-CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src accelerate launch --num_processes 1 --main_process_port 29560 \
-    eval/relpose/launch.py \
-    --weights model/cut3r_512_dpt_4_64.pth --output_dir eval_results/relpose/scannet_s3_1000/<config> \
-    --eval_dataset scannet_s3_1000 --size 512 --model_update_type <config> \
-    --spectral_temperature 1.0 --geo_gate_tau 2.0 --geo_gate_freq_cutoff 4
+- Common scenes: 65
+- Improved scenes: 20
+- Degraded scenes: 45
+- Median ATE: `0.20304 -> 0.24746`
+- Mean relative improvement: `-35.37%`
+- Median relative improvement: `-21.93%`
 
-# GPU1 — TUM relpose
-CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main_process_port 29561 \
-    eval/relpose/launch.py \
-    --weights model/cut3r_512_dpt_4_64.pth --output_dir eval_results/relpose/tum_s1_1000/<config> \
-    --eval_dataset tum_s1_1000 --size 512 --model_update_type <config> \
-    --spectral_temperature 1.0 --geo_gate_tau 2.0 --geo_gate_freq_cutoff 4
-```
+#### TUM: `ttt3r_random` vs `ttt3r_brake_geo`
 
-并行脚本: `eval/run_parallel_eval.sh`（nohup 双卡，日志 `eval/gpu0_scannet.log`, `eval/gpu1_tum.log`）
+- Common scenes: 8
+- Improved scenes: 5
+- Degraded scenes: 3
+- Median ATE: `0.08224 -> 0.054865`
+- Mean relative improvement: `+3.84%`
+- Median relative improvement: `+10.02%`
 
-### 预处理
+### Interpretation
 
-```bash
-conda activate ttt3r
-python datasets_preprocess/prepare_scannet_local.py   # → data/long_scannet_s3/ (96 scenes, 4 empty skipped from 100 test scenes)
-python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8 sequences)
-```
+1. `momentum_inv_t1` is clearly stronger than constant dampening on **TUM**.
+2. On **ScanNet**, the improvement is weaker and more mixed scene-by-scene.
+3. `brake_geo` does not behave like a universal improvement.
+4. The current evidence supports **stability brake alone** more strongly than `brake + geo`.
 
-原始数据在 `/mnt/sda/szy/research/dataset/`（从根分区迁出）。
+## S3 Tau Sensitivity
 
-### 数据集状态（2026-03-24）
+Only exported `tau=1` and `tau=2` are currently available.
 
-| 数据集 | 原始数据 | 预处理 | 评测状态 |
-|--------|---------|--------|---------|
-| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` (100 test scenes) | ✅ `data/long_scannet_s3/` (96 scenes; 4 empty skipped) | ✅ 完成 (65 valid, 31 GT含-inf skip) |
-| TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | ✅ 完成 |
-| Sintel | ✅ `data/sintel/` | — (直接使用) | ✅ 完成 |
-| Bonn | ✅ `data/long_bonn_s1/` | ✅ 预处理完成 | ✅ 完成 |
-| KITTI | ✅ `data/long_kitti_s1/` | ✅ 预处理完成 | ✅ 完成 |
-| 7scenes | ✅ 已下载 | ✅ 预处理完成 (18 seqs, 7 scenes) | ⏳ cut3r/ttt3r 完成, ttt3r_joint 运行中 |
+### ScanNet
 
-结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
+- `tau=1`: median ATE `0.19217`, mean ATE `0.26147`
+- `tau=2`: median ATE `0.26213`, mean ATE `0.31068`
 
-### Relpose 评测结果（2026-03-24）
+### TUM
 
-**ScanNet（96 scenes 中 65 valid, 31 skip — GT pose 含 -inf 导致 evo Umeyama eigh 不收敛，三配置一致，与原论文行为对齐）**
+- `tau=1`: median ATE `0.065545`, mean ATE `0.06339`
+- `tau=2`: median ATE `0.05592`, mean ATE `0.08219`
 
-| Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
-|--------|----------------|-------------------|-------------------|
-| cut3r (baseline) | 0.6713 | 0.0322 | 0.8987 |
-| ttt3r | 0.3519 (-47.6%) | 0.0350 | 0.9105 |
-| **ttt3r_joint** | **0.2143** (-68.1%) | 0.0449 | 1.0805 |
+### Interpretation
 
-**TUM（8 sequences，全部成功）**
+- ScanNet currently favors **tau = 1**
+- TUM shows mixed behavior: lower median at `tau=2`, but worse mean
+- The present conclusion is still: **tau = 1 is the safer default**
+- A real sensitivity section still needs more points: `0.5, 1.5, 3.0`
 
-| Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
-|--------|----------------|-------------------|-------------------|
-| cut3r (baseline) | 0.1641 | 0.0072 | 0.5655 |
-| ttt3r | 0.1043 (-36.4%) | 0.0091 | 0.4859 |
-| **ttt3r_joint** | **0.0589** (-64.1%) | 0.0103 | 0.4758 |
+## Exported Video Depth
 
-**分析**: ATE 大幅改善（ScanNet -68%, TUM -64%），RPE_t/RPE_r 略有上升，说明方法显著提升全局轨迹一致性，逐帧相对误差有小幅代价。31 个 Eigenvalue failure 在三配置间一致，不影响公平对比。
+### KITTI
 
-### Video Depth 评测结果（2026-03-24）
+- `cut3r`: Abs Rel `0.15153`, RMSE `5.66694`, delta<1.25 `0.80434`
+- `ttt3r`: Abs Rel `0.13192`, RMSE `5.42614`, delta<1.25 `0.86530`
+- `ttt3r_joint`: Abs Rel `0.13437`, RMSE `5.38475`, delta<1.25 `0.85774`
 
-**Abs Rel ↓**
+### Bonn
 
-| Config | KITTI | Bonn | Sintel |
-|--------|-------|------|--------|
-| cut3r (baseline) | 0.1515 | 0.0990 | 1.0217 |
-| ttt3r | 0.1319 (-12.9%) | 0.0997 (+0.7%) | 0.9776 (-4.3%) |
-| **ttt3r_joint** | **0.1344** (-11.3%) | **0.0941** (-5.0%) | **0.9173** (-10.2%) |
+- `cut3r`: Abs Rel `0.09900`, RMSE `0.34637`, delta<1.25 `0.90612`
+- `ttt3r`: Abs Rel `0.09974`, RMSE `0.33887`, delta<1.25 `0.92143`
+- `ttt3r_joint`: Abs Rel `0.09408`, RMSE `0.32358`, delta<1.25 `0.93431`
 
-**δ < 1.25 ↑**
+### Sintel
 
-| Config | KITTI | Bonn | Sintel |
-|--------|-------|------|--------|
-| cut3r (baseline) | 0.8043 | 0.9061 | 0.2377 |
-| ttt3r | 0.8653 | 0.9214 | 0.2324 |
-| **ttt3r_joint** | 0.8577 | **0.9343** | **0.2472** |
+- `cut3r`: Abs Rel `1.02167`, RMSE `6.88020`, delta<1.25 `0.23766`
+- `ttt3r`: Abs Rel `0.97764`, RMSE `6.67607`, delta<1.25 `0.23245`
+- `ttt3r_joint`: Abs Rel `0.91725`, RMSE `6.54943`, delta<1.25 `0.24723`
 
-**分析**: ttt3r_joint 在三个数据集上 Abs Rel 全面优于 baseline（KITTI -11.3%, Bonn -5.0%, Sintel -10.2%）。KITTI 上纯 ttt3r 略优于 joint，Bonn 和 Sintel 上 joint 最佳。
+## Exported 7scenes Reconstruction
 
-### 3D Reconstruction 评测结果（2026-03-25）
+Mean values parsed from `eval_results_export/video_recon/7scenes_200/*/7scenes/logs_all.txt`.
 
-**7scenes（18 sequences, 7 scenes, 每 seq 限 200 帧）**
+- `cut3r`: acc `0.092`, comp `0.048`, nc1 `0.582`, nc2 `0.545`
+- `ttt3r`: acc `0.027`, comp `0.023`, nc1 `0.600`, nc2 `0.561`
+- `ttt3r_joint`: acc `0.021`, comp `0.022`, nc1 `0.594`, nc2 `0.565`
 
-结果路径: `eval_results/video_recon/7scenes_200/<config>/7scenes/logs_all.txt`
+## Narrative Draft
 
-| Config | Acc ↓ | Comp ↓ | NC ↑ | NC_med ↑ |
-|--------|-------|--------|------|----------|
-| cut3r (baseline) | 0.092 | 0.048 | 0.563 | 0.596 |
-| ttt3r | **0.027** (-70.7%) | **0.023** (-52.1%) | **0.581** (+3.2%) | **0.625** (+4.9%) |
-| ttt3r_joint | ⏳ 运行中 | ⏳ | ⏳ | ⏳ |
+### Problem
 
-完整指标（mean）：
+Recurrent 3D reconstruction applies state updates too aggressively over long videos.  
+Even when incoming frames carry limited new geometry, the recurrent state still updates with nearly the same strength.  
+Constant dampening already helps a lot, which suggests that **over-update** is a central failure mode.
 
-| Config | Acc ↓ | Comp ↓ | NC1 ↑ | NC2 ↑ | Acc_med ↓ | Comp_med ↓ | NC1_med ↑ | NC2_med ↑ |
-|--------|-------|--------|-------|-------|-----------|------------|-----------|-----------|
-| cut3r | 0.092 | 0.048 | 0.582 | 0.545 | 0.054 | 0.018 | 0.627 | 0.566 |
-| ttt3r | 0.027 | 0.023 | 0.600 | 0.561 | 0.015 | 0.005 | 0.657 | 0.593 |
+### Method
 
-**分析**: ttt3r 在 3D 重建上改善巨大，Accuracy -70.7%, Completeness -52.1%，法向一致性也有提升。
+Use state-trajectory consistency as an online control signal:
 
-**Bug fix (2026-03-25)**: `_forward_impl()` 原先只支持 `cut3r`/`ttt3r`，`mv_recon/launch.py` 调用 `model(batch)` → `forward()` → `_forward_impl()`，导致 `ttt3r_joint` 报 `Invalid model type`。已补全所有 update type 支持（spectral, geogate, joint 等），与 `inference_step` 路径对齐。日志: `eval/7scenes_recon_joint.log`。
+`alpha_t = sigmoid(-tau * cos(delta_t, delta_{t-1}))`
 
-## Known Issues / Fixes Applied
-1. **SIASU warm-start**: `running_energy` init 0 → ratio explosion → state frozen. Fixed: warm-start on first call.
-2. **TUM depth matching**: Timestamp-based association needed (not stem-based).
-3. **Fair evaluation**: Compare full vs filtered on same `kept_indices`.
-4. **ScanNet pose 截断**: 根分区满时 `prepare_scannet_local.py` 写 pose 文件被截断（scene0707_00）。已修复重新生成。
-5. **ScanNet 31 scene Eigenvalue failure**: GT pose 含 -inf（深度传感器丢失追踪），evo Umeyama `eigh()` 不收敛。与原论文行为一致（同样 skip），不影响公平对比。4 个 scene (0777-0780) .sens 未解压，预处理跳过。
-6. **`_forward_impl` 缺少扩展 update type**: 只支持 cut3r/ttt3r，导致 mv_recon 评测 ttt3r_joint 失败。已补全所有类型（spectral, geogate, memgate, joint）并添加 spectral_state/geo_state 的 reset 逻辑。
+- cosine high: updates are aligned, likely redundant, so brake harder
+- cosine low: updates change direction, likely new information, so release the brake
 
-## Next Steps
-1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
-2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
-3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
-4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
-5. ~~3D Reconstruction eval (需下载 7scenes)~~ 部分完成 (2026-03-25). cut3r/ttt3r 完成; ttt3r_joint 运行中 (GPU1, ~3h).
-6. Paper outline drafting
+### Why This Story Is Stronger
+
+- It explains why constant `x0.5` works at all
+- It naturally motivates adaptive dampening
+- It aligns with the current theory direction: over-update bound, regret comparison, optimal tau
+- It fits the empirical pattern: dynamic scenes benefit more than static scenes
+
+## What Is Already Done on zjc
+
+1. Imported exported formal logs from `szy` into `eval_results_export/`
+2. Generated official local A3 figures for ScanNet/TUM
+3. Generated local S3 tau summaries from available exported runs
+4. Wrote a readable summary in `analysis_results/formal_export_summary.md`
+5. Pushed these artifacts to branch `zjc`
+
+## Suggested Next Steps
+
+### P0
+
+1. Finish **A2: cosine variance vs improvement**
+2. Finish **A4: state convergence** on real scenes, not just smoke tests
+3. Turn current A3/S3 outputs into paper-quality combined figures
+
+### P1
+
+1. Run missing tau values: `0.5, 1.5, 3.0`
+2. Re-evaluate whether `momentum_inv_t1` should replace `ttt3r_joint` as final method for video depth and 7scenes
+3. Add inference overhead numbers
+
+### P2
+
+1. Write a polished abstract around over-update and adaptive dampening
+2. Consolidate all result tables into one camera-ready summary sheet
+3. Merge the useful parts of this note back into the final project `CLAUDE.md`
+
+## Cautions
+
+- `analysis_results/` is gitignored by default, so result directories need `git add -f` if they should be versioned
+- The local worktree still contains unrelated modified files in `src/`; do not auto-commit them together with analysis artifacts
+- Exported sensitivity is incomplete; avoid over-claiming the tau story until more points are run
+
+## Branch Record
+
+- Branch: `zjc`
+- Export/artifact commit: `bfe6baa`
+- Source of exported logs: `origin/szy`
