@@ -3,7 +3,7 @@
 set -e
 
 workdir='.'
-model_names=('ttt3r') # ttt3r cut3r
+model_names=('ttt3r' 'ttt3r_momentum_inv_t1') # brake-focused outdoor validation
 ckpt_name='cut3r_512_dpt_4_64'
 model_weights="${workdir}/src/${ckpt_name}.pth"
 # datasets=('kitti_s1_50' 'kitti_s1_100' 'kitti_s1_110' 'kitti_s1_150' 'kitti_s1_200' 'kitti_s1_250' 'kitti_s1_300' 'kitti_s1_350' 'kitti_s1_400' 'kitti_s1_450' 'kitti_s1_500')

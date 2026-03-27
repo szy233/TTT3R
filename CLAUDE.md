@@ -161,15 +161,15 @@ Use state-trajectory consistency as an online control signal:
 
 ### P0
 
-1. Upgrade **A2** from local proxy to formal relpose-based analysis
-2. Upgrade **A4** from local CO3D evidence to formal relpose/video benchmark analysis
+1. Finish the **brake-only** code path as the main method and stop extending `brake_geo`
+2. Run **KITTI** outdoor validation for `ttt3r_momentum_inv_t1`
 3. Turn current A3/S3 outputs into paper-quality combined figures
 
 ### P1
 
-1. Run missing tau values: `0.5, 1.5, 3.0`
-2. Re-evaluate whether `momentum_inv_t1` should replace `ttt3r_joint` as final method for video depth and 7scenes
-3. Add inference overhead numbers
+1. Upgrade **A2** from local proxy to formal relpose-based analysis
+2. Upgrade **A4** from local CO3D evidence to formal relpose/video benchmark analysis
+3. Run missing tau values: `0.5, 1.5, 3.0`
 
 ### P2
 
