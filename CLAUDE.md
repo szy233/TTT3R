@@ -20,7 +20,7 @@ Interpretation:
 Current branch decision:
 
 - keep the story focused on **brake only**
-- do **not** make `geo gate` the main method
+- treat the auxiliary gate direction as a dropped side path, not a paper contribution
 
 ## Current Main Claim
 
@@ -29,7 +29,7 @@ The current evidence supports the following paper story:
 1. recurrent state updates in CUT3R/TTT3R can over-react over long videos
 2. train-free adaptive dampening in state space is enough to improve stability
 3. the best current train-free variant is `ttt3r_momentum_inv_t1`
-4. `geo gate` is not robust enough to be a main contribution
+4. the paper should focus on one clean mechanism: `brake`
 
 ## Core Results Already Available
 
@@ -61,7 +61,7 @@ Against plain `cut3r`:
 Important qualitative takeaway:
 
 - `ttt3r_momentum_inv_t1` is clearly the strongest brake-style candidate
-- `ttt3r_brake_geo` is not consistently good enough to keep as the main story
+- the story is cleaner if all non-brake gating variants are treated as discarded explorations
 
 ### 2. A3 Per-Scene Analysis
 
@@ -83,23 +83,12 @@ Key comparisons:
   - median ATE: `0.08224 -> 0.065545`
   - mean relative improvement: `+14.90%`
 
-- `ScanNet, ttt3r_random vs ttt3r_brake_geo`
-  - common scenes: `65`
-  - improved scenes: `20`
-  - degraded scenes: `45`
-  - mean relative improvement: `-35.37%`
-
-- `TUM, ttt3r_random vs ttt3r_brake_geo`
-  - common scenes: `8`
-  - improved scenes: `5`
-  - degraded scenes: `3`
-  - mean relative improvement: `+3.84%`
-
 Conclusion from A3:
 
-- the brake-only direction is much stronger than `brake_geo`
+- the brake-only direction is the one that should be kept
 - TUM shows the cleanest improvement pattern
 - ScanNet is more mixed scene-by-scene, but still favors `momentum_inv_t1` in aggregate
+- the auxiliary gate experiments are useful as negative evidence, but should not appear in the main story
 
 ### 3. S3 Tau Sensitivity
 
@@ -310,7 +299,7 @@ The strongest current narrative is:
 ### P0
 
 1. Turn the current results into paper-quality plots and combined tables
-2. Keep the method section centered on `stability brake` and drop `geo gate` from the main contribution
+2. Keep the method section centered on `stability brake` only
 3. Add one polished summary figure showing relpose + KITTI + A4 consistency evidence together
 
 ### P1
