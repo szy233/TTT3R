@@ -1,4 +1,5 @@
 import argparse
+import glob
 import shutil
 from pathlib import Path
 
@@ -94,16 +95,29 @@ def _pose_row_from_frame(frame) -> np.ndarray:
     return mat[:3, :].reshape(-1)
 
 
+def _camera_pose_row_from_frame(frame, camera_id: int) -> np.ndarray:
+    t_global_vehicle = np.asarray(frame.pose.transform, dtype=np.float64).reshape(4, 4)
+
+    camera_extrinsic = None
+    for calib in frame.context.camera_calibrations:
+        if calib.name == camera_id:
+            camera_extrinsic = np.asarray(calib.extrinsic.transform, dtype=np.float64).reshape(4, 4)
+            break
+
+    if camera_extrinsic is None:
+        return _pose_row_from_frame(frame)
+
+    # Waymo camera extrinsic is camera->vehicle. Compose with vehicle->global.
+    t_global_camera = t_global_vehicle @ camera_extrinsic
+    return t_global_camera[:3, :].reshape(-1)
+
+
 def convert(args):
     tf, dataset_pb2 = _load_waymo_modules()
     camera_id = _camera_enum(dataset_pb2, args.camera)
 
-    tfrecord_paths = sorted(Path().glob(args.tfrecord_glob))
-    if not tfrecord_paths:
-        # Handle absolute patterns because Path().glob does not support all absolute cases on some shells.
-        import glob
-
-        tfrecord_paths = [Path(p) for p in sorted(glob.glob(args.tfrecord_glob))]
+    # Use glob.glob directly to support absolute patterns on Linux.
+    tfrecord_paths = [Path(p) for p in sorted(glob.glob(args.tfrecord_glob))]
     if not tfrecord_paths:
         raise FileNotFoundError(f"No TFRecords matched: {args.tfrecord_glob}")
 
@@ -148,7 +162,7 @@ def convert(args):
             with img_dst.open("wb") as f:
                 f.write(camera_image.image)
 
-            rows.append(_pose_row_from_frame(frame))
+            rows.append(_camera_pose_row_from_frame(frame, camera_id))
 
             export_frame_idx += 1
             if export_frame_idx >= args.max_frames:

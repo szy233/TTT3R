@@ -60,6 +60,7 @@ python "$REPO_ROOT/datasets_preprocess/prepare_waymo_relpose.py" \
 pushd "$REPO_ROOT" >/dev/null
 DATASET="waymo_relpose" \
 DATASET_ROOT="$WAYMO_OUTPUT_ROOT" \
+WAYMO_RELPOSE_ROOT="$WAYMO_OUTPUT_ROOT" \
 MODEL_WEIGHTS="$WEIGHTS_PATH" \
 NUM_PROCESSES="$NUM_PROCESSES" \
 SIZE="$SIZE" \

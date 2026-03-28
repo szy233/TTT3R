@@ -61,6 +61,7 @@ python "$REPO_ROOT/datasets_preprocess/prepare_nuscenes_relpose.py" \
 pushd "$REPO_ROOT" >/dev/null
 DATASET="nuscenes_relpose" \
 DATASET_ROOT="$NUSCENES_OUTPUT_ROOT" \
+NUSCENES_RELPOSE_ROOT="$NUSCENES_OUTPUT_ROOT" \
 MODEL_WEIGHTS="$WEIGHTS_PATH" \
 NUM_PROCESSES="$NUM_PROCESSES" \
 SIZE="$SIZE" \

@@ -134,7 +134,7 @@ dataset_metadata = {
         "process_func": None,
     },
     "nuscenes_relpose": {
-        "img_path": "data/nuscenes_relpose",
+        "img_path": os.environ.get("NUSCENES_RELPOSE_ROOT", "data/nuscenes_relpose"),
         "mask_path": None,
         "dir_path_func": lambda img_path, seq: os.path.join(img_path, seq, "rgb_90"),
         "gt_traj_func": lambda img_path, anno_path, seq: os.path.join(
@@ -148,7 +148,7 @@ dataset_metadata = {
         "process_func": lambda args, img_path: process_scannet(args, img_path),
     },
     "waymo_relpose": {
-        "img_path": "data/waymo_relpose",
+        "img_path": os.environ.get("WAYMO_RELPOSE_ROOT", "data/waymo_relpose"),
         "mask_path": None,
         "dir_path_func": lambda img_path, seq: os.path.join(img_path, seq, "rgb_90"),
         "gt_traj_func": lambda img_path, anno_path, seq: os.path.join(

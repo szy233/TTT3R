@@ -9,13 +9,13 @@ size="${SIZE:-512}"
 main_port="${MAIN_PORT:-29562}"
 
 experiments=(
-  'cut3r:cut3r:0.15'
-  'ttt3r:ttt3r:0.15'
-  'ttt3r_momentum_inv_t1:ttt3r_momentum_inv_t1:0.15'
-  'ttt3r_momentum_inv_t1_drift0:ttt3r_momentum_inv_t1:0.0'
+  "cut3r:cut3r:0.15"
+  "ttt3r:ttt3r:0.15"
+  "ttt3r_momentum_inv_t1:ttt3r_momentum_inv_t1:0.15"
+  "ttt3r_momentum_inv_t1_drift0:ttt3r_momentum_inv_t1:0.0"
 )
 
-ckpt_name='cut3r_512_dpt_4_64'
+ckpt_name="cut3r_512_dpt_4_64"
 model_weights="${MODEL_WEIGHTS:-${workdir}/src/${ckpt_name}.pth}"
 if [ ! -f "$model_weights" ]; then
   model_weights="${workdir}/model/${ckpt_name}.pth"
@@ -32,7 +32,7 @@ if [ ! -d "$dataset_root" ]; then
 fi
 
 for exp in "${experiments[@]}"; do
-  IFS=':' read -r output_tag model_name alpha_drift <<< "$exp"
+  IFS=":" read -r output_tag model_name alpha_drift <<< "$exp"
   output_dir="${workdir}/eval_results/relpose/${dataset}/${output_tag}"
   echo "[relpose] dataset=${dataset} model=${model_name} alpha_drift=${alpha_drift} -> ${output_dir}"
 
