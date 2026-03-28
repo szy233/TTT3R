@@ -93,7 +93,7 @@ These differences are all small in magnitude on this local subset.
 
 ## 6. Limitations
 - This is a local, small-scale subset (4 sequences).  
-- Peak VRAM was not reliably captured in this run (NVML monitor unavailable in current logger output), so this report focuses on wall-clock overhead.
+- Earlier logs had unstable VRAM capture when `pynvml` was unavailable. The logger now uses dual backend monitoring (`pynvml` with `nvidia-smi` fallback) and records `peak_vram_backend` for transparency.
 
 ## 7. Conclusion
 Under controlled SAFE224 local repeats, `alpha_drift=0.15` and `alpha_drift=0.0` have **nearly identical inference overhead**.  
