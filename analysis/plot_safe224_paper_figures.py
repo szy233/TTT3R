@@ -115,6 +115,10 @@ def plot_typical_before_after(pred_root: Path, out_path: Path) -> None:
     frame_id = "000012"
 
     color_path = pred_root / "ttt3r_momentum_inv_t1" / seq / "color" / f"{frame_id}.png"
+    # fallback to raw sequence image if exported color frame is all black
+    raw_seq_path = (
+        pred_root.parent / "sequences" / "apple" / "540_79043_153212_len024" / f"{frame_id}.jpg"
+    )
     d_inv = pred_root / "ttt3r_momentum_inv_t1" / seq / "depth" / f"{frame_id}.npy"
     d_zero = pred_root / "ttt3r_momentum_inv_t1_drift0" / seq / "depth" / f"{frame_id}.npy"
 
@@ -122,6 +126,9 @@ def plot_typical_before_after(pred_root: Path, out_path: Path) -> None:
         raise FileNotFoundError("Typical sequence files not found for visualization.")
 
     img = plt.imread(color_path)
+    # if color export is fully black, use original sequence RGB for better visualization
+    if np.max(img) <= 0 and raw_seq_path.exists():
+        img = plt.imread(raw_seq_path)
     depth_inv = _load_depth(d_inv)
     depth_zero = _load_depth(d_zero)
     diff = np.abs(depth_inv - depth_zero)
