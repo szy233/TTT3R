@@ -929,6 +929,9 @@ class ARCroco3DStereo(CroCoNet):
                 # Initialize momentum gate state
                 if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                     momentum_state = {}
+                # Initialize ortho state
+                if update_type == "ttt3r_ortho":
+                    ortho_state = {}
             else:
                 if update_type == "cut3r":
                     update_mask1 = update_mask
@@ -1010,6 +1013,14 @@ class ARCroco3DStereo(CroCoNet):
                         state_feat, new_state_feat, spectral_state, self.config)
                     g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
+                elif update_type == "ttt3r_ortho":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -1471,7 +1482,36 @@ class ARCroco3DStereo(CroCoNet):
         drift_comp    = proj_scalar * drift_dir                         # [B, T, D]
         novel_comp    = delta - drift_comp                              # [B, T, D]
 
-        return state_feat + alpha_novel * novel_comp + alpha_drift * drift_comp
+        # Adaptive α_drift: scale with running drift energy
+        adaptive_mode = getattr(config, 'ortho_adaptive', '')
+        if adaptive_mode:
+            # Per-token drift energy = cos²(delta, drift_dir)
+            cos_sim = (delta_dir * drift_dir).sum(dim=-1, keepdim=True)  # [B, T, 1]
+            drift_energy = cos_sim ** 2  # [B, T, 1]
+            # Update running EMA of drift energy
+            ema_drift_e = ortho_state.get('ema_drift_energy', None)
+            if ema_drift_e is None:
+                ema_drift_e = drift_energy.detach().clone()
+            else:
+                ema_drift_e = beta * ema_drift_e + (1.0 - beta) * drift_energy.detach()
+            ortho_state['ema_drift_energy'] = ema_drift_e
+
+            if adaptive_mode == 'linear':
+                # α_drift = alpha_drift + (alpha_novel - alpha_drift) × drift_energy
+                effective_alpha_drift = alpha_drift + (alpha_novel - alpha_drift) * ema_drift_e
+            elif adaptive_mode == 'match':
+                # drift_energy 高时 α_drift → α_novel (uniform dampening)
+                effective_alpha_drift = alpha_novel * ema_drift_e + alpha_drift * (1.0 - ema_drift_e)
+            elif adaptive_mode == 'threshold':
+                # drift_energy > 0.5 → uniform dampening; else → ortho
+                use_uniform = (ema_drift_e > 0.5).float()
+                effective_alpha_drift = alpha_novel * use_uniform + alpha_drift * (1.0 - use_uniform)
+            else:
+                effective_alpha_drift = alpha_drift
+        else:
+            effective_alpha_drift = alpha_drift
+
+        return state_feat + alpha_novel * novel_comp + effective_alpha_drift * drift_comp
 
     @staticmethod
     def _true_momentum_update(state_feat, new_state_feat, momentum_state, config):

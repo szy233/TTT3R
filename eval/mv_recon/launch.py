@@ -45,6 +45,9 @@ def get_args_parser():
     parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
     parser.add_argument("--random_gate_p", type=float, default=0.5, help="Random gate constant probability")
     parser.add_argument("--momentum_tau", type=float, default=2.0, help="Momentum gate temperature")
+    parser.add_argument("--ortho_alpha_novel", type=float, default=0.5, help="Delta ortho: novel component learning rate")
+    parser.add_argument("--ortho_alpha_drift", type=float, default=0.05, help="Delta ortho: drift component learning rate")
+    parser.add_argument("--ortho_beta", type=float, default=0.95, help="Delta ortho: EMA decay for drift direction")
     parser.add_argument("--voxel_size", type=float, default=0.0, help="voxel size for voxel grid downsampling, 0 means no downsampling")
     return parser
 
@@ -113,6 +116,9 @@ def main(args):
     model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
     model.config.random_gate_p = args.random_gate_p
     model.config.momentum_tau = args.momentum_tau
+    model.config.ortho_alpha_novel = args.ortho_alpha_novel
+    model.config.ortho_alpha_drift = args.ortho_alpha_drift
+    model.config.ortho_beta = args.ortho_beta
 
     model.eval()
     # else:
