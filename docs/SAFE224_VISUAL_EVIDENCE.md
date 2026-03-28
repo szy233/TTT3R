@@ -28,7 +28,7 @@
 - `docs/figures/safe224/fig_typical_before_after_depth.png`
 
 含义：
-- 示例序列：`apple/540_79043_153212_len024`，第 `12` 帧。
+- 示例序列：`apple/540_79043_153212_len024`，第 `8` 帧。
 - 展示内容：`Input RGB`、`Depth(drift0)`、`Depth(inv_t1)`、`|Depth diff|`。
 - 用于直观展示 brake 配置变化带来的深度图差异。
 

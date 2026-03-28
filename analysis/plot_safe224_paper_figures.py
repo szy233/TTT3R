@@ -112,7 +112,9 @@ def _norm_depth(depth: np.ndarray) -> np.ndarray:
 
 def plot_typical_before_after(pred_root: Path, out_path: Path) -> None:
     seq = "apple/540_79043_153212_len024"
-    frame_id = "000012"
+    # 000012 in this sequence is fully black in both exported and raw frames;
+    # choose a valid visible frame for paper visualization.
+    frame_id = "000008"
 
     color_path = pred_root / "ttt3r_momentum_inv_t1" / seq / "color" / f"{frame_id}.png"
     # fallback to raw sequence image if exported color frame is all black
@@ -148,7 +150,7 @@ def plot_typical_before_after(pred_root: Path, out_path: Path) -> None:
     axs[3].set_title("|Depth diff|")
     for ax in axs:
         ax.axis("off")
-    fig.suptitle("Typical Sequence Visual Comparison (apple_len024, frame 12)", y=1.02)
+    fig.suptitle(f"Typical Sequence Visual Comparison (apple_len024, frame {int(frame_id)})", y=1.02)
     plt.tight_layout()
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
