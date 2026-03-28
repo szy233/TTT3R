@@ -26,6 +26,7 @@
 
 文件：
 - `docs/figures/safe224/fig_typical_before_after_depth.png`
+- `docs/figures/safe224/fig_typical_before_after_depth_frame008.png`（推荐网页查看，避免缓存）
 
 含义：
 - 示例序列：`apple/540_79043_153212_len024`，第 `8` 帧。

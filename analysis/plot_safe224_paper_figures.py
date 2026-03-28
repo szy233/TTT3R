@@ -110,11 +110,8 @@ def _norm_depth(depth: np.ndarray) -> np.ndarray:
     return d
 
 
-def plot_typical_before_after(pred_root: Path, out_path: Path) -> None:
+def plot_typical_before_after(pred_root: Path, out_path: Path, frame_id: str = "000008") -> None:
     seq = "apple/540_79043_153212_len024"
-    # 000012 in this sequence is fully black in both exported and raw frames;
-    # choose a valid visible frame for paper visualization.
-    frame_id = "000008"
 
     color_path = pred_root / "ttt3r_momentum_inv_t1" / seq / "color" / f"{frame_id}.png"
     # fallback to raw sequence image if exported color frame is all black
@@ -179,7 +176,15 @@ def main() -> None:
 
     plot_alpha_curve(per_seq, args.output_dir / "fig_alpha_drift_curve.png")
     plot_sequence_improvement(per_seq, args.output_dir / "fig_sequence_improvement_distribution.png")
-    plot_typical_before_after(pred_root, args.output_dir / "fig_typical_before_after_depth.png")
+    plot_typical_before_after(
+        pred_root, args.output_dir / "fig_typical_before_after_depth.png", frame_id="000008"
+    )
+    # cache-busting copy with explicit frame suffix for web preview
+    plot_typical_before_after(
+        pred_root,
+        args.output_dir / "fig_typical_before_after_depth_frame008.png",
+        frame_id="000008",
+    )
 
     print("[DONE] Figures saved to:", args.output_dir)
 
