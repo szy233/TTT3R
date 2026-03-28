@@ -20,6 +20,8 @@ from utils.metrics_utils import compute_camera_consistency
 from utils.pointcloud_utils import compute_conf_stats, count_output_points, count_processed_frames
 from utils.sampling_utils import parse_length_from_seq_name
 
+_DEMO_FLAGS_CACHE: dict[tuple[str, str], set[str]] = {}
+
 
 class GpuMemoryMonitor:
     def __init__(self, enabled: bool) -> None:
@@ -103,12 +105,55 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--downsample_factor", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--timeout_sec", type=int, default=7200)
+    parser.add_argument("--repo_root", type=str, default=None)
     parser.add_argument("--skip_if_done", action="store_true")
     return parser.parse_args()
 
 
+def get_demo_supported_flags(python_exe: str, repo_root: Path) -> set[str]:
+    key = (str(Path(python_exe).resolve()), str(repo_root.resolve()))
+    if key in _DEMO_FLAGS_CACHE:
+        return _DEMO_FLAGS_CACHE[key]
+
+    try:
+        proc = subprocess.run(
+            [str(Path(python_exe).resolve()), "demo.py", "-h"],
+            cwd=str(repo_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        text = proc.stdout or ""
+    except Exception:
+        text = ""
+
+    flags = {
+        "--model_path",
+        "--seq_path",
+        "--device",
+        "--size",
+        "--vis_threshold",
+        "--output_dir",
+        "--port",
+        "--model_update_type",
+        "--frame_interval",
+        "--reset_interval",
+        "--downsample_factor",
+    }
+    if "--alpha_drift" in text:
+        flags.add("--alpha_drift")
+    if "--seed" in text:
+        flags.add("--seed")
+
+    _DEMO_FLAGS_CACHE[key] = flags
+    return flags
+
+
 def run_one_experiment(args: argparse.Namespace) -> dict[str, Any]:
     seq_path = Path(args.seq_path).resolve()
+    repo_root = Path(getattr(args, "repo_root", None) or REPO_ROOT).resolve()
     object_id = seq_path.parent.name
     sequence_id = seq_path.name
     seq_length = parse_length_from_seq_name(sequence_id)
@@ -152,10 +197,11 @@ def run_one_experiment(args: argparse.Namespace) -> dict[str, Any]:
         str(args.reset_interval),
         "--downsample_factor",
         str(args.downsample_factor),
-        "--seed",
-        str(args.seed),
     ]
-    if args.alpha_drift is not None:
+    supported_flags = get_demo_supported_flags(args.python_exe, repo_root)
+    if "--seed" in supported_flags:
+        command.extend(["--seed", str(args.seed)])
+    if args.alpha_drift is not None and "--alpha_drift" in supported_flags:
         command.extend(["--alpha_drift", str(args.alpha_drift)])
 
     start = time.time()
@@ -169,7 +215,7 @@ def run_one_experiment(args: argparse.Namespace) -> dict[str, Any]:
         log_f.write(f"[CMD] {' '.join(command)}\n")
         proc = subprocess.Popen(
             command,
-            cwd=str(REPO_ROOT),
+            cwd=str(repo_root),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
