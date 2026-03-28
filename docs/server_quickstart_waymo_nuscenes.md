@@ -59,9 +59,12 @@ bash scripts/server/run_waymo_relpose_pipeline.sh
 ## 4. 常见参数
 
 - `NUM_PROCESSES=1`：更稳，显存压力小。
+- 不设置 `NUM_PROCESSES`：脚本会自动探测 GPU 数量并并行。
 - `MAX_FRAMES`：先用 200~300 验证流程，再拉到 500。
 - `STRIDE=2`：可以减轻耗时和存储。
 - `WEIGHTS_PATH=/your/path/cut3r_512_dpt_4_64.pth`：自定义权重路径。
+- `AMP_DTYPE=bf16`（默认）：H200 推荐，速度更快。
+- `TF32=1`（默认）：开启 Tensor Core TF32 加速。
 
 ## 5. 说明
 

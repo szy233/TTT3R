@@ -4,9 +4,26 @@ set -euo pipefail
 
 workdir="${WORKDIR:-.}"
 dataset="${DATASET:?DATASET is required, e.g. nuscenes_relpose or waymo_relpose}"
-num_processes="${NUM_PROCESSES:-1}"
+
+if [ -n "${NUM_PROCESSES:-}" ]; then
+  num_processes="${NUM_PROCESSES}"
+elif command -v nvidia-smi >/dev/null 2>&1; then
+  gpu_count="$(nvidia-smi -L | wc -l | tr -d ' ')"
+  if [ -n "$gpu_count" ] && [ "$gpu_count" -gt 0 ]; then
+    num_processes="$gpu_count"
+  else
+    num_processes="1"
+  fi
+else
+  num_processes="1"
+fi
+
 size="${SIZE:-512}"
 main_port="${MAIN_PORT:-29562}"
+amp_dtype="${AMP_DTYPE:-bf16}"
+tf32="${TF32:-1}"
+cudnn_benchmark="${CUDNN_BENCHMARK:-1}"
+inference_mode="${INFERENCE_MODE:-1}"
 
 experiments=(
   "cut3r:cut3r:0.15"
@@ -42,5 +59,9 @@ for exp in "${experiments[@]}"; do
     --eval_dataset "$dataset" \
     --size "$size" \
     --model_update_type "$model_name" \
-    --alpha_drift "$alpha_drift"
+    --alpha_drift "$alpha_drift" \
+    --amp_dtype "$amp_dtype" \
+    --tf32 "$tf32" \
+    --cudnn_benchmark "$cudnn_benchmark" \
+    --inference_mode "$inference_mode"
 done

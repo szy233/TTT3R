@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import torch
 import argparse
+from contextlib import nullcontext
 
 from copy import deepcopy
 from eval.relpose.metadata import dataset_metadata
@@ -53,6 +54,12 @@ def get_args_parser():
         default="cut3r",
         help="model type for state update strategy: cut3r, ttt3r, ttt3r_joint, etc.",
     )
+    parser.add_argument(
+        "--alpha_drift",
+        type=float,
+        default=0.15,
+        help="Residual update floor for stability brake. Use 0.0 for ablation.",
+    )
     parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
     parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
     parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
@@ -77,7 +84,62 @@ def get_args_parser():
     parser.add_argument("--revisit", type=int, default=1)
     parser.add_argument("--freeze_state", action="store_true", default=False)
     parser.add_argument("--solve_pose", action="store_true", default=False)
+    parser.add_argument(
+        "--amp_dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bf16", "fp16", "fp32"],
+        help="Autocast dtype for inference speed. Use bf16 on H200.",
+    )
+    parser.add_argument(
+        "--tf32",
+        type=int,
+        default=1,
+        help="Enable TF32 matmul/cuDNN on Ampere+ GPUs (1=True, 0=False).",
+    )
+    parser.add_argument(
+        "--cudnn_benchmark",
+        type=int,
+        default=1,
+        help="Enable cuDNN benchmark auto-tuner (1=True, 0=False).",
+    )
+    parser.add_argument(
+        "--inference_mode",
+        type=int,
+        default=1,
+        help="Use torch.inference_mode during forward pass (1=True, 0=False).",
+    )
     return parser
+
+
+def _setup_runtime(args):
+    args.tf32 = bool(args.tf32)
+    args.cudnn_benchmark = bool(args.cudnn_benchmark)
+    args.inference_mode = bool(args.inference_mode)
+
+    torch.set_grad_enabled(False)
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = args.tf32
+        torch.backends.cudnn.allow_tf32 = args.tf32
+        torch.backends.cudnn.benchmark = args.cudnn_benchmark
+        torch.set_float32_matmul_precision("high")
+
+    if args.amp_dtype == "auto":
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+            args.amp_dtype = "bf16"
+        elif torch.cuda.is_available():
+            args.amp_dtype = "fp16"
+        else:
+            args.amp_dtype = "fp32"
+
+
+def _autocast_ctx(args, device):
+    if args.amp_dtype == "fp32":
+        return nullcontext()
+    if "cuda" not in str(device):
+        return nullcontext()
+    dtype = torch.bfloat16 if args.amp_dtype == "bf16" else torch.float16
+    return torch.autocast(device_type="cuda", dtype=dtype)
 
 
 def eval_pose_estimation(args, model, save_dir=None):
@@ -154,7 +216,10 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
                 )
 
                 start = time.time()
-                outputs, _ = inference_recurrent_lighter(views, model, device)
+                mode_ctx = torch.inference_mode if args.inference_mode else torch.no_grad
+                with mode_ctx():
+                    with _autocast_ctx(args, device):
+                        outputs, _ = inference_recurrent_lighter(views, model, device)
                 end = time.time()
                 fps = len(filelist) / (end - start)
                 print(f"Finished pose estimation for {args.eval_dataset} {seq: <16}, FPS: {fps:.2f}")
@@ -266,6 +331,7 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
 if __name__ == "__main__":
     args = get_args_parser()
     args = args.parse_args()
+    _setup_runtime(args)
     add_path_to_dust3r(args.weights)
     from dust3r.utils.image import load_images_for_eval as load_images
     from dust3r.post_process import estimate_focal_knowing_depth
@@ -403,13 +469,13 @@ if __name__ == "__main__":
 
         if solve_pose:
             pts3ds_self = [
-                output["pts3d_in_self_view"].cpu() for output in outputs["pred"]
+                output["pts3d_in_self_view"].float().cpu() for output in outputs["pred"]
             ]
             pts3ds_other = [
-                output["pts3d_in_other_view"].cpu() for output in outputs["pred"]
+                output["pts3d_in_other_view"].float().cpu() for output in outputs["pred"]
             ]
-            conf_self = [output["conf_self"].cpu() for output in outputs["pred"]]
-            conf_other = [output["conf"].cpu() for output in outputs["pred"]]
+            conf_self = [output["conf_self"].float().cpu() for output in outputs["pred"]]
+            conf_other = [output["conf"].float().cpu() for output in outputs["pred"]]
             pr_poses, focal, pp = recover_cam_params(
                 torch.cat(pts3ds_self, 0),
                 torch.cat(pts3ds_other, 0),
@@ -420,16 +486,16 @@ if __name__ == "__main__":
         else:
 
             pts3ds_self = [
-                output["pts3d_in_self_view"].cpu() for output in outputs["pred"]
+                output["pts3d_in_self_view"].float().cpu() for output in outputs["pred"]
             ]
             pts3ds_other = [
-                output["pts3d_in_other_view"].cpu() for output in outputs["pred"]
+                output["pts3d_in_other_view"].float().cpu() for output in outputs["pred"]
             ]
-            conf_self = [output["conf_self"].cpu() for output in outputs["pred"]]
-            conf_other = [output["conf"].cpu() for output in outputs["pred"]]
+            conf_self = [output["conf_self"].float().cpu() for output in outputs["pred"]]
+            conf_other = [output["conf"].float().cpu() for output in outputs["pred"]]
             pts3ds_self = torch.cat(pts3ds_self, 0)
             pr_poses = [
-                pose_encoding_to_camera(pred["camera_pose"].clone()).cpu()
+                pose_encoding_to_camera(pred["camera_pose"].clone()).float().cpu()
                 for pred in outputs["pred"]
             ]
             pr_poses = torch.cat(pr_poses, 0)
@@ -464,6 +530,7 @@ if __name__ == "__main__":
     
     # set model type and frequency-domain hyperparameters
     model.config.model_update_type = args.model_update_type
+    model.config.alpha_drift = args.alpha_drift
     model.config.spectral_temperature = args.spectral_temperature
     model.config.geo_gate_tau = args.geo_gate_tau
     model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
