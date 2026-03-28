@@ -59,10 +59,10 @@ updated = state_feat + α_novel × novel_comp + α_drift × drift_comp
 | ttt3r_momentum_inv_t1 | 0.261 | -68.0% | -6.8% |
 | **ttt3r_ortho** | **0.492** | -39.8% | +75.7% |
 | ttt3r_ortho_adaptive (linear) | 0.358 | -56.2% | +27.9% |
-| ttt3r_ortho_adaptive (match) | 运行中 | — | — |
-| ttt3r_ortho_adaptive (threshold) | 运行中 | — | — |
+| ttt3r_ortho_adaptive (match) | 0.356 | -56.4% | +27.1% |
+| ttt3r_ortho_adaptive (threshold) | 0.376 | -54.0% | +34.3% |
 
-**⚠ Ortho 在 ScanNet relpose 上退化**。Adaptive linear 修复部分 (0.492→0.358)，但仍逊于 random/brake。
+**⚠ Ortho 在 ScanNet relpose 上退化**。三种 adaptive 策略天花板 ~0.356，修复了固定 ortho 的大部分退化 (0.492→0.356, -28%)，但仍逊于 random (0.280) 和 brake (0.261)。结论：ortho 分解本身在高 drift energy 场景有结构性限制，不是靠调 α_drift 能完全修复的。
 
 ### Video Depth — Abs Rel ↓
 
