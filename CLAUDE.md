@@ -219,11 +219,10 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 
 ## Next Steps
 
-### 运行中
-- **[Running] adaptive ortho match/threshold ScanNet** — GPU0/GPU1 并行
+### 已完成
+- ~~Adaptive ortho ScanNet 结果分析~~ — 三种策略天花板 ~0.356，确认 ortho 在高 drift energy 场景的结构性限制，不再继续调参
 
 ### 待办
-- **[P0] Adaptive ortho ScanNet 结果分析** — match/threshold 出来后决定最终 adaptive 策略
 - **[P1] Inference overhead (S2)** — wall-clock time + peak GPU memory
 - **[P1] 理论更新** — drift energy bound, adaptive α 推导
 - **[P2] Paper writing** — 基于当前结果开始写 method + experiments
