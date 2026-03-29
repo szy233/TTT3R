@@ -5,13 +5,18 @@
 包含文件:
 
 - `summary.csv`：4 组模型的总体平均指标
+- `summary_effective_models.csv`：去除无效重复组后的主比较表（推荐引用）
 - `per_sequence_results.csv`：逐序列指标明细
 - `summary.md`：评测脚本自动生成的 Markdown 摘要
 - `nuscenes_full_h200.log`：完整运行日志（含进度、速度、结束标记）
 
-关键结果（avg_ate / avg_rpe_trans / avg_rpe_rot）:
+关键结果（有效组，avg_ate / avg_rpe_trans / avg_rpe_rot）:
 
 - `cut3r`: `2.32265 / 0.85829 / 0.72078`
 - `ttt3r`: `5.02525 / 2.07429 / 1.16555`
 - `ttt3r_momentum_inv_t1`: `11.83113 / 4.72726 / 3.73936`
-- `ttt3r_momentum_inv_t1_drift0`: `11.83113 / 4.72726 / 3.73936`
+
+说明:
+
+- 历史导出的 `ttt3r_momentum_inv_t1_drift0` 与 `ttt3r_momentum_inv_t1` 完全一致。
+- 后续代码排查确认：当时 `alpha_drift` 在 `stability brake` 路径未真正生效，因此不将 `drift0` 作为有效独立组进行主比较。

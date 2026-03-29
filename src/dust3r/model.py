@@ -1347,7 +1347,12 @@ class ARCroco3DStereo(CroCoNet):
             )
 
         cosine = F.cosine_similarity(delta, prev_delta, dim=-1, eps=1e-6)
-        alpha = torch.sigmoid(-tau * cosine)[..., None]
+        alpha_raw = torch.sigmoid(-tau * cosine)[..., None]
+        # Keep a minimum drift channel to avoid over-suppressing all updates.
+        # alpha_drift=0.0 is an ablation that removes this residual update path.
+        alpha_drift = float(getattr(config, "alpha_drift", 0.15))
+        alpha_drift = max(0.0, min(1.0, alpha_drift))
+        alpha = alpha_drift + (1.0 - alpha_drift) * alpha_raw
         brake_state["last_cosine"] = cosine.detach().mean().item()
         return alpha
 

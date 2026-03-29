@@ -43,19 +43,18 @@ bash scripts/server/run_nuscenes_relpose_pipeline.sh
 - `eval_results/relpose/nuscenes_relpose/summary.md`
 - `eval_results/relpose/nuscenes_pipeline.log`
 
-### 3.1 结果摘要 (summary.csv)
+### 3.1 结果摘要 (有效组)
 
 | model | avg_ate | avg_rpe_trans | avg_rpe_rot |
 |---|---:|---:|---:|
 | cut3r | 2.57783 | 1.25918 | 0.90599 |
 | ttt3r | 10.04719 | 4.88576 | 1.31527 |
 | ttt3r_momentum_inv_t1 | 17.99197 | 7.99655 | 10.64272 |
-| ttt3r_momentum_inv_t1_drift0 | 17.99197 | 7.99655 | 10.64272 |
 
 备注:
 
-- 在本次 nuScenes mini 子集上，`cut3r` 明显优于三组 TTT3R 配置。
-- `ttt3r_momentum_inv_t1` 与 `ttt3r_momentum_inv_t1_drift0` 指标完全一致，和之前在 KITTI 观察到的现象一致，建议后续继续排查该分支的 gate 生效路径。
+- 在本次 nuScenes mini 子集上，`cut3r` 明显优于当前 TTT3R 配置。
+- 历史导出的 `ttt3r_momentum_inv_t1_drift0` 与 `ttt3r_momentum_inv_t1` 完全一致，后续确认是 `alpha_drift` 未生效导致；因此这里从主比较中移除 `drift0` 行，避免误读为有效独立实验组。
 
 ## 4) Waymo 状态与下一步
 
@@ -105,17 +104,16 @@ bash scripts/server/run_nuscenes_relpose_pipeline.sh
 - `eval_results/relpose/nuscenes_relpose/per_sequence_results.csv`（3401 行，含表头）
 - `logs/nuscenes_full_h200.log`
 
-### 5.1 Full 结果摘要 (summary.csv)
+### 5.1 Full 结果摘要 (有效组)
 
 | model | avg_ate | avg_rpe_trans | avg_rpe_rot |
 |---|---:|---:|---:|
 | cut3r | 2.32265 | 0.85829 | 0.72078 |
 | ttt3r | 5.02525 | 2.07429 | 1.16555 |
 | ttt3r_momentum_inv_t1 | 11.83113 | 4.72726 | 3.73936 |
-| ttt3r_momentum_inv_t1_drift0 | 11.83113 | 4.72726 | 3.73936 |
 
 简要结论:
 
 1. Full trainval 上，`cut3r` 仍显著优于当前 TTT3R 分支配置。
-2. `ttt3r_momentum_inv_t1` 与 `ttt3r_momentum_inv_t1_drift0` 再次完全一致，支持“`alpha_drift` 分支未生效或被覆盖”的排查方向。
+2. 历史导出的 `ttt3r_momentum_inv_t1_drift0` 与 `ttt3r_momentum_inv_t1` 完全一致，后续确认是 `alpha_drift` 未生效导致；因此这里从主比较中移除 `drift0` 行。
 3. 本次运行未出现 OOM，512 分辨率在 H200 单卡下可稳定完整执行。
