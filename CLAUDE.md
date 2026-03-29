@@ -102,7 +102,7 @@ Brake 在 7scenes Acc 上优于 ortho (0.021 vs 0.026)，Comp/NC 基本持平。
 
 α_drift 鲁棒 (0.05-0.2 <2%)，α_novel≥0.5 鲁棒，β=0.95 sweet spot（0.9/0.99 退化 35%+）。
 
-### Ortho Hyperparameter Sensitivity — ScanNet (90f, 76 valid)
+### Ortho Hyperparameter Sensitivity — ScanNet (90f, 76 valid, linspace 采样)
 
 | α_novel | α_drift | β | ATE ↓ | vs default |
 |---------|---------|------|-------|------------|
@@ -115,6 +115,8 @@ Brake 在 7scenes Acc 上优于 ortho (0.021 vs 0.026)，Comp/NC 基本持平。
 | 0.5 | 0.05 | 0.9 | 0.666 | +19.6% |
 
 **⚠ 与 TUM 完全反转**: β=0.99 在 ScanNet 最优（TUM 最差），α_drift 越高越好（TUM 不敏感）。证实 drift 性质在两个 dataset 根本不同。
+
+注：此 sensitivity 数据使用 linspace 采样（覆盖全轨迹），趋势仍有参考价值但绝对值偏高。
 
 ### Inference Overhead — TUM (3 seqs × 200f, 3 repeats)
 
@@ -194,39 +196,40 @@ TAUM: `sigmoid(||Δstate||_per_dim / mean(||Δstate||) - 1.5)`，理论预期 si
 
 Ortho 在 TUM 短序列上也最优，大幅超越 TTSA3R。
 
-### ScanNet 90f（96 scenes, 76 valid）
+### ScanNet 90f（96 scenes, 91 valid, first-90 标准协议）
 
 | Config | ATE ↓ | vs cut3r |
 |--------|-------|----------|
-| **cut3r (baseline)** | **0.244** | **—** |
-| ttt3r | 0.298 | +22.1% |
-| ttt3r_random (p=0.5) | 0.453 | +85.7% |
-| ttt3r_ortho_adaptive (linear) | 0.497 | +103.7% |
-| ttt3r_momentum_inv_t1 (brake) | 0.525 | +115.2% |
-| ttt3r_ortho | 0.557 | +128.4% |
+| cut3r (baseline) | 0.095 | — |
+| **ttt3r** | **0.064** | **-32.7%** |
+| ttt3r_random (p=0.5) | 0.064 | -32.7% |
+| ttt3r_momentum_inv_t1 (brake) | 0.071 | -25.0% |
+| ttt3r_ortho_adaptive (linear) | 0.074 | -22.6% |
+| ttt3r_ortho | 0.087 | -8.2% |
 
-**⚠ ScanNet 90f: 所有方法均退化**，连 plain ttt3r 也比 cut3r 差 +22%。Over-update 在短序列上不存在，dampening 反而有害。
+ScanNet 90f 所有方法均改善。ttt3r/random 改善最大 (-33%)，ortho 改善最小 (-8%)。与 1000f 趋势一致：ortho 的 drift 分解在 ScanNet 高 drift energy 场景效果有限。
 
-### A6: Over-update 是 Emerging Problem — 序列长度 × 场景类型交互
+注：之前的 ScanNet 90f 结果（所有方法退化）是因为帧选择错误 — 用了 np.linspace 均匀采样（覆盖 100% 轨迹），本质上是稀疏长序列测试。修正为标准 first-90 协议后结果翻转。
+
+### A6: Over-update 普遍存在 — 短序列即可观察
 
 | | TUM 90f | TUM 1000f | ScanNet 90f | ScanNet 1000f | Sintel ~50f |
 |---|---------|-----------|-------------|---------------|-------------|
-| cut3r ATE | 0.033 | 0.166 | 0.244 | 0.805 | 0.209 |
-| ttt3r vs cut3r | **-42%** | **-38%** | **+22%** | **-50%** | 0% |
-| ortho vs cut3r | **-55%** | **-66%** | **+128%** | -40% | +13% |
-| brake vs cut3r | **-53%** | **-62%** | **+115%** | -68% | +14% |
-| ttt3r 改善 scenes | — | — | 31/76 (41%) | 63/66 (95%) | — |
+| cut3r ATE | 0.033 | 0.166 | 0.095 | 0.805 | 0.209 |
+| ttt3r vs cut3r | **-42%** | **-38%** | **-33%** | **-50%** | 0% |
+| ortho vs cut3r | **-55%** | **-66%** | **-8%** | -40% | +13% |
+| brake vs cut3r | **-53%** | **-62%** | **-25%** | -68% | +14% |
 
 **关键发现**:
-1. **TUM**: 所有长度都有 over-update（90f 已 -42%），dampening 始终有效
-2. **ScanNet**: 90f **无 over-update**（cut3r=0.244 是最优），1000f 才出现（ATE 3.3x 退化到 0.805）
+1. **TUM**: 所有长度都有 over-update（90f 已 -42%），dampening 始终有效，ortho 最优
+2. **ScanNet**: 90f 即有 over-update（ttt3r -33%），1000f 更严重（ATE 8.5x 退化到 0.805）
 3. **Sintel**: 序列极短 (20-50f)，无 over-update
-4. **ScanNet 的两阶段特性**: 早期更新是有效 geometry refinement（不该抑制），累积到长序列后才变成有害 over-update
-5. **TUM drift 从一开始就是有害的** — drift energy=40% 但方向分散，即使 90f 也是重复性噪声
+4. **Ortho 在 ScanNet 上效果有限**: 90f -8% vs ttt3r -33%，1000f -40% vs brake -68%。高 drift energy 场景 drift 分解不如 scalar dampening
+5. **Over-update 严重度**: ScanNet 1000f/90f = 8.5x 退化，TUM 1000f/90f = 5.0x 退化
 
 注：cut3r baseline 有差异（TUM 0.0325 vs TTSA3R paper 0.046），可能是 eval stride/subset 不同。
 
-结果: `eval_results/relpose/tum/<config>/`, `eval_results/relpose/scannet_s3_90/<config>/`
+结果: `eval_results/relpose/tum/<config>/`, `eval_results/relpose/scannet_s3_90_first/<config>/`
 
 ## Update Types in model.py
 
@@ -293,7 +296,7 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 
 ### Dataset Notes
 
-- ScanNet: 100 test scenes → 96 预处理（4 empty skip）→ 65 valid（31 GT 含 -inf, evo eigh 不收敛，三配置一致）
+- ScanNet: 100 test scenes → 96 预处理（4 empty skip）→ 91 valid (90f) / 66 valid (1000f) / 65 valid (1000f adaptive)（GT 含 -inf, evo eigh 不收敛）
 - TUM: 8 sequences, 全部成功
 - 所有数据集预处理完成，评测 pipeline 正常
 
@@ -322,17 +325,17 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 **叙事**: Over-update 是 emerging problem（随序列增长显现）→ 方向性分析 → Delta Decomposition
 
 **Story**:
-1. **问题**: Recurrent 3D 的 state update 存在 systematic over-update，但这是 **序列长度 × 场景类型的交互效应**（A6）：TUM 90f 即出现，ScanNet 需 >90f 累积
+1. **问题**: Recurrent 3D 的 state update 存在 systematic over-update，90f 即可观察（TUM -42%, ScanNet -33%），随序列增长加剧（1000f: TUM -38%, ScanNet -50%）
 2. **分析**: Scalar adaptive gate 全部退化为常数（A1-A3 + 竞品 TTSA3R A5）；delta 方向有结构性 drift（A4），drift 性质因场景而异
 3. **Insight**: 问题不是 "何时更新" 而是 "更新方向的哪部分该保留"；超参敏感性在 TUM/ScanNet 上完全反转（β=0.95 vs 0.99）
 4. **方法**: Delta Orthogonalization — drift/novel 分解 + 差异化抑制
-5. **结果**: TUM pose -66.5% (long) / -55.4% (short, vs TTSA3R -44.2%), video depth -31~59%, 7scenes Comp -54%，零额外 overhead
+5. **结果**: TUM pose -66.5% (long) / -55.4% (short, vs TTSA3R -44.2%), video depth -31~59%, 7scenes Comp -54%，零额外 overhead; ScanNet 90f -8% (ortho) / -33% (ttt3r)
 
 **Contributions**:
-1. 揭示 over-update 是 emerging problem + scalar gate 退化为常数（自身 A1-A3 + 竞品 TTSA3R A5 双重验证）
+1. 揭示 over-update 普遍存在（90f 即可观察）+ scalar gate 退化为常数（自身 A1-A3 + 竞品 TTSA3R A5 双重验证）
 2. 发现方向性本质：drift energy 在不同场景差异显著（40%-60%），超参敏感性反转（TUM β=0.95 最优 vs ScanNet β=0.99 最优），精确解释方法适用边界
 3. Delta Orthogonalization: train-free, plug-in, zero overhead, TUM pose SOTA (-55~66%), video depth SOTA (-31~59%)
-4. 短序列上大幅超越 TTSA3R（TUM ATE -44.2%），证明方法泛化；ScanNet 90f 退化揭示 over-update 的 emerging nature
+4. 短序列上大幅超越 TTSA3R（TUM ATE -44.2%），ScanNet 90f 也改善 (-8~33%)
 
 ## Next Steps
 
@@ -342,10 +345,10 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 - ~~TTSA3R TAUM gate analysis~~ — TAUM σ_time=0.006，比 ttt3r gate 更严重退化为常数，证实 A1 推广到竞品
 - ~~Short sequence eval (TUM 90f)~~ — ortho ATE=0.0145 (-55.4% vs cut3r, -44% vs TTSA3R)，短序列上也最优
 - ~~Inference overhead~~ — 所有方法零额外内存 (6.14GB)，FPS 8.4-10.0，negligible overhead
-- ~~ScanNet 90f short-seq eval~~ — **所有方法均退化** (cut3r 最优 0.244)，over-update 在短序列不存在
+- ~~ScanNet 90f short-seq eval~~ — first-90 标准协议: 所有方法均改善 (ttt3r -33%, ortho -8%)，over-update 在 90f 即存在
 - ~~ScanNet ortho 超参敏感性~~ — 与 TUM 完全反转: β=0.99 最优 (vs TUM β=0.95)，α_drift 越高越好
 - ~~Sintel relpose~~ — 短序列 (20-50f) 无 over-update，dampening 均无益
-- ~~A6 emerging problem 分析~~ — over-update 是序列长度 × 场景类型交互效应
+- ~~A6 分析~~ — over-update 普遍存在（TUM/ScanNet 90f 即可观察），Sintel 太短除外
 
 ### 待办
 - **[P1] 理论更新** — drift energy bound, adaptive α 推导, emerging problem 理论框架
