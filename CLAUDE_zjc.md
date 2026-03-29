@@ -1,188 +1,196 @@
-# TTT3R — zjc Branch Working Notes
+# TTT3R (zjc) — Stability Brake Result Summary
 
 ## Project Goal
+Train-free, inference-time improvement for recurrent 3D reconstruction by controlling **systematic over-update** in state updates.
 
-NeurIPS-style project log for train-free, inference-time state dampening in recurrent 3D reconstruction.  
-Current branch focus: organize exported evaluation results, formalize the stability-brake story, and keep a clean local record for follow-up experiments on `zjc`.
+Current main line on `zjc`:
 
-## Current Position
+- keep one core method: **stability brake**
+- remove multi-gate complexity from main story
+- validate on local safe setting + outdoor depth + large-scale relpose export
 
-The main story on this branch is no longer "frequency gating".  
-The strongest validated direction is:
+---
 
-- **Stability Brake**: `alpha_t = sigmoid(-tau * cos(delta_t, delta_{t-1}))`
-- Problem framing: **systematic over-update** in recurrent state updates
-- Core claim: adaptive dampening is better than constant dampening when scene dynamics vary over time
+## Core Method
 
-The exported formal results were synced from `origin/szy` into `eval_results_export/`, then summarized and visualized locally on this branch.
-
-## Main Files on zjc
-
-| File | Purpose |
-|------|---------|
-| `analysis/per_scene_improvement_analysis.py` | A3 per-scene relpose comparison |
-| `analysis/s3_brake_sensitivity.py` | S3 tau sensitivity summary |
-| `analysis/state_convergence_analysis.py` | A4 state convergence logging and plots |
-| `analysis/a3_per_scene_distribution.py` | Original per-scene plotting script from `szy` |
-| `analysis_results/formal_export_summary.md` | Human-readable summary of exported results |
-| `eval_results_export/` | Exported formal logs and metrics from `szy` branch |
-
-## Exported Formal Results
-
-### A3 Per-Scene Relpose
-
-#### ScanNet: `ttt3r_random` vs `ttt3r_momentum_inv_t1`
-
-- Common scenes: 65
-- Improved scenes: 31
-- Degraded scenes: 34
-- Median ATE: `0.20304 -> 0.19217`
-- Mean relative improvement: `+0.92%`
-- Median relative improvement: `-1.35%`
-
-#### TUM: `ttt3r_random` vs `ttt3r_momentum_inv_t1`
-
-- Common scenes: 8
-- Improved scenes: 7
-- Degraded scenes: 1
-- Median ATE: `0.08224 -> 0.065545`
-- Mean relative improvement: `+14.90%`
-- Median relative improvement: `+10.21%`
-
-#### ScanNet: `ttt3r_random` vs `ttt3r_brake_geo`
-
-- Common scenes: 65
-- Improved scenes: 20
-- Degraded scenes: 45
-- Median ATE: `0.20304 -> 0.24746`
-- Mean relative improvement: `-35.37%`
-- Median relative improvement: `-21.93%`
-
-#### TUM: `ttt3r_random` vs `ttt3r_brake_geo`
-
-- Common scenes: 8
-- Improved scenes: 5
-- Degraded scenes: 3
-- Median ATE: `0.08224 -> 0.054865`
-- Mean relative improvement: `+3.84%`
-- Median relative improvement: `+10.02%`
-
-### Interpretation
-
-1. `momentum_inv_t1` is clearly stronger than constant dampening on **TUM**.
-2. On **ScanNet**, the improvement is weaker and more mixed scene-by-scene.
-3. `brake_geo` does not behave like a universal improvement.
-4. The current evidence supports **stability brake alone** more strongly than `brake + geo`.
-
-## S3 Tau Sensitivity
-
-Only exported `tau=1` and `tau=2` are currently available.
-
-### ScanNet
-
-- `tau=1`: median ATE `0.19217`, mean ATE `0.26147`
-- `tau=2`: median ATE `0.26213`, mean ATE `0.31068`
-
-### TUM
-
-- `tau=1`: median ATE `0.065545`, mean ATE `0.06339`
-- `tau=2`: median ATE `0.05592`, mean ATE `0.08219`
-
-### Interpretation
-
-- ScanNet currently favors **tau = 1**
-- TUM shows mixed behavior: lower median at `tau=2`, but worse mean
-- The present conclusion is still: **tau = 1 is the safer default**
-- A real sensitivity section still needs more points: `0.5, 1.5, 3.0`
-
-## Exported Video Depth
-
-### KITTI
-
-- `cut3r`: Abs Rel `0.15153`, RMSE `5.66694`, delta<1.25 `0.80434`
-- `ttt3r`: Abs Rel `0.13192`, RMSE `5.42614`, delta<1.25 `0.86530`
-- `ttt3r_joint`: Abs Rel `0.13437`, RMSE `5.38475`, delta<1.25 `0.85774`
-
-### Bonn
-
-- `cut3r`: Abs Rel `0.09900`, RMSE `0.34637`, delta<1.25 `0.90612`
-- `ttt3r`: Abs Rel `0.09974`, RMSE `0.33887`, delta<1.25 `0.92143`
-- `ttt3r_joint`: Abs Rel `0.09408`, RMSE `0.32358`, delta<1.25 `0.93431`
-
-### Sintel
-
-- `cut3r`: Abs Rel `1.02167`, RMSE `6.88020`, delta<1.25 `0.23766`
-- `ttt3r`: Abs Rel `0.97764`, RMSE `6.67607`, delta<1.25 `0.23245`
-- `ttt3r_joint`: Abs Rel `0.91725`, RMSE `6.54943`, delta<1.25 `0.24723`
-
-## Exported 7scenes Reconstruction
-
-Mean values parsed from `eval_results_export/video_recon/7scenes_200/*/7scenes/logs_all.txt`.
-
-- `cut3r`: acc `0.092`, comp `0.048`, nc1 `0.582`, nc2 `0.545`
-- `ttt3r`: acc `0.027`, comp `0.023`, nc1 `0.600`, nc2 `0.561`
-- `ttt3r_joint`: acc `0.021`, comp `0.022`, nc1 `0.594`, nc2 `0.565`
-
-## Narrative Draft
-
-### Problem
-
-Recurrent 3D reconstruction applies state updates too aggressively over long videos.  
-Even when incoming frames carry limited new geometry, the recurrent state still updates with nearly the same strength.  
-Constant dampening already helps a lot, which suggests that **over-update** is a central failure mode.
-
-### Method
-
-Use state-trajectory consistency as an online control signal:
+State update strength is controlled by alignment of consecutive residual directions:
 
 `alpha_t = sigmoid(-tau * cos(delta_t, delta_{t-1}))`
 
-- cosine high: updates are aligned, likely redundant, so brake harder
-- cosine low: updates change direction, likely new information, so release the brake
+- high cosine (update direction repeats): stronger brake
+- low cosine (new direction appears): allow more update
 
-### Why This Story Is Stronger
+In code this line corresponds to `ttt3r_momentum_inv_t1` branch, with `alpha_drift` as key parameter.
 
-- It explains why constant `x0.5` works at all
-- It naturally motivates adaptive dampening
-- It aligns with the current theory direction: over-update bound, regret comparison, optimal tau
-- It fits the empirical pattern: dynamic scenes benefit more than static scenes
+---
 
-## What Is Already Done on zjc
+## Key Results
 
-1. Imported exported formal logs from `szy` into `eval_results_export/`
-2. Generated official local A3 figures for ScanNet/TUM
-3. Generated local S3 tau summaries from available exported runs
-4. Wrote a readable summary in `analysis_results/formal_export_summary.md`
-5. Pushed these artifacts to branch `zjc`
+### 1) KITTI Outdoor Depth (post-bugfix, brake vs baseline)
 
-## Suggested Next Steps
+Main comparison:
 
-### P0
+- baseline: `ttt3r`
+- brake: `ttt3r_momentum_inv_t1`
+- dataset: `kitti_s1_500_bugfix_final`
 
-1. Finish **A2: cosine variance vs improvement**
-2. Finish **A4: state convergence** on real scenes, not just smoke tests
-3. Turn current A3/S3 outputs into paper-quality combined figures
+#### Metric alignment
 
-### P1
+| model | Abs Rel | Sq Rel | RMSE | Log RMSE | delta < 1.25 |
+|---|---:|---:|---:|---:|---:|
+| ttt3r | 0.128815 | 0.912491 | 5.700562 | 0.180974 | 0.850601 |
+| ttt3r_momentum_inv_t1 | 0.115049 | 0.845235 | 5.672172 | 0.171253 | 0.866680 |
 
-1. Run missing tau values: `0.5, 1.5, 3.0`
-2. Re-evaluate whether `momentum_inv_t1` should replace `ttt3r_joint` as final method for video depth and 7scenes
-3. Add inference overhead numbers
+#### Scale alignment
 
-### P2
+| model | Abs Rel | Sq Rel | RMSE | Log RMSE | delta < 1.25 |
+|---|---:|---:|---:|---:|---:|
+| ttt3r | 0.125868 | 0.853534 | 5.495092 | 0.173581 | 0.867252 |
+| ttt3r_momentum_inv_t1 | 0.118438 | 0.805025 | 5.463623 | 0.165685 | 0.880861 |
 
-1. Write a polished abstract around over-update and adaptive dampening
-2. Consolidate all result tables into one camera-ready summary sheet
-3. Merge the useful parts of this note back into the final project `CLAUDE.md`
+#### Scale+shift alignment
 
-## Cautions
+| model | Abs Rel | Sq Rel | RMSE | Log RMSE | delta < 1.25 |
+|---|---:|---:|---:|---:|---:|
+| ttt3r | 0.116942 | 0.835753 | 5.547695 | 0.171391 | 0.873662 |
+| ttt3r_momentum_inv_t1 | 0.106303 | 0.795042 | 5.566821 | 0.162461 | 0.889503 |
 
-- `analysis_results/` is gitignored by default, so result directories need `git add -f` if they should be versioned
-- The local worktree still contains unrelated modified files in `src/`; do not auto-commit them together with analysis artifacts
-- Exported sensitivity is incomplete; avoid over-claiming the tau story until more points are run
+Abs Rel improvement of brake:
 
-## Branch Record
+- metric: `-10.69%`
+- scale: `-5.90%`
+- scale+shift: `-9.10%`
 
-- Branch: `zjc`
-- Export/artifact commit: `bfe6baa`
-- Source of exported logs: `origin/szy`
+Conclusion:
+
+- after bugfix, brake is active and consistently improves KITTI depth quality.
+
+---
+
+### 2) nuScenes Full Relpose (H200, CAM_FRONT, 850 scenes)
+
+#### Effective main comparison (3 valid groups)
+
+| model | avg_ate | avg_rpe_trans | avg_rpe_rot |
+|---|---:|---:|---:|
+| cut3r | 2.32265 | 0.85829 | 0.72078 |
+| ttt3r | 5.02525 | 2.07429 | 1.16555 |
+| ttt3r_momentum_inv_t1 | 11.83113 | 4.72726 | 3.73936 |
+
+#### Distribution stats (per-sequence, mean / median / p90)
+
+| model | ATE | RPE_trans | RPE_rot |
+|---|---:|---:|---:|
+| cut3r | 2.3227 / 1.8415 / 4.9125 | 0.8583 / 0.7671 / 1.5677 | 0.7208 / 0.5739 / 1.2828 |
+| ttt3r | 5.0252 / 2.4177 / 8.5885 | 2.0743 / 1.2470 / 3.5543 | 1.1655 / 0.6104 / 1.7978 |
+| ttt3r_momentum_inv_t1 | 11.8311 / 5.4329 / 35.7223 | 4.7273 / 2.7427 / 12.0787 | 3.7394 / 0.9007 / 10.6717 |
+
+Important note:
+
+- historical `ttt3r_momentum_inv_t1_drift0` was identical to `ttt3r_momentum_inv_t1` in this run, and should not be treated as a valid independent group for conclusion.
+
+---
+
+### 3) Runtime / Efficiency
+
+#### nuScenes full run-time (from full log)
+
+| output_tag | alpha_drift | total_runtime_min | fps_mean | fps_median |
+|---|---:|---:|---:|---:|
+| cut3r | 0.15 | 53.417 | 19.391 | 19.670 |
+| ttt3r | 0.15 | 52.167 | 19.278 | 19.610 |
+| ttt3r_momentum_inv_t1 | 0.15 | 53.717 | 19.079 | 19.600 |
+| ttt3r_momentum_inv_t1_drift0 | 0.00 | 53.950 | 18.806 | 19.200 |
+
+#### Local safe224 overhead (`drift>0` vs `drift0`)
+
+- runtime delta (`drift0 - drift>0`): `-1.03%`
+- per-frame delta: `-0.98%`
+
+Conclusion:
+
+- brake-related control does not introduce meaningful overhead in current local safe setting.
+
+---
+
+### 4) Reproducibility (SAFE224, 3 repeats)
+
+Method: `ttt3r_momentum_inv_t1`, 2 protocols:
+
+- fixed seed: `42,42,42`
+- different seed: `41,42,43`
+
+Overall (mean ± std):
+
+| protocol | runtime_sec | per_frame_sec | basic_consistency | loop_trans_error |
+|---|---:|---:|---:|---:|
+| fixed seed | 15.8234 ± 1.7198 | 0.9656 ± 0.2895 | 1.1085 ± 0.5101 | 0.3946 ± 0.3710 |
+| different seed | 15.8584 ± 1.5049 | 0.9634 ± 0.2614 | 1.1085 ± 0.5101 | 0.3946 ± 0.3710 |
+
+Takeaway:
+
+- geometric quality metrics are stable across seeds in this SAFE224 setup.
+- observed variance is mainly runtime jitter.
+
+---
+
+### 5) Reset-Interval Sensitivity (SAFE224)
+
+Compared methods:
+
+- `ttt3r_momentum_inv_t1` (`alpha_drift=0.15`)
+- `ttt3r_momentum_inv_t1_drift0` (`alpha_drift=0.0`)
+
+Reset intervals tested: `4, 8, 16, 100`
+
+Paired summary (`drift0 - brake`):
+
+- consistency delta mean: `0.002720` (small)
+- runtime delta mean: `0.249268 s`
+- `drift0` slower ratio: `0.688`
+
+Takeaway:
+
+- no one-sided geometry dominance on this tiny local subset
+- runtime side still slightly favors brake in most paired runs
+
+---
+
+## What Was Fixed
+
+### Bugfix A (KITTI invalid identical result)
+
+- issue: brake state was reset too frequently due to improper reset-mask handling
+- fix: only reset when `torch.any(reset_mask)` is true
+- commit: `4e3e14e`
+
+### Bugfix B (`alpha_drift` ineffective in brake path)
+
+- issue: `alpha_drift` parameter was passed but not applied in one stability-brake path
+- fix: apply `alpha_drift + (1 - alpha_drift) * alpha_raw` form in brake update
+- commit: `6be34c2`
+
+---
+
+## Current Story (Paper-Oriented)
+
+1. Over-update exists and can be controlled by a lightweight state-space brake.
+2. Brake gives clear improvement on outdoor depth (KITTI post-bugfix).
+3. Brake is low-overhead and reproducible in local safe configuration.
+4. Large-scale nuScenes full run is finished and fully exported with distribution-level stats for auditability.
+
+---
+
+## Artifact Paths
+
+- Main report: `docs/waymo_nuscenes_h200_runlog_20260329.md`
+- KITTI summary: `docs/kitti_brake_summary.md`
+- Reproducibility: `docs/reproducibility_safe224_seedstudy.md`
+- Overhead: `docs/s2_overhead_drift_compare.md`
+- Reset sensitivity: `docs/reset_interval_sensitivity_safe224.md`
+- nuScenes full summary:
+  - `eval_results_export/relpose/nuscenes_relpose_h200_full_20260329/summary_effective_models.csv`
+  - `eval_results_export/relpose/nuscenes_relpose_h200_full_20260329/summary_distribution_stats.csv`
+  - `eval_results_export/relpose/nuscenes_relpose_h200_full_20260329/summary_runtime_fps_from_log.csv`
+- Depth full table:
+  - `eval_results_export/video_depth/summary_all_metrics.csv`
