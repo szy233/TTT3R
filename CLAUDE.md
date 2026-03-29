@@ -322,7 +322,7 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 
 ## Paper Narrative
 
-**叙事**: Over-update 是 emerging problem（随序列增长显现）→ 方向性分析 → Delta Decomposition
+**叙事**: Over-update 普遍存在（90f 即可观察）→ scalar gate 全退化为常数 → 方向性分析 → Delta Orthogonalization
 
 **Story**:
 1. **问题**: Recurrent 3D 的 state update 存在 systematic over-update，90f 即可观察（TUM -42%, ScanNet -33%），随序列增长加剧（1000f: TUM -38%, ScanNet -50%）
@@ -339,21 +339,14 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
 
 ## Next Steps
 
-### 已完成
-- ~~Adaptive ortho ScanNet 结果分析~~ — 三种策略天花板 ~0.356，确认 ortho 在高 drift energy 场景的结构性限制
-- ~~Brake depth + 7scenes~~ — brake 与 ortho 在 depth/7scenes 上非常接近，支撑 scalar→directional 叙事
-- ~~TTSA3R TAUM gate analysis~~ — TAUM σ_time=0.006，比 ttt3r gate 更严重退化为常数，证实 A1 推广到竞品
-- ~~Short sequence eval (TUM 90f)~~ — ortho ATE=0.0145 (-55.4% vs cut3r, -44% vs TTSA3R)，短序列上也最优
-- ~~Inference overhead~~ — 所有方法零额外内存 (6.14GB)，FPS 8.4-10.0，negligible overhead
-- ~~ScanNet 90f short-seq eval~~ — first-90 标准协议: 所有方法均改善 (ttt3r -33%, ortho -8%)，over-update 在 90f 即存在
-- ~~ScanNet ortho 超参敏感性~~ — 与 TUM 完全反转: β=0.99 最优 (vs TUM β=0.95)，α_drift 越高越好
-- ~~Sintel relpose~~ — 短序列 (20-50f) 无 over-update，dampening 均无益
-- ~~A6 分析~~ — over-update 普遍存在（TUM/ScanNet 90f 即可观察），Sintel 太短除外
+### 实验 & 可视化
+- **[P1] Depth qualitative viz** — 选 TUM/Bonn 代表帧，对比 cut3r/ttt3r/ortho/brake 的 depth map + error map
+- **[P1] Per-scene scatter plot** — A4 drift energy vs ortho improvement（ScanNet 65 scenes），展示 drift energy 高的 scene ortho 反而退化
+- **[P1] ScanNet scaling curve** — 100f/200f/500f/1000f 各方法 ATE，量化 over-update 随长度加剧的速率
+- **[P2] Length-aware ortho** — 前 T₀ 帧不抑制 drift，之后逐渐增强（实验性探索，可能不进 paper）
 
-### 待办
-- **[P1] 理论更新** — drift energy bound, adaptive α 推导, emerging problem 理论框架
-- **[P1] Depth qualitative viz** — 代表帧 depth map 可视化
-- **[P1] Per-scene scatter plot** — drift energy vs improvement（ScanNet 退化→insight）
-- **[P1] ScanNet scaling curve** — 不同长度 (100f, 200f, 500f, 1000f) 各方法 ATE，找 over-update tipping point
-- **[P2] Length-aware ortho** — 前 T₀ 帧不抑制 drift，之后逐渐增强（实验性探索）
-- **[P2] Paper writing** — 基于当前结果开始写 method + experiments
+### 理论 & 写作
+- **[P1] 理论框架更新** — drift energy bound（为什么 α_drift 最优值依赖 drift energy），adaptive α 推导，与 continual learning gradient projection 的联系
+- **[P1] Paper writing: method section** — Delta Orthogonalization 形式化定义 + 与 scalar dampening 的对比分析
+- **[P1] Paper writing: experiments** — 五数据集三任务结果表 + ablation（sensitivity, overhead, A1-A6）
+- **[P2] Paper writing: intro + related work** — over-update 问题定义，scalar gate 退化现象，positioning vs GRS-SLAM3R/OnlineX/LONG3R

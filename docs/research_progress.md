@@ -1,10 +1,10 @@
 # TTT3R — 研究进展全记录
 
-> 最后更新：2026-03-27
+> 最后更新：2026-03-29
 
 ## 项目概述
 
-**目标**：NeurIPS 投稿。针对循环式 3D 重建（CUT3R/TTT3R）在 long video 上的 **state over-update** 问题，提出 train-free、inference-time 的自适应更新方案。
+**目标**：NeurIPS 投稿。针对循环式 3D 重建（CUT3R/TTT3R）的 **state over-update** 问题（90f 即可观察，非仅 long video），提出 train-free、inference-time 的方向性更新分解方案（Delta Orthogonalization）。
 
 **代码库**：基于 CUT3R/TTT3R 框架，核心修改集中在 `src/dust3r/model.py`。
 
@@ -282,38 +282,44 @@ state = old + α_novel × novel_comp + α_drift × drift_comp
 
 ## 八、当前状态与下一步
 
-### 正在运行
+### 已完成（2026-03-29 更新）
 
-| 实验 | GPU | 预计时间 | 状态 |
-|------|-----|---------|------|
-| ttt3r_ortho ScanNet 全量 (96 scenes) | GPU0 | ~3-4h | 运行中 |
-| ttt3r_ortho ad=0 TUM | GPU1 | ~20min | 运行中 |
+- ✅ Ortho ScanNet/TUM/Sintel 全量评测（relpose + video depth + 7scenes）
+- ✅ Ortho 超参敏感性（TUM + ScanNet，发现两者最优参数完全反转）
+- ✅ Adaptive ortho 三种策略（linear/match/threshold），天花板 ~0.356
+- ✅ Inference overhead benchmark（零额外内存，FPS +18%）
+- ✅ A4 delta direction 分析（ScanNet drift energy 60% vs TUM 40%）
+- ✅ A5 TTSA3R TAUM gate 退化分析（σ_time=0.006，比 ttt3r 更严重）
+- ✅ A6 over-update 普遍性分析（90f 即可观察，非 emerging problem）
+- ✅ ScanNet 90f 标准协议修正（linspace→first-90，结果翻转：退化→改善）
+- ✅ Sintel relpose（短序列无 over-update，dampening 均无益）
 
 ### 待完成
 
 | 优先级 | 任务 |
 |--------|------|
-| **P0** | Ortho ScanNet 全量结果确认 |
-| **P0** | Ortho 超参敏感性：α_novel ∈ {0.3, 0.5, 0.7}, α_drift ∈ {0, 0.05, 0.1}, β ∈ {0.9, 0.95, 0.99} |
-| **P1** | 最终方法 video depth + 7scenes 评测（替代 ttt3r_joint） |
-| **P1** | A1 重做：对比 ortho vs brake 的 gate/delta 动态 |
-| **P1** | Inference overhead 测量（wall-clock + peak GPU memory） |
-| **P2** | Paper outline 起草（新叙事：scale calibration → directional decomposition） |
-| **P2** | 理论更新：drift subtraction 的 regret bound |
+| **P1** | 理论更新 — drift energy bound, adaptive α 推导, emerging problem 理论框架 |
+| **P1** | Depth qualitative viz — 代表帧 depth map 可视化 |
+| **P1** | Per-scene scatter plot — drift energy vs improvement（ScanNet 退化 → insight） |
+| **P1** | ScanNet scaling curve — 不同长度 (100f, 200f, 500f, 1000f) 各方法 ATE |
+| **P2** | Length-aware ortho — 前 T₀ 帧不抑制 drift，之后逐渐增强 |
+| **P2** | Paper writing — method + experiments |
 
-### Paper 叙事方向（2026-03-27 更新）
+### Paper 叙事方向（2026-03-29 更新）
 
-**不再从频域出发**。方法与频域无关。新定位：
+**核心叙事**：Over-update 是普遍存在的问题（90f 即可观察） → scalar gate 全退化为常数 → 方向性分析揭示 drift 本质 → Delta Orthogonalization
 
-> 问题：Recurrent 3D reconstruction 在 long video 上 systematic over-update。
+> **问题**：Recurrent 3D 的 state update 存在 systematic over-update，90f 即可观察（TUM -42%, ScanNet -33%），随序列增长加剧
 >
-> 发现1：常数 dampening ×0.33 解决 95% 的问题 → 核心是 scale calibration。
+> **分析**：Scalar adaptive gate 全部退化为常数（A1-A3 + 竞品 TTSA3R A5）；delta 方向有结构性 drift（A4），drift 性质因场景而异（TUM drift energy 40% vs ScanNet 60%）
 >
-> 发现2：state 更新存在系统性方向漂移（cos=0.7），70% 的更新能量在重复方向上。
+> **Insight**：问题不是 "何时更新" 而是 "更新方向的哪部分该保留"；超参敏感性在 TUM/ScanNet 上完全反转（β=0.95 vs 0.99）
 >
-> 方法：Delta Orthogonalization — 分解更新为漂移分量（压制）+ 新信息分量（保留）。
+> **方法**：Delta Orthogonalization — drift/novel 分解 + 差异化抑制
 >
-> 贡献：(1) 诊断 over-update 为 directional drift; (2) Delta 正交化方法; (3) 理论保证; (4) 五个数据集三个任务验证。
+> **结果**：TUM pose -66.5% (long) / -55.4% (short, vs TTSA3R -44.2%), video depth -31~59%, 7scenes Comp -54%，零额外 overhead; ScanNet 90f -8% (ortho) / -33% (ttt3r)
+>
+> **贡献**：(1) 揭示 over-update 普遍存在 + scalar gate 退化（双重验证）; (2) 发现方向性本质与 dataset-dependent drift; (3) Delta Orthogonalization: train-free, plug-in, zero overhead; (4) TUM/depth SOTA, 短序列超越 TTSA3R
 
 ---
 

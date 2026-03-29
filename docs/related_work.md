@@ -1,6 +1,6 @@
 # Related Work — Streaming / Recurrent 3D Reconstruction
 
-整理截止 2026-03-26。按与本项目的关联度排序。
+整理截止 2026-03-29。按与本项目的关联度排序。
 
 ---
 
@@ -129,18 +129,21 @@
 | Prior 集成 | G-CUT3R |
 | Test-time optimization | Test3R, tttLRM |
 
-### 我们的定位与差异化
+### 我们的定位与差异化（2026-03-29 更新）
 
-**仅存的差异化空间**:
+**差异化**:
 1. **Training-free + plug-and-play** on CUT3R/TTT3R（IncVGGT 也是 training-free 但针对 VGGT 系）
-2. **Output-guided state gating**（用模型自身预测的几何一致性指导 state 更新）
-3. 不改架构，不改权重
+2. **Delta Orthogonalization** — 方向性分解（drift vs novel），非 scalar gating
+3. 不改架构，不改权重，零额外 overhead（FPS +18%, 内存不变）
+4. **诊断贡献**：揭示 scalar adaptive gate 全退化为常数（含竞品 TTSA3R），over-update 90f 即存在
+
+**已确认的优势与局限**:
+- ✅ TUM relpose: ortho -66.5% (long), -55.4% (short), 大幅超越 TTSA3R (-44.2%)
+- ✅ Video depth: ortho/brake 接近，KITTI -31%, Bonn -31%, Sintel -59%
+- ⚠️ ScanNet relpose: ortho 退化 (1000f +76% vs random, 90f -8% vs ttt3r -33%)。高 drift energy 场景的 "drift" 实际是有用 refinement，方向分解有结构性限制
+- ⚠️ Sintel: 序列太短 (20-50f)，over-update 尚未累积，任何 dampening 无益
 
 **核心风险**:
-- 如果 selective gating 不比 constant dampening 好 → contribution 太薄
-- OnlineX 的 insight（高频/低频 state 分离）与我们重叠
+- OnlineX 的架构分离在高 drift energy 场景（如 ScanNet）可能更有效
 - GRS-SLAM3R 的 learned gating 直接竞争
-
-**待确认**:
-- S1 video depth + 7scenes 结果：geo gate 在几何任务上是否优于 random dampening
-- SIASU v2 cross-token ranking 是否有效
+- Ortho 的 ScanNet 退化需在 paper 中诚实讨论（作为 insight 而非弱点）
