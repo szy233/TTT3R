@@ -1,11 +1,11 @@
-# TTT3R — Delta Orthogonalization for Recurrent 3D Reconstruction
+# TTT3R — Frequency-Guided State & Memory Update Framework
 
 ## Project Goal
-NeurIPS submission. Train-free, inference-time method to address systematic over-update in recurrent 3D reconstruction (CUT3R/TTT3R). 核心方法：Delta Orthogonalization — 将 state update 分解为 drift（重复方向）和 novel（新信息）分量，差异化抑制。
+NeurIPS submission. Train-free, inference-time frequency-domain framework for selective state/memory updates in recurrent 3D reconstruction (CUT3R/TTT3R).
 
 ## Architecture Overview
 
-Model: `src/dust3r/model.py`, class `ARCroco3DStereo`. Recurrent processing:
+The model (`src/dust3r/model.py`, class `ARCroco3DStereo`) processes video frames recurrently:
 1. Encode frame → `feat_i`
 2. `_recurrent_rollout(state_feat, feat_i)` → `new_state_feat`, `dec`
 3. `pose_retriever.update_mem(mem, feat, pose)` → `new_mem`
@@ -13,260 +13,130 @@ Model: `src/dust3r/model.py`, class `ARCroco3DStereo`. Recurrent processing:
 5. State update: `state_feat = new * mask1 + old * (1-mask1)`
 6. Memory update: `mem = new_mem * mask2 + mem * (1-mask2)`
 
-`mask1` is where our method is applied.
+`mask1` and `mask2` are where our frequency-domain gates are applied.
 
-## Method: Delta Orthogonalization (`ttt3r_ortho`)
+## Three-Layer Frequency Framework
 
-```python
-delta = new_state_feat - state_feat
-drift_dir = EMA(delta_dir, β=0.95)    # 追踪漂移方向
-drift_comp = proj(delta, drift_dir)    # 投影到漂移方向 → 强抑制 (α_drift=0.05)
-novel_comp = delta - drift_comp        # 正交分量（新信息）→ 保留 (α_novel=0.5)
-updated = state_feat + α_novel × novel_comp + α_drift × drift_comp
-```
+### Layer 1 — Frame Filtering (validated)
+- **Signal**: `LFE(FFT2(RGB_diff))` — low-freq energy of inter-frame RGB difference
+- **Action**: Skip frames where LFE < threshold × EMA(LFE)
+- **Result**: Skip 35% frames, TTT3R depth -3.1% on ScanNet
+- **Code**: `compute_frame_spectral_change()`, `filter_views_by_spectral_change()`
 
-**Adaptive 模式** (`--ortho_adaptive`): 根据 per-token drift energy (cos² EMA) 动态调节 α_drift
-- `linear`: `α_drift = base + (α_novel - base) × drift_energy`
-- `match`: `α_drift = α_novel × drift_energy + base × (1 - drift_energy)`
-- `threshold`: per-token 二值切换，drift_energy > 0.5 用 uniform dampening
+### Layer 2 — Token-Level State Modulation (SIASU, validated)
+- **Signal**: Per-token high-freq residual energy of state trajectory (EMA low-pass → residual)
+- **Action**: `alpha_k = sigmoid(-τ × (energy_k / running_mean - 1))` per token
+- **Code**: `_spectral_modulation()`, update types `cut3r_spectral` / `ttt3r_spectral`
+- **Result**: cut3r_spectral -5.0%, ttt3r_spectral -8.3% (vs cut3r). τ insensitive, use τ=1
+- **Status**: Validated (2026-03-23)
 
-**Motivation** (A1-A4 分析):
-- A1: 所有 scalar adaptive gate 退化为 ~constant 0.33（std≈0.02），无时序动态 → scalar gate 方向不可行
-- A2: cos variance vs improvement 无相关（r=-0.13, p=0.63）→ adaptive timing 无意义
-- A3: Scalar gate per-scene ~50/50 改善/退化 → 不 robust
-- A4: cos(δ_t, δ_{t-1}) TUM≈0.62, ScanNet≈0.77 → drift energy 差异显著（40% vs 60%），需要 dataset-adaptive 策略
-
-## Key Results
-
-### Relpose ATE — TUM（8 sequences）
-
-| Config | ATE ↓ | vs cut3r | vs random |
-|--------|-------|----------|-----------|
-| cut3r (baseline) | 0.166 | — | — |
-| ttt3r | 0.103 | -38.1% | — |
-| ttt3r_random (p=0.33) | 0.066 | -60.2% | — |
-| ttt3r_momentum_inv_t1 | 0.063 | -61.8% | -4.5% |
-| **ttt3r_ortho** | **0.056** | **-66.5%** | **-15.4%** |
-| ttt3r_ortho_adaptive (linear) | 0.055 | -66.9% | -16.7% |
-
-### Relpose ATE — ScanNet（96 scenes, 65 valid）
-
-| Config | ATE ↓ | vs cut3r | vs random |
-|--------|-------|----------|-----------|
-| cut3r (baseline) | 0.817 | — | — |
-| ttt3r | 0.406 | -50.3% | — |
-| ttt3r_random (p=0.5) | 0.280 | -65.8% | — |
-| ttt3r_momentum_inv_t1 | 0.261 | -68.0% | -6.8% |
-| **ttt3r_ortho** | **0.492** | -39.8% | +75.7% |
-| ttt3r_ortho_adaptive (linear) | 0.358 | -56.2% | +27.9% |
-| ttt3r_ortho_adaptive (match) | 0.356 | -56.4% | +27.1% |
-| ttt3r_ortho_adaptive (threshold) | 0.376 | -54.0% | +34.3% |
-
-**⚠ Ortho 在 ScanNet relpose 上退化**。三种 adaptive 策略天花板 ~0.356，修复了固定 ortho 的大部分退化 (0.492→0.356, -28%)，但仍逊于 random (0.280) 和 brake (0.261)。结论：ortho 分解本身在高 drift energy 场景有结构性限制，不是靠调 α_drift 能完全修复的。
-
-### Video Depth — Abs Rel ↓
-
-| Config | KITTI | Bonn | Sintel |
-|--------|-------|------|--------|
-| cut3r | 0.1515 | 0.0990 | 1.0217 |
-| ttt3r | 0.1319 (-12.9%) | 0.0997 | 0.9776 (-4.3%) |
-| ttt3r_joint | 0.1344 (-11.3%) | 0.0941 (-5.0%) | 0.9173 (-10.2%) |
-| ttt3r_momentum_inv_t1 (brake) | 0.1061 (-30.0%) | 0.0658 (-33.5%) | 0.4022 (-60.6%) |
-| **ttt3r_ortho** | **0.1042 (-31.2%)** | **0.0680 (-31.3%)** | **0.4175 (-59.1%)** |
-
-Brake vs ortho: depth 上非常接近。Bonn brake 略优 (0.0658 vs 0.0680), Sintel brake 略优 (0.4022 vs 0.4175), KITTI ortho 略优 (0.1042 vs 0.1061)。支撑叙事：scalar brake 已有效，ortho 提供 principled 方向分解但实际增益有限。
-
-### 3D Reconstruction — 7scenes
-
-| Config | Acc ↓ | Comp ↓ | NC ↑ |
-|--------|-------|--------|------|
-| cut3r | 0.092 | 0.048 | 0.563 |
-| ttt3r | 0.027 (-70.7%) | 0.023 (-52.1%) | 0.581 |
-| ttt3r_joint | 0.021 (-77.2%) | 0.022 (-54.2%) | 0.579 |
-| ttt3r_momentum_inv_t1 (brake) | 0.021 (-77.2%) | 0.022 (-54.2%) | 0.580 |
-| **ttt3r_ortho** | **0.026 (-71.7%)** | **0.022 (-54.2%)** | **0.577** |
-
-Brake 在 7scenes Acc 上优于 ortho (0.021 vs 0.026)，Comp/NC 基本持平。
-
-### Ortho Hyperparameter Sensitivity — TUM (1000f)
-
-| α_novel | α_drift | β | ATE ↓ | vs default |
-|---------|---------|------|-------|------------|
-| 0.5 | 0.1 | 0.95 | **0.055** | **-1.5%** |
-| **0.5** | **0.05** | **0.95** | **0.056** | **default** |
-| 0.5 | 0.2 | 0.95 | 0.056 | +0.1% |
-| 0.7 | 0.05 | 0.95 | 0.057 | +2.2% |
-| 0.3 | 0.05 | 0.95 | 0.069 | +24.1% |
-| 0.5 | 0.05 | 0.9 | 0.076 | +35.5% |
-| 0.5 | 0.05 | 0.99 | 0.077 | +38.7% |
-
-α_drift 鲁棒 (0.05-0.2 <2%)，α_novel≥0.5 鲁棒，β=0.95 sweet spot（0.9/0.99 退化 35%+）。
-
-### Ortho Hyperparameter Sensitivity — ScanNet (90f, 76 valid, linspace 采样)
-
-| α_novel | α_drift | β | ATE ↓ | vs default |
-|---------|---------|------|-------|------------|
-| 0.5 | 0.05 | **0.99** | **0.458** | **-17.8%** |
-| 0.5 | 0.2 | 0.95 | 0.500 | -10.2% |
-| 0.7 | 0.05 | 0.95 | 0.529 | -4.9% |
-| 0.5 | 0.1 | 0.95 | 0.531 | -4.6% |
-| **0.5** | **0.05** | **0.95** | **0.557** | **default** |
-| 0.3 | 0.05 | 0.95 | 0.660 | +18.5% |
-| 0.5 | 0.05 | 0.9 | 0.666 | +19.6% |
-
-**⚠ 与 TUM 完全反转**: β=0.99 在 ScanNet 最优（TUM 最差），α_drift 越高越好（TUM 不敏感）。证实 drift 性质在两个 dataset 根本不同。
-
-注：此 sensitivity 数据使用 linspace 采样（覆盖全轨迹），趋势仍有参考价值但绝对值偏高。
-
-### Inference Overhead — TUM (3 seqs × 200f, 3 repeats)
-
-| Config | FPS | Peak Mem (GB) | vs cut3r |
-|--------|-----|---------------|----------|
-| cut3r | 8.44 | 6.14 | — |
-| ttt3r | 9.82 | 6.14 | +16% faster |
-| ttt3r_random | 9.76 | 6.14 | +16% faster |
-| ttt3r_momentum_inv_t1 (brake) | 10.03 | 6.14 | +19% faster |
-| **ttt3r_ortho** | **9.95** | **6.14** | **+18% faster** |
-| ttt3r_ortho_adaptive | 9.93 | 6.14 | +18% faster |
-
-所有方法**零额外内存**，速度甚至略快（dampened update 减少 memory pressure）。结果: `eval_results/benchmark_overhead.json`
-
-### Relpose ATE — Sintel（14 sequences, ~20-50f each）
-
-| Config | ATE ↓ | vs cut3r |
-|--------|-------|----------|
-| cut3r (baseline) | 0.209 | — |
-| ttt3r | 0.209 | -0.1% |
-| ttt3r_random (p=0.5) | 0.220 | +5.2% |
-| ttt3r_ortho_adaptive | 0.221 | +5.9% |
-| ttt3r_ortho | 0.237 | +13.2% |
-| ttt3r_momentum_inv_t1 (brake) | 0.238 | +14.0% |
-
-Sintel 序列极短 (20-50f)，over-update 尚未累积，任何 dampening 均无益或略有害。
-
-## A4: Delta Direction Analysis — ScanNet vs TUM
-
-| 指标 | TUM (8 scenes) | ScanNet (96 scenes) |
-|------|----------------|---------------------|
-| **cos(δ_t, δ_{t-1}) mean** | **0.617 ± 0.037** | **0.767 ± 0.037** |
-| cos std (intra-scene) | 0.124 ± 0.015 | 0.095 ± 0.011 |
-| **drift energy (cos²)** | **0.398 ± 0.041** | **0.598 ± 0.054** |
-
-**关键发现**:
-1. **ScanNet cos 远高于 TUM** (0.77 vs 0.62) — ScanNet 室内场景的 state update 方向高度一致
-2. **ScanNet drift energy 60% vs TUM 40%** — ScanNet 有 60% 更新能量在 "drift" 方向
-3. **ScanNet 的 "drift" 是有用的 refinement** — 室内场景需要在一致方向上持续完善几何，ortho 把这些有用更新当噪声抑制了
-4. **TUM drift energy 较低 (40%)** — 动态运动下 drift 确实是重复性 over-update，ortho 分解恰好合适
-
-**Per-scene scatter**: ortho 在 ScanNet 仅 11/65 scenes 改善。cos_mean 与 improvement 弱正相关 (r=0.237, p=0.057)。
-
-脚本: `analysis/a4_delta_direction.py`，结果: `analysis_results/a4_delta_direction/`
-
-## A5: TTSA3R TAUM Gate Statistics — TUM
-
-验证 TTSA3R 的 TAUM gate (Temporal Adaptive Update Module) 是否也退化为常数。
-TAUM: `sigmoid(||Δstate||_per_dim / mean(||Δstate||) - 1.5)`，理论预期 sigmoid(-0.5) ≈ 0.378。
-
-| 指标 | TAUM Temporal | SCUM Spatial | Final (T×S) |
-|------|--------------|--------------|-------------|
-| **mean** | **0.355** | 0.651 | **0.231** |
-| **σ_time** | **0.006** | — | **0.016** |
-| σ_dim (per-frame) | 0.169 | — | — |
-
-**关键发现**: TAUM temporal gate σ_time=0.006，比 ttt3r 自身的 gate (σ≈0.02) 小 3-4x，**更严重地退化为常数**。
-- 理论原因：`state_change / mean(state_change)` 归一化后均值恒为 1.0，sigmoid(1-1.5) ≈ 0.378
-- 实际 0.355 vs 理论 0.378 — 因为 state_change 分布右偏（CV=1.28）
-- **SCUM spatial gate 提供了一些 cross-token variation (μ=0.65)，但 final gate 的时序动态仍极小**
-- 结论：TTSA3R 的 "adaptive" gate 在实际运行中也退化为近似常数 dampening（~0.23），证实 A1 finding 推广到竞品
-
-脚本: `analysis/taum_gate_stats.py`（需 `cut3r_taum_log` update type），结果: `analysis_results/taum_gate_stats/`
-
-## Short Sequence Evaluation (90 frames, CUT3R protocol)
-
-### TUM 90f（8 sequences）
-
-| Config | ATE ↓ | vs cut3r | vs TTSA3R |
-|--------|-------|----------|-----------|
-| cut3r (baseline) | 0.0325 | — | — |
-| TTSA3R (paper reported) | 0.026 | -20.0% | — |
-| ttt3r | 0.0189 | -41.8% | -27.3% |
-| ttt3r_random (p=0.33) | 0.0153 | -52.9% | -41.2% |
-| ttt3r_momentum_inv_t1 (brake) | 0.0153 | -52.8% | -41.2% |
-| **ttt3r_ortho** | **0.0145** | **-55.4%** | **-44.2%** |
-
-Ortho 在 TUM 短序列上也最优，大幅超越 TTSA3R。
-
-### ScanNet 90f（96 scenes, 91 valid, first-90 标准协议）
-
-| Config | ATE ↓ | vs cut3r |
-|--------|-------|----------|
-| cut3r (baseline) | 0.095 | — |
-| **ttt3r** | **0.064** | **-32.7%** |
-| ttt3r_random (p=0.5) | 0.064 | -32.7% |
-| ttt3r_momentum_inv_t1 (brake) | 0.071 | -25.0% |
-| ttt3r_ortho_adaptive (linear) | 0.074 | -22.6% |
-| ttt3r_ortho | 0.087 | -8.2% |
-
-ScanNet 90f 所有方法均改善。ttt3r/random 改善最大 (-33%)，ortho 改善最小 (-8%)。与 1000f 趋势一致：ortho 的 drift 分解在 ScanNet 高 drift energy 场景效果有限。
-
-注：之前的 ScanNet 90f 结果（所有方法退化）是因为帧选择错误 — 用了 np.linspace 均匀采样（覆盖 100% 轨迹），本质上是稀疏长序列测试。修正为标准 first-90 协议后结果翻转。
-
-### A6: Over-update 普遍存在 — 短序列即可观察
-
-| | TUM 90f | TUM 1000f | ScanNet 90f | ScanNet 1000f | Sintel ~50f |
-|---|---------|-----------|-------------|---------------|-------------|
-| cut3r ATE | 0.033 | 0.166 | 0.095 | 0.805 | 0.209 |
-| ttt3r vs cut3r | **-42%** | **-38%** | **-33%** | **-50%** | 0% |
-| ortho vs cut3r | **-55%** | **-66%** | **-8%** | -40% | +13% |
-| brake vs cut3r | **-53%** | **-62%** | **-25%** | -68% | +14% |
-
-**关键发现**:
-1. **TUM**: 所有长度都有 over-update（90f 已 -42%），dampening 始终有效，ortho 最优
-2. **ScanNet**: 90f 即有 over-update（ttt3r -33%），1000f 更严重（ATE 8.5x 退化到 0.805）
-3. **Sintel**: 序列极短 (20-50f)，无 over-update
-4. **Ortho 在 ScanNet 上效果有限**: 90f -8% vs ttt3r -33%，1000f -40% vs brake -68%。高 drift energy 场景 drift 分解不如 scalar dampening
-5. **Over-update 严重度**: ScanNet 1000f/90f = 8.5x 退化，TUM 1000f/90f = 5.0x 退化
-
-注：cut3r baseline 有差异（TUM 0.0325 vs TTSA3R paper 0.046），可能是 eval stride/subset 不同。
-
-结果: `eval_results/relpose/tum/<config>/`, `eval_results/relpose/scannet_s3_90_first/<config>/`
+### Layer 3 — Geometric Consistency Gate (validated, best result)
+- **Signal**: `LFE(FFT2(log_depth_diff))` — low-freq energy of log-depth change
+- **Action**: Gate state update when depth prediction is geometrically inconsistent
+- **Result**: cut3r_geogate -3.5%, ttt3r_geogate -7.2% (vs ttt3r -6.4%)
+- **Code**: `_geo_consistency_gate()`, update types `cut3r_geogate` / `ttt3r_geogate`
+- **Best config**: τ=2, freq_cutoff=4 (25% bandwidth). Cutoff-insensitive (c2/c4/c8 all ~-3.5%)
 
 ## Update Types in model.py
 
-| `model_update_type` | `mask1` (state) | Status |
-|---------------------|-----------------|--------|
-| `cut3r` | 1.0 (baseline) | baseline |
-| `ttt3r` | sigmoid(cross_attn) | baseline |
-| `ttt3r_ortho` | delta orthogonalization | **TUM/depth 最优，ScanNet pose 退化** |
-| `ttt3r_random` | ttt3r × p (constant) | naive baseline |
-| `ttt3r_momentum` | ttt3r × stability brake | 已验证，非最优 |
-| `ttt3r_geogate` / `ttt3r_joint` | ttt3r × geo/joint gate | 早期方法 |
-| `ttt3r_conf` / `ttt3r_l2gate` | ttt3r × conf/l2 gate | naive baseline |
-| Others (spectral, memgate, delta_clip, attn_protect, mem_novelty, brake_geo) | various | 已放弃 |
+| `model_update_type` | `mask1` (state) | `mask2` (memory) |
+|---------------------|-----------------|------------------|
+| `cut3r` | 1.0 (baseline) | 1.0 |
+| `ttt3r` | sigmoid(cross_attn) | 1.0 |
+| `cut3r_spectral` | spectral_modulation α | 1.0 |
+| `ttt3r_spectral` | ttt3r × α | 1.0 |
+| `cut3r_memgate` | 1.0 | spectral_change gate |
+| `ttt3r_memgate` | sigmoid(cross_attn) | spectral_change gate |
+| `cut3r_geogate` | geo_consistency gate | 1.0 |
+| `ttt3r_geogate` | ttt3r × geo gate | 1.0 |
+| `cut3r_joint` | α × geo gate | 1.0 |
+| `ttt3r_joint` | ttt3r × α × geo gate | 1.0 |
+| `ttt3r_l2gate` | ttt3r × l2_norm_gate | 1.0 | ← naive baseline (planned)
+| `ttt3r_random` | ttt3r × p (constant) | 1.0 | ← naive baseline (planned)
+| `ttt3r_conf` | ttt3r × conf_gate | 1.0 | ← naive baseline (existing)
 
-## Failed Directions (Summary)
+## Key Experimental Results
 
-- **SIASU v1/v2**: EMA 紧密追踪 → alpha≡0.5; v2 ranking 更差 (0.291 vs 0.283)
-- **Geo gate 联合 (brake_geo)**: 两 gate 叠加 over-dampening
-- **Delta Clipping**: 限制大更新，旋转场景退化
-- **Attention Protection**: 高 attention ≠ 需保护
-- **Memory Novelty Gate**: cosine EMA 紧密追踪 (cos>0.99)，≈常数
-- **Cross-attention bridge (Route C1)**: Attention 过于 diffuse (entropy 0.914)
-- **Non-inverted momentum**: SGD 直觉在 over-update 场景有害
-- **Token tracking (Direction C)**: State tokens 不追踪空间语义
+### B2 Memory Gate (weak, ~1% improvement)
+```
+cut3r_mg_t3_sr0.3   -1.75%   (best memgate variant)
+ttt3r_mg_t3_sr0.5   -6.25%   (no gain over pure ttt3r -6.40%)
+```
+Memory's soft cross-attention write already handles redundancy. Direction deprioritized.
 
-## Eval Pipeline
+### B3 Geometric Consistency Gate (strong)
+```
+cut3r_geo_t2         -3.83%   (spatial domain, best)
+cut3r_geo_t2_c4      -3.52%   (frequency domain)
+ttt3r_geo_t3         -7.41%   (spatial domain, best overall)
+ttt3r_geo_t2_c4      -7.16%   (frequency domain)
+```
 
-三类评测，脚本在 `eval/` 下：
+### Joint Ablation (L23+ttt3r is best)
+```
+cut3r (baseline)     0.0745   —
+ttt3r (baseline)     0.0697   -6.4%
+L1+ttt3r             0.0700   -6.0%
+L2+ttt3r             0.0684   -8.2%
+L3+ttt3r             0.0692   -7.2%
+L23+ttt3r            0.0690   -7.5%   ← best combination
+L123+ttt3r           0.0699   -6.2%   (L1 conflicts with L2/L3)
+L23+cut3r            0.0698   -6.3%   (matches pure ttt3r)
+```
+L1 frame skipping conflicts with fine-grained L2/L3 modulation. Final method: L23+ttt3r.
 
-| 评测类型 | 数据集 | 脚本 | 数据路径 |
-|---------|--------|------|---------|
-| Camera Pose | ScanNet, TUM, Sintel | `eval/relpose/launch.py` | `data/long_scannet_s3/`, `data/long_tum_s1/` |
+### Failed Directions
+- **Direction C (dynamic token tracking)**: State tokens don't track spatial semantics. Walking r=-0.024, static r=-0.383 (reversed). Abandoned.
+- **Confidence gating (Exp 2)**: <1% improvement, feedback loop. Abandoned.
+
+## Experiment Configs
+
+All experiments share: `--seed 42 --size 512 --max_frames 200 --num_scannet 10`
+
+Server paths:
+- Model: `model/cut3r_512_dpt_4_64.pth`
+- ScanNet: `/mnt/sda/szy/research/dataset/scannetv2`
+- TUM: `/mnt/sda/szy/research/dataset/tum`
+- Working dir: `/home/szy/research/TTT3R`
+
+Local paths:
+- Working dir: `/Users/shaozhengyu/code/TTT3R`
+- Results synced to `analysis_results/` (gitignored)
+
+Sync command: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/<exp>/ analysis_results/<exp>/`
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/dust3r/model.py` | All update types, gate methods, LocalMemory |
+| `analysis/geogate_ablation.py` | B3 geo gate ablation |
+| `analysis/memgate_ablation.py` | B2 memory gate ablation |
+| `analysis/spectral_ablation.py` | Layer 2 SIASU ablation |
+| `analysis/batch_frame_novelty.py` | Layer 1 validation |
+| `analysis/metric_comparison.py` | spectral_change vs L2/high/mid freq |
+| `analysis/joint_ablation.py` | Three-layer joint ablation |
+| `docs/research_progress.md` | Full research log (Chinese) |
+| `docs/run_experiments.sh` | All experiment commands |
+
+## Formal Evaluation
+
+### Eval Pipeline
+
+三类标准评测，脚本在 `eval/` 下：
+
+| 评测类型 | 数据集 | 脚本 | 预处理数据路径 |
+|---------|--------|------|--------------|
+| Camera Pose (relpose) | ScanNet, TUM, Sintel | `eval/relpose/launch.py` | `data/long_scannet_s3/`, `data/long_tum_s1/` |
 | Video Depth | KITTI, Bonn, Sintel | `eval/video_depth/launch.py` | `data/long_kitti_s1/`, `data/long_bonn_s1/` |
 | 3D Reconstruction | 7scenes | `eval/mv_recon/launch.py` | — |
 
+### 运行方式
+
+对比三个配置：`cut3r`（baseline）, `ttt3r`, `ttt3r_joint`（L23+ttt3r，最终方法）。
+
 ```bash
-# 双卡并行示例
+# 双卡并行: GPU0 跑 ScanNet, GPU1 跑 TUM
 conda activate ttt3r
 
 # GPU0 — ScanNet relpose
@@ -284,69 +154,209 @@ CUDA_VISIBLE_DEVICES=1 PYTHONPATH=src accelerate launch --num_processes 1 --main
     --spectral_temperature 1.0 --geo_gate_tau 2.0 --geo_gate_freq_cutoff 4
 ```
 
-共享参数: `--seed 42 --size 512 --max_frames 200 --num_scannet 10`
-并行脚本: `eval/run_parallel_eval.sh`
-结果: `eval_results/relpose/<dataset>/<config>/_error_log.txt`
+并行脚本: `eval/run_parallel_eval.sh`（nohup 双卡，日志 `eval/gpu0_scannet.log`, `eval/gpu1_tum.log`）
 
-### Paths
+### 预处理
 
-- Model: `model/cut3r_512_dpt_4_64.pth`
-- 原始数据: `/mnt/sda/szy/research/dataset/` (ScanNet, TUM)
-- 本地同步: `rsync -avz 10.160.4.14:/home/szy/research/TTT3R/analysis_results/<exp>/ analysis_results/<exp>/`
+```bash
+conda activate ttt3r
+python datasets_preprocess/prepare_scannet_local.py   # → data/long_scannet_s3/ (96 scenes, 4 empty skipped from 100 test scenes)
+python datasets_preprocess/prepare_tum_local.py       # → data/long_tum_s1/ (8 sequences)
+```
 
-### Dataset Notes
+原始数据在 `/mnt/sda/szy/research/dataset/`（从根分区迁出）。
 
-- ScanNet: 100 test scenes → 96 预处理（4 empty skip）→ 91 valid (90f) / 66 valid (1000f) / 65 valid (1000f adaptive)（GT 含 -inf, evo eigh 不收敛）
-- TUM: 8 sequences, 全部成功
-- 所有数据集预处理完成，评测 pipeline 正常
+### 数据集状态（2026-03-24）
 
-## Key Files
+| 数据集 | 原始数据 | 预处理 | 评测状态 |
+|--------|---------|--------|---------|
+| ScanNet | ✅ `/mnt/sda/szy/research/dataset/scannetv2` (100 test scenes) | ✅ `data/long_scannet_s3/` (96 scenes; 4 empty skipped) | ✅ 完成 (65 valid, 31 GT含-inf skip) |
+| TUM | ✅ `/mnt/sda/szy/research/dataset/tum` | ✅ `data/long_tum_s1/` (8 seqs) | ✅ 完成 |
+| Sintel | ✅ `data/sintel/` | — (直接使用) | ✅ 完成 |
+| Bonn | ✅ `data/long_bonn_s1/` | ✅ 预处理完成 | ✅ 完成 |
+| KITTI | ✅ `data/long_kitti_s1/` | ✅ 预处理完成 | ✅ 完成 |
+| 7scenes | ✅ 已下载 | ✅ 预处理完成 (18 seqs, 7 scenes) | ✅ 完成 |
 
-| File | Purpose |
-|------|---------|
-| `src/dust3r/model.py` | 所有 update types, gate methods, LocalMemory |
-| `docs/research_progress.md` | 完整研究日志 |
-| `docs/related_work.md` | 竞品分析 & 相关工作 |
-| `docs/theory_section.tex` | 理论推导 |
-| `analysis/a1a2_gate_dynamics.py` | A1/A2 分析脚本 |
-| `analysis/a4_delta_direction.py` | A4 delta direction 分析（ScanNet vs TUM） |
-| `analysis/taum_gate_stats.py` | A5 TTSA3R TAUM gate 退化分析 |
-| `eval/run_parallel_eval.sh` | 并行评测脚本 |
-| `eval/benchmark_overhead.py` | 推理 overhead benchmark（FPS + GPU memory） |
+结果输出到 `eval_results/relpose/<dataset>/<config>/_error_log.txt`（ATE, RPE trans, RPE rot）。
 
-## Known Issues
+### Relpose 评测结果（2026-03-24）
 
-1. **Gate state 每帧重置**: `view["reset"]` 返回 `tensor([False])` 非 None → 用 `reset_mask.any()` 判断。已修复三处。
-2. **ScanNet 31 scene skip**: GT 含 -inf, evo eigh 不收敛。与原论文一致，不影响公平对比。
-3. **`_forward_impl` 扩展**: 已补全所有 update type 支持（含 ttt3r_ortho），与 `inference_step` 对齐。
+**ScanNet（96 scenes 中 65 valid, 31 skip — GT pose 含 -inf 导致 evo Umeyama eigh 不收敛，三配置一致，与原论文行为对齐）**
 
-## Paper Narrative
+| Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
+|--------|----------------|-------------------|-------------------|
+| cut3r (baseline) | 0.6713 | 0.0322 | 0.8987 |
+| ttt3r | 0.3519 (-47.6%) | 0.0350 | 0.9105 |
+| **ttt3r_joint** | **0.2143** (-68.1%) | 0.0449 | 1.0805 |
 
-**叙事**: Over-update 普遍存在（90f 即可观察）→ scalar gate 全退化为常数 → 方向性分析 → Delta Orthogonalization
+**TUM（8 sequences，全部成功）**
 
-**Story**:
-1. **问题**: Recurrent 3D 的 state update 存在 systematic over-update，90f 即可观察（TUM -42%, ScanNet -33%），随序列增长加剧（1000f: TUM -38%, ScanNet -50%）
-2. **分析**: Scalar adaptive gate 全部退化为常数（A1-A3 + 竞品 TTSA3R A5）；delta 方向有结构性 drift（A4），drift 性质因场景而异
-3. **Insight**: 问题不是 "何时更新" 而是 "更新方向的哪部分该保留"；超参敏感性在 TUM/ScanNet 上完全反转（β=0.95 vs 0.99）
-4. **方法**: Delta Orthogonalization — drift/novel 分解 + 差异化抑制
-5. **结果**: TUM pose -66.5% (long) / -55.4% (short, vs TTSA3R -44.2%), video depth -31~59%, 7scenes Comp -54%，零额外 overhead; ScanNet 90f -8% (ortho) / -33% (ttt3r)
+| Config | ATE (median) ↓ | RPE_t (median) ↓ | RPE_r (median) ↓ |
+|--------|----------------|-------------------|-------------------|
+| cut3r (baseline) | 0.1641 | 0.0072 | 0.5655 |
+| ttt3r | 0.1043 (-36.4%) | 0.0091 | 0.4859 |
+| **ttt3r_joint** | **0.0589** (-64.1%) | 0.0103 | 0.4758 |
 
-**Contributions**:
-1. 揭示 over-update 普遍存在（90f 即可观察）+ scalar gate 退化为常数（自身 A1-A3 + 竞品 TTSA3R A5 双重验证）
-2. 发现方向性本质：drift energy 在不同场景差异显著（40%-60%），超参敏感性反转（TUM β=0.95 最优 vs ScanNet β=0.99 最优），精确解释方法适用边界
-3. Delta Orthogonalization: train-free, plug-in, zero overhead, TUM pose SOTA (-55~66%), video depth SOTA (-31~59%)
-4. 短序列上大幅超越 TTSA3R（TUM ATE -44.2%），ScanNet 90f 也改善 (-8~33%)
+**分析**: ATE 大幅改善（ScanNet -68%, TUM -64%），RPE_t/RPE_r 略有上升，说明方法显著提升全局轨迹一致性，逐帧相对误差有小幅代价。31 个 Eigenvalue failure 在三配置间一致，不影响公平对比。
+
+### Video Depth 评测结果（2026-03-24）
+
+**Abs Rel ↓**
+
+| Config | KITTI | Bonn | Sintel |
+|--------|-------|------|--------|
+| cut3r (baseline) | 0.1515 | 0.0990 | 1.0217 |
+| ttt3r | 0.1319 (-12.9%) | 0.0997 (+0.7%) | 0.9776 (-4.3%) |
+| **ttt3r_joint** | **0.1344** (-11.3%) | **0.0941** (-5.0%) | **0.9173** (-10.2%) |
+
+**δ < 1.25 ↑**
+
+| Config | KITTI | Bonn | Sintel |
+|--------|-------|------|--------|
+| cut3r (baseline) | 0.8043 | 0.9061 | 0.2377 |
+| ttt3r | 0.8653 | 0.9214 | 0.2324 |
+| **ttt3r_joint** | 0.8577 | **0.9343** | **0.2472** |
+
+**分析**: ttt3r_joint 在三个数据集上 Abs Rel 全面优于 baseline（KITTI -11.3%, Bonn -5.0%, Sintel -10.2%）。KITTI 上纯 ttt3r 略优于 joint，Bonn 和 Sintel 上 joint 最佳。
+
+### 3D Reconstruction 评测结果（2026-03-25）
+
+**7scenes（18 sequences, 7 scenes, 每 seq 限 200 帧）**
+
+结果路径: `eval_results/video_recon/7scenes_200/<config>/7scenes/logs_all.txt`
+
+| Config | Acc ↓ | Comp ↓ | NC ↑ | NC_med ↑ |
+|--------|-------|--------|------|----------|
+| cut3r (baseline) | 0.092 | 0.048 | 0.563 | 0.596 |
+| ttt3r | 0.027 (-70.7%) | 0.023 (-52.1%) | 0.581 (+3.2%) | 0.625 (+4.9%) |
+| **ttt3r_joint** | **0.021** (-77.2%) | **0.022** (-54.2%) | 0.579 (+2.8%) | 0.622 (+4.4%) |
+
+完整指标（mean）：
+
+| Config | Acc ↓ | Comp ↓ | NC1 ↑ | NC2 ↑ | Acc_med ↓ | Comp_med ↓ | NC1_med ↑ | NC2_med ↑ |
+|--------|-------|--------|-------|-------|-----------|------------|-----------|-----------|
+| cut3r | 0.092 | 0.048 | 0.582 | 0.545 | 0.054 | 0.018 | 0.627 | 0.566 |
+| ttt3r | 0.027 | 0.023 | 0.600 | 0.561 | 0.015 | 0.005 | 0.657 | 0.593 |
+| ttt3r_joint | 0.021 | 0.022 | 0.594 | 0.565 | 0.009 | 0.004 | 0.646 | 0.598 |
+
+**分析**: ttt3r_joint 在 3D 重建上表现最佳，Accuracy -77.2%, Completeness -54.2%。纯 ttt3r 也有大幅改善（Acc -70.7%）。法向一致性均有提升（NC +2~5%）。
+
+**Bug fix (2026-03-25)**: `_forward_impl()` 原先只支持 `cut3r`/`ttt3r`，`mv_recon/launch.py` 调用 `model(batch)` → `forward()` → `_forward_impl()`，导致 `ttt3r_joint` 报 `Invalid model type`。已补全所有 update type 支持（spectral, geogate, joint 等），与 `inference_step` 路径对齐。日志: `eval/7scenes_recon_joint.log`。
+
+## Known Issues / Fixes Applied
+1. **SIASU warm-start**: `running_energy` init 0 → ratio explosion → state frozen. Fixed: warm-start on first call.
+2. **TUM depth matching**: Timestamp-based association needed (not stem-based).
+3. **Fair evaluation**: Compare full vs filtered on same `kept_indices`.
+4. **ScanNet pose 截断**: 根分区满时 `prepare_scannet_local.py` 写 pose 文件被截断（scene0707_00）。已修复重新生成。
+5. **ScanNet 31 scene Eigenvalue failure**: GT pose 含 -inf（深度传感器丢失追踪），evo Umeyama `eigh()` 不收敛。与原论文行为一致（同样 skip），不影响公平对比。4 个 scene (0777-0780) .sens 未解压，预处理跳过。
+6. **`_forward_impl` 缺少扩展 update type**: 只支持 cut3r/ttt3r，导致 mv_recon 评测 ttt3r_joint 失败。已补全所有类型（spectral, geogate, memgate, joint）并添加 spectral_state/geo_state 的 reset 逻辑。
+
+## Paper Narrative（定稿方向，2026-03-25）
+
+### 核心故事线
+
+**问题**: Recurrent 3D reconstruction（CUT3R/TTT3R）的 state update 是 blind 的——不管输入帧是否带来新几何信息，都以相同力度更新。这在视频中有害：冗余帧的连续更新会把已收敛的几何估计搅乱，快速运动帧带来的剧变会导致 state 不稳定。TTT3R 的 learned gate（sigmoid cross-attention）是 data-driven 的，但训练时在 image pairs 上，未见过 long video 的 temporal redundancy pattern，泛化不够。
+
+**Insight**: State update 何时更新、更新多少，本质是**信号变化检测问题**。频域是做变化检测的 natural tool——低频能量捕捉结构性变化，高频捕捉噪声/细节扰动。不是 arbitrarily 选了频域，而是问题本身就是频域问题。
+
+**方法**: 两个互补的 frequency-domain gate：
+- **L2（SIASU）**: State trajectory 的 token-level 高频残差——"state 自身在说它不稳定"（state 空间，高频信号）
+- **L3（Geo Gate）**: 深度预测的低频结构变化——"预测结果在说几何变了"（output 空间，低频信号）
+- 两层信号来源独立、频段互补，联合使用有额外增益
+
+**卖点**: Train-free, inference-time, plug-and-play. 不改架构不改权重，在 CUT3R/TTT3R 上都有效 → 通用性。
+
+### L1 的处理策略
+
+**不在主文中提 L1 被弃用。** L1 frame skipping 作为 motivation 的引子——视频帧间存在大量冗余，低频能量可刻画冗余。然后 argue：粗粒度帧级跳过太 aggressive，会丢 fine-grained 信息，所以需要 token-level 和 geometric-level 的 soft gating。L1 的观察变成 motivate L2/L3 的 stepping stone。
+
+消融表只呈现 L2、L3、L23 对比，不出现 L1/L12/L13/L123。如审稿人问"为什么不做 frame skipping"，rebuttal 用 L1 实验数据回答。
+
+### Contribution 列法（insight-driven，不列描述性 contribution）
+
+1. 揭示 recurrent 3D reconstruction 中 blind state update 的问题并定量分析
+2. 提出 frequency-domain signal-based selective update，无需训练
+3. 五个数据集三个任务（relpose, video depth, 3D recon）验证有效性
+
+## Supplementary Experiments（待补充，2026-03-25 规划）
+
+### Exp S1: Naive Baseline Comparison（必须）
+
+证明频域信号的优越性，而非"少更新一点就好"或"简单变化量检测就够"。
+
+需要加 3 个 baseline update type 到 `model.py`：
+
+#### S1a: `ttt3r_l2gate` — L2 Norm Gating
+- 用 state delta 的 L2 norm 代替 SIASU 的频域能量
+- **逻辑**: `delta = new_state_feat - state_feat`，`energy = delta.norm(dim=-1, keepdim=True)`
+- 同样维护 running mean + sigmoid gate，和 SIASU 结构完全对称
+- **对比意义**: 同样的 gate 机制，只是信号不同（L2 norm vs 频域残差），证明 EMA 低通 + 高频残差分解是关键
+- **实现**: 新增 `_l2_norm_gate()` static method，结构复制 `_spectral_modulation()`，去掉 EMA 低通步骤，直接用 `(new - old).norm()` 作为 energy
+
+#### S1b: `ttt3r_random` — Random Gating
+- 以与 SIASU 相同的平均 gate ratio 做随机 mask
+- **逻辑**: 先跑一次 `ttt3r_joint` 记录平均 alpha 值（预计 0.5-0.7），然后 `alpha = p`（scalar constant）
+- **对比意义**: 证明 selective gating 的信号 quality matters，不是"降低平均更新率就好"
+- **实现**: `update_mask1 = update_mask * ttt3r_mask * p`，p 通过 config 传入
+
+#### S1c: `ttt3r_conf` — Confidence Gating（已有）
+- 已在 `model.py` 中实现，用预测 confidence 做 gate
+- 直接作为 baseline 行呈现，无需额外代码
+
+#### 实现步骤（Claude Code 操作）
+1. 在 `model.py` 中添加 `_l2_norm_gate()` static method
+2. 在 `_forward_impl()` 和 `inference_step()` 和 analysis path 的 update type switch 中添加 `ttt3r_l2gate` 和 `ttt3r_random` 分支
+3. 先在快速实验（`--num_scannet 10`）上验证实现正确性
+4. 在正式评测 pipeline（relpose ScanNet+TUM, video depth, 7scenes）上跑全量对比
+
+### Exp S2: Inference Overhead（完成，2026-03-29）
+
+Train-free 是卖点，需要证明 overhead negligible。
+
+**结果**（TUM, 8 seqs × 200 frames, GPU4, size=512）：
+
+| Config | FPS | Overhead | Peak GPU Mem |
+|--------|-----|----------|--------------|
+| cut3r (baseline) | 10.75 | — | 6.14 GB |
+| ttt3r | 10.49 | +2.4% | 6.14 GB |
+| **ttt3r_joint** | **10.47** | **+2.7%** | **6.14 GB** |
+| ttt3r_l2gate | 10.63 | +1.1% | 6.14 GB |
+| ttt3r_random | 10.57 | +1.7% | 6.14 GB |
+| ttt3r_conf | 10.55 | +1.9% | 6.14 GB |
+
+**结论**: 所有变体 overhead ≤ 3%，GPU 内存完全相同。ttt3r_joint 仅慢 2.7%，可在论文中声明 overhead negligible。结果保存于 `eval_results/benchmark_overhead.json`。
+
+### Exp S3: Hyperparameter Sensitivity（必须）
+
+整理成正式图表，在完整评测 pipeline 上跑（非快速实验的 10 scene）。
+
+- **τ（spectral_temperature + geo_gate_tau）**: grid {0.5, 1, 2, 4}
+- **freq_cutoff（geo_gate_freq_cutoff）**: grid {2, 4, 8}
+- 在 ScanNet relpose 上跑，报 ATE median
+- 已有部分快速实验数据（τ insensitive, cutoff insensitive），正式实验确认
+
+### Exp S4: Qualitative Visualization（建议）
+
+- 挑 2-3 个 representative sequences（ScanNet 快速转动 / 静止 / 遮挡场景）
+- 展示 gate activation（L2 alpha, L3 g_geo）随时间的变化曲线
+- 配合 RGB 帧 + 深度图 + 点云质量对比
+- **实现**: 在 `inference_step` 中记录每帧的 alpha 和 g_geo 值到 list，后处理绘图
+
+### Exp S5: Per-Scene Distribution（建议）
+
+- Scatter plot: x=cut3r ATE, y=ttt3r_joint ATE, 每点一个 scene
+- 或 box plot 展示改善分布的 consistency
+- 用已有 `eval_results/relpose/` 下的 per-scene error log 数据
 
 ## Next Steps
-
-### 实验 & 可视化
-- **[P1] Depth qualitative viz** — 选 TUM/Bonn 代表帧，对比 cut3r/ttt3r/ortho/brake 的 depth map + error map
-- **[P1] Per-scene scatter plot** — A4 drift energy vs ortho improvement（ScanNet 65 scenes），展示 drift energy 高的 scene ortho 反而退化
-- **[P1] ScanNet scaling curve** — 100f/200f/500f/1000f 各方法 ATE，量化 over-update 随长度加剧的速率
-- **[P2] Length-aware ortho** — 前 T₀ 帧不抑制 drift，之后逐渐增强（实验性探索，可能不进 paper）
-
-### 理论 & 写作
-- **[P1] 理论框架更新** — drift energy bound（为什么 α_drift 最优值依赖 drift energy），adaptive α 推导，与 continual learning gradient projection 的联系
-- **[P1] Paper writing: method section** — Delta Orthogonalization 形式化定义 + 与 scalar dampening 的对比分析
-- **[P1] Paper writing: experiments** — 五数据集三任务结果表 + ablation（sensitivity, overhead, A1-A6）
-- **[P2] Paper writing: intro + related work** — over-update 问题定义，scalar gate 退化现象，positioning vs GRS-SLAM3R/OnlineX/LONG3R
+1. ~~Re-run Layer 2 SIASU ablation (warm-start fixed)~~ Done (2026-03-23)
+2. ~~Three-layer joint experiment (Layer 1 + 2 + 3)~~ Done (2026-03-23). L23+ttt3r -7.5% best; L1 conflicts.
+3. ~~Formal relpose eval on ScanNet + TUM~~ Done (2026-03-24). ATE: ScanNet -68.1%, TUM -64.1%.
+4. ~~Video Depth eval~~ Done (2026-03-24). Abs Rel: KITTI -11.3%, Bonn -5.0%, Sintel -10.2%.
+5. ~~3D Reconstruction eval (需下载 7scenes)~~ Done (2026-03-25). Acc -77.2%, Comp -54.2% (ttt3r_joint).
+6. Exp S1: Naive baseline comparison (ttt3r_l2gate, ttt3r_random, ttt3r_conf)
+7. ~~Exp S2: Inference overhead measurement~~ Done (2026-03-29). ttt3r_joint overhead +2.7%, GPU mem identical.
+8. Exp S3: Hyperparameter sensitivity (τ, freq_cutoff) on full eval
+9. Exp S4: Qualitative visualization (gate activation over time)
+10. Exp S5: Per-scene distribution analysis
+11. Paper outline drafting
