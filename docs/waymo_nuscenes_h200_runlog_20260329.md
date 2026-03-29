@@ -77,3 +77,45 @@ export INFERENCE_MODE=1
 bash scripts/server/run_waymo_relpose_pipeline.sh
 ```
 
+## 5) nuScenes Full Trainval（CAM_FRONT，850 scenes，已完成）
+
+在同一台 H200 服务器上，已完成 `v1.0-trainval` 全量 `CAM_FRONT` 跑数（`850/850`）。
+
+执行入口:
+
+```bash
+NUSCENES_DATAROOT=/root/datasets/nuscenes_trainval_camfront \
+NUSCENES_VERSION=v1.0-trainval \
+NUSCENES_CAMERA=CAM_FRONT \
+NUSCENES_OUTPUT_ROOT=/root/TTT3R/data/nuscenes_relpose_full_camfront \
+MAX_SCENES=850 \
+MAX_FRAMES=500 \
+SIZE=512 \
+NUM_PROCESSES=1 \
+AMP_DTYPE=bf16 \
+TF32=1 \
+CUDNN_BENCHMARK=1 \
+INFERENCE_MODE=1 \
+bash scripts/server/run_nuscenes_relpose_pipeline.sh
+```
+
+产物:
+
+- `eval_results/relpose/nuscenes_relpose/summary.csv`
+- `eval_results/relpose/nuscenes_relpose/per_sequence_results.csv`（3401 行，含表头）
+- `logs/nuscenes_full_h200.log`
+
+### 5.1 Full 结果摘要 (summary.csv)
+
+| model | avg_ate | avg_rpe_trans | avg_rpe_rot |
+|---|---:|---:|---:|
+| cut3r | 2.32265 | 0.85829 | 0.72078 |
+| ttt3r | 5.02525 | 2.07429 | 1.16555 |
+| ttt3r_momentum_inv_t1 | 11.83113 | 4.72726 | 3.73936 |
+| ttt3r_momentum_inv_t1_drift0 | 11.83113 | 4.72726 | 3.73936 |
+
+简要结论:
+
+1. Full trainval 上，`cut3r` 仍显著优于当前 TTT3R 分支配置。
+2. `ttt3r_momentum_inv_t1` 与 `ttt3r_momentum_inv_t1_drift0` 再次完全一致，支持“`alpha_drift` 分支未生效或被覆盖”的排查方向。
+3. 本次运行未出现 OOM，512 分辨率在 H200 单卡下可稳定完整执行。
