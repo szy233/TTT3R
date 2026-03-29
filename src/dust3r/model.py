@@ -1462,6 +1462,14 @@ class ARCroco3DStereo(CroCoNet):
         alpha_drift = getattr(config, 'ortho_alpha_drift', 0.05)
         beta        = getattr(config, 'ortho_beta',        0.95)
 
+        # Length-aware warmup: no drift suppression for first T0 frames,
+        # linearly ramp up over warmup window
+        t0       = getattr(config, 'ortho_warmup_t0', 0)
+        warmup_w = getattr(config, 'ortho_warmup_window', 0)
+
+        step = ortho_state.get('step', 0)
+        ortho_state['step'] = step + 1
+
         delta = new_state_feat - state_feat  # [B, T, D]
         # Normalize per token
         delta_norm = delta.norm(dim=-1, keepdim=True).clamp(min=1e-8)
@@ -1497,19 +1505,26 @@ class ARCroco3DStereo(CroCoNet):
             ortho_state['ema_drift_energy'] = ema_drift_e
 
             if adaptive_mode == 'linear':
-                # α_drift = alpha_drift + (alpha_novel - alpha_drift) × drift_energy
                 effective_alpha_drift = alpha_drift + (alpha_novel - alpha_drift) * ema_drift_e
             elif adaptive_mode == 'match':
-                # drift_energy 高时 α_drift → α_novel (uniform dampening)
                 effective_alpha_drift = alpha_novel * ema_drift_e + alpha_drift * (1.0 - ema_drift_e)
             elif adaptive_mode == 'threshold':
-                # drift_energy > 0.5 → uniform dampening; else → ortho
                 use_uniform = (ema_drift_e > 0.5).float()
                 effective_alpha_drift = alpha_novel * use_uniform + alpha_drift * (1.0 - use_uniform)
             else:
                 effective_alpha_drift = alpha_drift
         else:
             effective_alpha_drift = alpha_drift
+
+        # Apply warmup: blend effective_alpha_drift toward alpha_novel during early frames
+        if t0 > 0 and step < t0 + warmup_w:
+            if step < t0:
+                # Pure warmup phase: no drift suppression, uniform dampening
+                effective_alpha_drift = alpha_novel
+            else:
+                # Ramp phase: linearly interpolate from alpha_novel to target
+                ramp = (step - t0) / max(warmup_w, 1)
+                effective_alpha_drift = alpha_novel + (effective_alpha_drift - alpha_novel) * ramp
 
         return state_feat + alpha_novel * novel_comp + effective_alpha_drift * drift_comp
 
