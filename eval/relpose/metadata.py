@@ -234,6 +234,26 @@ tum_configs = {
 }
 dataset_metadata.update(tum_configs)
 
+kitti_odo_numbers = [200, 500, 1000]
+kitti_odo_configs = {
+    f"kitti_odo_s1_{num}": {
+        "img_path": "data/long_kitti_odo_s1",
+        "mask_path": None,
+        "dir_path_func": lambda img_path, seq, num=num: os.path.join(img_path, seq, f"image_{num}"),
+        "gt_traj_func": lambda img_path, anno_path, seq, num=num: os.path.join(
+            img_path, seq, f"pose_{num}.txt"
+        ),
+        "traj_format": "tum",
+        "seq_list": None,
+        "full_seq": True,
+        "mask_path_seq_func": lambda mask_path, seq: None,
+        "skip_condition": None,
+        "process_func": None,
+    }
+    for num in kitti_odo_numbers
+}
+dataset_metadata.update(kitti_odo_configs)
+
 
 # Define processing functions for each dataset
 def process_kitti(args, img_path):
