@@ -92,53 +92,178 @@
 
 ---
 
-## 4. Analysis
+## 4. Core Observation: Sequence-Length-Dependent Crossover Effect
 
-### Key Finding: Sequence Length Determines Optimal Dampening Strategy
+Results reveal a striking **crossover**: the optimal dampening strategy **reverses** between short and long sequences.
 
-The results reveal a striking **crossover effect** between short (200f) and long (1000f) sequences:
+- **200f**: `ttt3r_random` (constant p=0.33) achieves the best mean ATE at 5.680m (**-39.9%**), while both adaptive methods (`momentum` +0.9%, `ortho` +31.4%) **degrade** over baseline.
+- **1000f**: `ttt3r_ortho` achieves the best mean ATE at 67.876m (**-36.3%**), while constant dampening only reaches -15.3%.
 
-- **Short sequences (200f)**: Simple methods win. `ttt3r_random` (constant p=0.33) achieves the best mean ATE at 5.680m (-39.9%), followed closely by `ttt3r` (sigmoid gating) at 6.007m (-36.5%). Both adaptive methods (`momentum` and `ortho`) **fail**, performing at or worse than the baseline.
-
-- **Long sequences (1000f)**: Adaptive methods dominate. `ttt3r_ortho` achieves the best mean ATE at 67.876m (-36.3%), followed by `ttt3r_momentum` at 72.010m (-32.4%). Simple dampening methods show smaller gains.
-
-### Why Adaptive Methods Fail on Short Sequences
-
-Adaptive methods (`momentum`, `ortho`) need a **burn-in period** to build up meaningful statistics:
-- `ttt3r_momentum` requires past deltas to compute alignment cosine — early frames have unreliable signals
-- `ttt3r_ortho` accumulates a drift subspace via exponential moving average (beta=0.95) — insufficient history in 200 frames leads to incorrect drift/novel decomposition
-
-This manifests as extreme variance: `ttt3r_momentum` scores 2.270 on seq 05 (best overall) but 18.069 on seq 07 (worst overall). The adaptive signal occasionally helps but is too noisy to be reliable.
-
-### Why Adaptive Methods Excel on Long Sequences
-
-Over 1000 frames, the **over-update problem** becomes severe — repeated gradient steps in similar directions cause state drift. This is exactly what adaptive dampening targets:
-
-- `ttt3r_ortho` suppresses the drift component of updates (alpha_drift=0.05 vs alpha_novel=0.5), preserving only novel information. On the hardest sequence (02, highway driving with 187.9m baseline ATE), ortho reduces error by **66.1%** to 63.7m.
-- `ttt3r_momentum` detects aligned consecutive updates (likely drift) and dampens them. It achieves consistent improvements across all 5 sequences.
-
-### RPE vs ATE Disconnect
-
-An interesting pattern: methods with the best ATE (global trajectory) often have higher RPE (frame-to-frame error). For 1000f, `ttt3r_momentum` has the highest RPE_trans (4.940 m/frame) but second-best ATE. This suggests adaptive dampening trades local accuracy for better global consistency — it prevents cumulative drift even at the cost of noisier per-frame estimates.
-
-### Sequence Difficulty Ranking
-
-By baseline (cut3r) ATE:
-- **Hardest**: seq 02 (highway, long straight) — 12.5m (200f), 187.9m (1000f)
-- **Medium**: seq 00, 08 (mixed urban/suburban)
-- **Easiest**: seq 05, 07 (residential) — 6.4m (200f), 60.7m (1000f)
-
-Adaptive methods show the largest gains on the hardest sequences, where cumulative drift is most pronounced.
+The remainder of this section provides a systematic analysis of this phenomenon.
 
 ---
 
-## 5. Conclusions
+## 5. Analysis: Why Adaptive Dampening Fails on Short Sequences
 
-1. **Test-time training consistently helps** on OOD data — all TTT variants improve over `cut3r` on 1000-frame sequences
-2. **Sequence length is the critical variable** for choosing dampening: short sequences favor simple constant dampening, long sequences strongly favor adaptive methods
-3. **Delta Orthogonalization is the best long-sequence method**, achieving -36.3% ATE reduction on 1000f with especially strong gains on high-drift sequences
-4. **Stability Brake is the most consistent adaptive method**, improving on all 5 sequences at 1000f (no regression on any sequence)
-5. The **burn-in problem** of adaptive methods is a clear area for improvement — combining a constant dampening warmup with adaptive methods could yield the best of both worlds
+### 5.1 Update Rule Formalization
+
+All methods share the same state update:
+
+```
+s_t = alpha_t * s_hat_t + (1 - alpha_t) * s_{t-1}
+```
+
+where `s_hat_t` is the proposed new state and `alpha_t in [0,1]` is the update coefficient.
+
+| Method | alpha_t |
+|--------|---------|
+| cut3r | 1 (full update) |
+| ttt3r | sigmoid(mean(cross_attn_state)) |
+| ttt3r_random | 0.33 (constant) |
+| ttt3r_momentum | sigmoid(c_t) * [alpha_drift + (1-alpha_drift) * sigmoid(-tau * cos(delta_t, delta_{t-1}))] |
+| ttt3r_ortho | Decomposes delta_t into drift/novel, applies alpha_drift=0.05, alpha_novel=0.5 respectively |
+
+**Key distinction**: `momentum` and `ortho` depend on **historical statistics** to compute alpha_t, while `random` and `ttt3r` do not.
+
+### 5.2 Cold-Start Problem
+
+#### Stability Brake: First-Frame Degeneracy
+
+From the implementation (`_stability_brake`, L1341-1347):
+
+```python
+prev_delta = brake_state.get("prev_delta", None)
+brake_state["prev_delta"] = delta.detach().clone()
+if prev_delta is None:
+    return torch.ones(...)  # alpha = 1, NO dampening
+```
+
+- **Frame 1**: alpha = 1.0 — equivalent to `cut3r`, zero suppression
+- **Frame 2**: only 1 reference delta — cosine similarity estimate is unreliable
+- **Frames 1-20**: adaptive signal has not stabilized
+
+In OOD setting (indoor-trained model on outdoor KITTI), the first frame's full update is highly likely to push state in a suboptimal direction. This **initial error propagates** through subsequent frames.
+
+#### Delta Orthogonalization: EMA Convergence Delay
+
+Ortho maintains an EMA to estimate the drift subspace:
+
+```
+delta_bar_t = beta * delta_bar_{t-1} + (1-beta) * delta_t,   beta = 0.95
+```
+
+The characteristic time constant is `tau_ema = 1/(1-beta) = 20` frames. Standard engineering practice requires ~3*tau = **60 frames** for reasonable convergence.
+
+In a 200-frame sequence, **30% of all frames (first ~60)** have an inaccurate drift subspace estimate, causing:
+- Beneficial novel updates misclassified as drift → **suppressed** (alpha=0.05)
+- Harmful drift updates misclassified as novel → **passed through** (alpha=0.5)
+
+In 1000-frame sequences, this cold-start phase is only 6%, and its impact is amortized.
+
+### 5.3 Adaptation-vs-Drift Phase Confusion
+
+This is the most fundamental issue. In OOD evaluation, the model faces two sequential phases:
+
+1. **Adaptation Phase**: The model migrates from indoor distribution to outdoor distribution. This requires **large, directionally consistent updates** — exactly what adaptive methods are designed to suppress.
+2. **Maintenance Phase**: The model has adapted. Continued directionally consistent updates become **over-update / state drift** — this is what adaptive methods should suppress.
+
+**Adaptive methods cannot distinguish these two phases.** The Stability Brake's core signal `cos(delta_t, delta_{t-1})` will be high in both cases (consecutive deltas align), but the appropriate response is opposite:
+- Adaptation: high cosine → **do not suppress** (the model is correctly adapting)
+- Maintenance: high cosine → **suppress** (the model is drifting)
+
+The **phase ratio** depends on sequence length:
+
+| | 200 frames | 1000 frames |
+|--|--|--|
+| Adaptation phase (~100 frames) | **50%** | 10% |
+| Maintenance phase | 50% | **90%** |
+| Net effect of adaptive suppression | Harmful (suppresses needed adaptation) | Beneficial (suppresses drift) |
+
+### 5.4 Variance Analysis: Quantitative Evidence of Instability
+
+Per-sequence ATE reveals the instability of adaptive methods on short sequences:
+
+**ttt3r_momentum on 200f:**
+
+| Seq | ATE (m) | vs cut3r | Verdict |
+|-----|---------|----------|---------|
+| 00 | 4.282 | -61.1% | Hit |
+| 02 | 12.994 | +4.1% | Miss |
+| 05 | 2.270 | -64.4% | Hit |
+| 07 | 18.069 | +142.4% | Miss |
+| 08 | 10.099 | +1.7% | Miss |
+
+**Coefficient of Variation (CV) = 66.5%** — the method is essentially gambling.
+
+**ttt3r_momentum on 1000f:**
+
+| Seq | ATE (m) | vs cut3r | Verdict |
+|-----|---------|----------|---------|
+| 00 | 100.742 | -10.4% | Hit |
+| 02 | 87.094 | -53.6% | Hit |
+| 05 | 48.212 | -34.7% | Hit |
+| 07 | 54.389 | -10.4% | Hit |
+| 08 | 69.612 | -28.7% | Hit |
+
+**CV = 30.0%**, **5/5 sequences improved** — consistent and reliable.
+
+Summary of CV across methods:
+
+| Method | CV (200f) | CV (1000f) |
+|--------|-----------|------------|
+| ttt3r_random | 22.3% | 31.3% |
+| ttt3r | 19.5% | 26.4% |
+| ttt3r_momentum | **66.5%** | 30.0% |
+| ttt3r_ortho | **47.3%** | 22.0% |
+
+Adaptive methods exhibit **2-3x higher variance** on short sequences compared to constant dampening. This is the hallmark of an estimator with insufficient samples.
+
+### 5.5 Why Constant Dampening Wins on Short Sequences
+
+`ttt3r_random` (alpha=0.33) has several structural advantages for short sequences:
+
+1. **No cold start**: Dampening is active from frame 1 — the critical first few OOD frames are immediately protected
+2. **No misclassification**: Does not attempt to distinguish drift from novel updates; uniformly scales all updates by 0.33
+3. **Adaptation preserved**: Although each update is scaled to 33%, the correct direction is preserved. Over 200 frames, the model still accumulates sufficient adaptation, just more slowly
+4. **Low variance**: The strategy is deterministic with respect to sequence content — no dependence on stochastic statistics of the delta trajectory
+
+In bias-variance tradeoff terms: constant dampening is a **low-bias, low-variance** estimator, while adaptive dampening is a **variable-bias, high-variance** estimator. With limited samples (short sequences), the low-variance strategy dominates — consistent with classical statistical learning theory.
+
+### 5.6 Why Adaptive Methods Excel on Long Sequences
+
+At 1000 frames, cumulative drift becomes the dominant error source. Consider seq 02 (highway):
+- cut3r ATE = 187.9m — the trajectory has essentially diverged
+- This magnitude cannot be explained by "insufficient adaptation" — it is **catastrophic state drift** from 1000 frames of compounding directional error
+
+Adaptive methods now have both the statistical power and the opportunity:
+- **EMA has converged**: drift subspace / delta alignment statistics are reliable after ~60 frames
+- **Drift dominates**: 90% of frames are in maintenance phase, where suppression is beneficial
+- **Compounding savings**: even small per-frame drift reductions compound over 1000 frames into large trajectory improvements
+
+Ortho's per-sequence improvement on the hardest case: seq 02 drops from 187.9m to 63.7m (**-66.1%**).
+
+### 5.7 RPE-ATE Dissociation
+
+An unexpected pattern: methods with the best ATE (global trajectory) often show **higher** RPE (frame-to-frame error):
+
+| Method | ATE rank (1000f) | RPE_trans (1000f) |
+|--------|-------------------|-------------------|
+| ttt3r_ortho | **1st** (67.9m) | 3.720 m/frame |
+| ttt3r_momentum | **2nd** (72.0m) | 4.940 m/frame |
+| cut3r | 5th (106.5m) | 1.441 m/frame |
+
+Interpretation: adaptive dampening **trades local accuracy for global consistency**. By suppressing directionally aligned updates, it introduces higher per-frame noise (RPE increases) but prevents the cumulative drift that dominates ATE. The RPE increase is bounded (additive noise), while the ATE reduction is compounding (multiplicative savings over 1000 frames).
+
+---
+
+## 6. Conclusions
+
+1. **Test-time training consistently helps** on OOD data — all TTT variants outperform `cut3r` on 1000-frame sequences
+2. **Sequence length is the critical variable**: a **crossover effect** exists where optimal strategy shifts from constant to adaptive dampening as sequence length increases
+3. **Adaptive methods suffer from three interacting failure modes on short sequences**: (a) cold-start degeneracy, (b) adaptation-vs-drift phase confusion, (c) high estimator variance from insufficient samples
+4. **Delta Orthogonalization is the best long-sequence method** (-36.3% ATE on 1000f), with the strongest gains on high-drift sequences (seq 02: -66.1%)
+5. **Stability Brake is the most robust adaptive method**, improving all 5 sequences at 1000f with no regression
+6. The results suggest a natural improvement: **warmup scheduling** — use constant dampening for the first N frames (avoiding cold-start), then transition to adaptive dampening (leveraging converged statistics). This could achieve the best of both regimes
 
 ---
 
