@@ -1511,6 +1511,11 @@ class ARCroco3DStereo(CroCoNet):
             elif adaptive_mode == 'threshold':
                 use_uniform = (ema_drift_e > 0.5).float()
                 effective_alpha_drift = alpha_novel * use_uniform + alpha_drift * (1.0 - use_uniform)
+            elif adaptive_mode == 'steep':
+                # Unified ortho-brake: high drift energy → selectivity↓ → brake-like
+                gamma = getattr(config, 'ortho_gamma', 2.0)
+                selectivity = (1.0 - ema_drift_e) ** gamma
+                effective_alpha_drift = alpha_novel * (1.0 - selectivity) + alpha_drift * selectivity
             else:
                 effective_alpha_drift = alpha_drift
         else:

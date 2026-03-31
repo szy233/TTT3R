@@ -74,7 +74,8 @@ def get_args_parser():
     parser.add_argument("--ortho_alpha_novel", type=float, default=0.5, help="Delta ortho: novel component learning rate")
     parser.add_argument("--ortho_alpha_drift", type=float, default=0.05, help="Delta ortho: drift component learning rate")
     parser.add_argument("--ortho_beta", type=float, default=0.95, help="Delta ortho: EMA decay for drift direction")
-    parser.add_argument("--ortho_adaptive", type=str, default="", help="Delta ortho adaptive mode: '', 'linear', 'match', 'threshold'")
+    parser.add_argument("--ortho_adaptive", type=str, default="", help="Delta ortho adaptive mode: '', 'linear', 'match', 'threshold', 'steep'")
+    parser.add_argument("--ortho_gamma", type=float, default=2.0, help="Delta ortho steep mode: transition sharpness (higher = faster brake fallback)")
     parser.add_argument("--ortho_warmup_t0", type=int, default=0, help="Delta ortho: no drift suppression for first T0 frames")
     parser.add_argument("--ortho_warmup_window", type=int, default=0, help="Delta ortho: linear ramp window after T0")
 
@@ -508,6 +509,7 @@ if __name__ == "__main__":
     model.config.ortho_alpha_drift = args.ortho_alpha_drift
     model.config.ortho_beta = args.ortho_beta
     model.config.ortho_adaptive = args.ortho_adaptive
+    model.config.ortho_gamma = args.ortho_gamma
     model.config.ortho_warmup_t0 = args.ortho_warmup_t0
     model.config.ortho_warmup_window = args.ortho_warmup_window
 
