@@ -16,8 +16,7 @@ model_names=(
     'cut3r'
     'ttt3r'
     'ttt3r_random'    # aconst: constant dampening (p=0.33)
-    'ttt3r_momentum'  # brake: stability brake
-    'ttt3r_ortho'     # ortho: delta orthogonalization
+    'ttt3r_momentum_inv_t1' # brake: stability brake (best variant on zjc)
 )
 
 datasets=('kitti_odo_s1_200' 'kitti_odo_s1_1000')
