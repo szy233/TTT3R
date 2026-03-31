@@ -10,7 +10,7 @@
 set -e
 
 workdir='.'
-model_weights="${workdir}/model/cut3r_512_dpt_4_64.pth"
+model_weights="${workdir}/src/cut3r_512_dpt_4_64.pth"
 
 model_names=(
     'cut3r'
