@@ -17,15 +17,14 @@ Output structure (matches eval pipeline convention):
         00/
             image_200/         <- symlinks to first 200 frames
             pose_200.txt       <- TUM format: ts tx ty tz qx qy qz qw
-            image_500/
-            pose_500.txt
-            image_1000/
-            pose_1000.txt
+            image_full/        <- symlinks to ALL frames (full sequence)
+            pose_full.txt
         02/
             ...
 
 Usage:
     python eval/relpose/prepare_kitti_odometry.py --kitti_root /path/to/kitti_odometry
+    python eval/relpose/prepare_kitti_odometry.py --kitti_root /path/to/kitti_odometry --full
     python eval/relpose/prepare_kitti_odometry.py --kitti_root /path/to/kitti_odometry --seqs 00 02 05
 """
 
@@ -53,7 +52,35 @@ def kitti_pose_to_tum(row_12):
     return t, q
 
 
-def prepare_sequence(kitti_root, output_root, seq, lengths):
+def _create_symlinks_and_poses(kitti_root, output_root, seq, all_frames, poses_raw, length, tag):
+    """Create image symlinks and TUM pose file for a given length/tag."""
+    img_src = os.path.join(kitti_root, "sequences", seq, "image_2")
+    frames = all_frames[:length]
+
+    # Create image directory with symlinks
+    img_dst = os.path.join(output_root, seq, f"image_{tag}")
+    os.makedirs(img_dst, exist_ok=True)
+    for fname in frames:
+        src = os.path.abspath(os.path.join(img_src, fname))
+        dst = os.path.join(img_dst, fname)
+        if not os.path.exists(dst):
+            os.symlink(src, dst)
+
+    # Write TUM pose file
+    pose_dst = os.path.join(output_root, seq, f"pose_{tag}.txt")
+    with open(pose_dst, "w") as f:
+        for i in range(length):
+            t, q = kitti_pose_to_tum(poses_raw[i])
+            f.write(
+                f"{i:06d} "
+                f"{t[0]:.8f} {t[1]:.8f} {t[2]:.8f} "
+                f"{q[0]:.8f} {q[1]:.8f} {q[2]:.8f} {q[3]:.8f}\n"
+            )
+
+    print(f"[OK] seq {seq}, tag {tag}: {length} frames -> {img_dst}")
+
+
+def prepare_sequence(kitti_root, output_root, seq, lengths, full=False):
     img_src = os.path.join(kitti_root, "sequences", seq, "image_2")
     pose_src = os.path.join(kitti_root, "poses", f"{seq}.txt")
 
@@ -68,35 +95,16 @@ def prepare_sequence(kitti_root, output_root, seq, lengths):
     poses_raw = np.loadtxt(pose_src)  # (N, 12)
     n_available = min(len(all_frames), len(poses_raw))
 
+    # Fixed-length configs
     for length in lengths:
         if n_available < length:
             print(f"[SKIP] seq {seq} has only {n_available} frames, need {length}")
             continue
+        _create_symlinks_and_poses(kitti_root, output_root, seq, all_frames, poses_raw, length, str(length))
 
-        frames = all_frames[:length]
-
-        # Create image directory with symlinks
-        img_dst = os.path.join(output_root, seq, f"image_{length}")
-        os.makedirs(img_dst, exist_ok=True)
-        for fname in frames:
-            src = os.path.abspath(os.path.join(img_src, fname))
-            dst = os.path.join(img_dst, fname)
-            if not os.path.exists(dst):
-                os.symlink(src, dst)
-
-        # Write TUM pose file
-        pose_dst = os.path.join(output_root, seq, f"pose_{length}.txt")
-        with open(pose_dst, "w") as f:
-            for i in range(length):
-                t, q = kitti_pose_to_tum(poses_raw[i])
-                # Use zero-padded frame index as timestamp (matches sorted filelist)
-                f.write(
-                    f"{i:06d} "
-                    f"{t[0]:.8f} {t[1]:.8f} {t[2]:.8f} "
-                    f"{q[0]:.8f} {q[1]:.8f} {q[2]:.8f} {q[3]:.8f}\n"
-                )
-
-        print(f"[OK] seq {seq}, length {length}: {length} frames -> {img_dst}")
+    # Full-length config
+    if full:
+        _create_symlinks_and_poses(kitti_root, output_root, seq, all_frames, poses_raw, n_available, "full")
 
 
 def main():
@@ -126,16 +134,23 @@ def main():
         default=[200, 500, 1000],
         help="Frame lengths to prepare (default: 200 500 1000)",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        default=False,
+        help="Also prepare full-length sequences (all available frames)",
+    )
     args = parser.parse_args()
 
     print(f"KITTI root : {args.kitti_root}")
     print(f"Output root: {args.output_root}")
     print(f"Sequences  : {args.seqs}")
     print(f"Lengths    : {args.lengths}")
+    print(f"Full       : {args.full}")
     print()
 
     for seq in args.seqs:
-        prepare_sequence(args.kitti_root, args.output_root, seq, args.lengths)
+        prepare_sequence(args.kitti_root, args.output_root, seq, args.lengths, full=args.full)
 
 
 if __name__ == "__main__":

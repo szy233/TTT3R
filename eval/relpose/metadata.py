@@ -254,6 +254,22 @@ kitti_odo_configs = {
 }
 dataset_metadata.update(kitti_odo_configs)
 
+# Full-length KITTI odometry (all frames per sequence)
+dataset_metadata["kitti_odo_full"] = {
+    "img_path": "data/long_kitti_odo_s1",
+    "mask_path": None,
+    "dir_path_func": lambda img_path, seq: os.path.join(img_path, seq, "image_full"),
+    "gt_traj_func": lambda img_path, anno_path, seq: os.path.join(
+        img_path, seq, "pose_full.txt"
+    ),
+    "traj_format": "tum",
+    "seq_list": None,
+    "full_seq": True,
+    "mask_path_seq_func": lambda mask_path, seq: None,
+    "skip_condition": None,
+    "process_func": None,
+}
+
 
 # Define processing functions for each dataset
 def process_kitti(args, img_path):
