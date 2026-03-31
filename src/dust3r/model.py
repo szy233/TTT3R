@@ -1054,6 +1054,8 @@ class ARCroco3DStereo(CroCoNet):
                         }
                     if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                         momentum_state = {}
+                    if update_type == "ttt3r_ortho":
+                        ortho_state = {}
             all_state_args.append(
                 (state_feat, state_pos, init_state_feat, mem, init_mem)
             )
@@ -2246,6 +2248,8 @@ class ARCroco3DStereo(CroCoNet):
                         }
                     if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                         momentum_state = {}
+                    if update_type == "ttt3r_ortho":
+                        ortho_state = {}
                     if update_type in ("cut3r_geogate", "ttt3r_geogate",
                                        "cut3r_joint", "ttt3r_joint",
                                        "ttt3r_brake_geo"):
@@ -2431,6 +2435,8 @@ class ARCroco3DStereo(CroCoNet):
                     }
                 if update_type == "ttt3r_momentum":
                     momentum_state = {}
+                if update_type == "ttt3r_ortho":
+                    ortho_state = {}
             else:
                 # Extract depth for geo gate types
                 if update_type in ("cut3r_geogate", "ttt3r_geogate",
@@ -2545,6 +2551,17 @@ class ARCroco3DStereo(CroCoNet):
                         state_feat, new_state_feat, spectral_state, self.config)
                     g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
+                elif update_type == "ttt3r_ortho":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -2592,6 +2609,8 @@ class ARCroco3DStereo(CroCoNet):
                         }
                     if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
                         momentum_state = {}
+                    if update_type == "ttt3r_ortho":
+                        ortho_state = {}
 
         # Clean up temporary state
         if hasattr(self, '_analysis_prev_delta'):
