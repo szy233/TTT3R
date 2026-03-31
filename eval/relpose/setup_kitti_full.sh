@@ -36,68 +36,7 @@ echo "[OK] Dependencies installed."
 # --------------------------------------------------
 echo ""
 echo "[2/4] Downloading KITTI odometry data..."
-
-mkdir -p "${KITTI_ROOT}/sequences" "${KITTI_ROOT}/poses"
-
-# Download poses (tiny, <1MB)
-if [ ! -f "${KITTI_ROOT}/poses/00.txt" ]; then
-    echo "  Downloading poses..."
-    cd "${KITTI_ROOT}"
-    wget -q --show-progress -O data_odometry_poses.zip \
-        "https://s3.eu-central-1.amazonaws.com/avg-kitti/data_odometry_poses.zip"
-    unzip -q -o data_odometry_poses.zip
-    # Move poses to expected location
-    if [ -d "dataset/poses" ]; then
-        mv dataset/poses/*.txt poses/
-        rm -rf dataset
-    fi
-    rm -f data_odometry_poses.zip
-    cd "${WORKDIR}"
-    echo "  [OK] Poses downloaded."
-else
-    echo "  [SKIP] Poses already exist."
-fi
-
-# Download color images (65GB full, but we only need 00-10)
-# Unfortunately KITTI only provides full zip. We download and extract only needed sequences.
-COLOR_ZIP="${KITTI_ROOT}/data_odometry_color.zip"
-if [ ! -d "${KITTI_ROOT}/sequences/00" ]; then
-    echo "  Downloading color images (65GB, this will take a while)..."
-    echo "  Started at $(date '+%H:%M:%S')"
-    cd "${KITTI_ROOT}"
-
-    # Download if not already present
-    if [ ! -f "${COLOR_ZIP}" ]; then
-        wget -q --show-progress -O "${COLOR_ZIP}" \
-            "https://s3.eu-central-1.amazonaws.com/avg-kitti/data_odometry_color.zip"
-    fi
-
-    echo "  Extracting only sequences 00-10 (saving disk space)..."
-    # Extract only sequences 00-10 from the zip
-    for seq in 00 01 02 03 04 05 06 07 08 09 10; do
-        echo "    Extracting sequence ${seq}..."
-        unzip -q -o "${COLOR_ZIP}" "dataset/sequences/${seq}/image_2/*" -d . 2>/dev/null || true
-    done
-
-    # Move to expected structure
-    if [ -d "dataset/sequences" ]; then
-        for seq in 00 01 02 03 04 05 06 07 08 09 10; do
-            if [ -d "dataset/sequences/${seq}" ]; then
-                mv "dataset/sequences/${seq}" "sequences/${seq}"
-            fi
-        done
-        rm -rf dataset
-    fi
-
-    # Remove zip to save disk space
-    echo "  Removing zip to save disk (65GB)..."
-    rm -f "${COLOR_ZIP}"
-
-    cd "${WORKDIR}"
-    echo "  [OK] Color images extracted."
-else
-    echo "  [SKIP] Sequences already exist."
-fi
+bash eval/relpose/download_kitti.sh "${KITTI_ROOT}"
 
 # --------------------------------------------------
 # Step 3: Prepare data (symlinks + TUM poses)
