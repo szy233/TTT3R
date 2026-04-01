@@ -123,6 +123,19 @@ S_t = S_{t-1} + β_t (α⊥ · δ⊥ + α∥ · δ∥)
 | α⊥ > α∥, γ=0 | DDD3R (fixed ortho) | 全方向分解 |
 | α⊥ > α∥, γ>0 | DDD3R (drift-adaptive) | 自适应 |
 
+### CLI 参数对照
+
+| Paper Symbol | CLI Arg | Config Attr | Default |
+|-------------|---------|------------|---------|
+| α (constant) | `--alpha` | `config.alpha` | 0.5 |
+| α⊥ | `--alpha_perp` | `config.alpha_perp` | 0.5 |
+| α∥ | `--alpha_parallel` | `config.alpha_parallel` | 0.05 |
+| β_ema | `--beta_ema` | `config.beta_ema` | 0.95 |
+| γ | `--gamma` | `config.gamma` | 0.0 |
+| τ (brake) | `--brake_tau` | `config.brake_tau` | 2.0 |
+
+Old CLI args (`--ortho_alpha_novel`, `--ortho_beta`, etc.) still work as hidden aliases.
+
 ### Brake 的定位
 Brake 不作为 DDD3R 的组件，而是**作为 baseline 展示**。它是 directional decomposition 的一阶近似：
 - Brake: cos(δ_t, δ_{t-1}) 高 → 整体 scale down（只看相邻帧，scalar gate）
@@ -307,14 +320,16 @@ Steep 大幅修复 ortho 退化（17.8→8.8 on seq04, 39.9→24.6 on seq03）�
 
 ## Update Types in model.py
 
-| `model_update_type` | `mask1` (state) | 框架角色 |
-|---------------------|-----------------|----------|
-| `cut3r` | 1.0 (baseline) | baseline |
-| `ttt3r` | sigmoid(cross_attn) | existing method |
-| `ttt3r_random` | ttt3r × p (constant) | DDD3R with α⊥=α∥=p |
-| `ttt3r_momentum` | ttt3r × stability brake | baseline (DDD3R 一阶近似) |
-| `ttt3r_ortho` | ttt3r_mask + delta orthogonalization | DDD3R with α⊥>α∥ |
-| Others (joint, conf, l2gate, spectral, memgate, delta_clip, attn_protect, mem_novelty, brake_geo) | various | 已放弃 |
+| `model_update_type` | `mask1` (state) | Paper Role | Old Name |
+|---------------------|-----------------|------------|----------|
+| `cut3r` | 1.0 (baseline) | baseline | — |
+| `ttt3r` | sigmoid(cross_attn) | existing method | — |
+| `ddd3r_constant` | ttt3r × α | DDD3R with α⊥=α∥=α | `ttt3r_random` |
+| `ddd3r_brake` | ttt3r × stability brake | baseline (DDD3R 一阶近似) | `ttt3r_momentum` |
+| `ddd3r` | ttt3r_mask + directional decomposition | DDD3R with α⊥>α∥, γ≥0 | `ttt3r_ortho` |
+| Others (joint, conf, l2gate, spectral, memgate, etc.) | various | abandoned | — |
+
+Old names still work via backward-compat alias mapping in model.py.
 
 ## Eval Pipeline
 
@@ -325,11 +340,16 @@ Steep 大幅修复 ortho 退化（17.8→8.8 on seq04, 39.9→24.6 on seq03）�
 | 3D Reconstruction | 7scenes | `eval/mv_recon/launch.py` |
 
 ```bash
+# Unified eval script (recommended)
+bash eval/run_ddd3r_eval.sh <GPU> <DATASET> <METHOD>
+# e.g.: bash eval/run_ddd3r_eval.sh 0 tum_s1_1000 ddd3r_g2
+
+# Or direct launch:
 conda activate ttt3r
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src accelerate launch --num_processes 1 --main_process_port 29560 \
     eval/relpose/launch.py \
-    --weights model/cut3r_512_dpt_4_64.pth --output_dir eval_results/relpose/scannet_s3_1000/<config> \
-    --eval_dataset scannet_s3_1000 --size 512 --model_update_type <config>
+    --weights model/cut3r_512_dpt_4_64.pth --output_dir eval_results/relpose/scannet_s3_1000/ddd3r \
+    --eval_dataset scannet_s3_1000 --size 512 --model_update_type ddd3r --gamma 2.0
 ```
 
 ### Paths
@@ -361,6 +381,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src accelerate launch --num_processes 1 --main
 | `eval/run_scaling_curve.sh` | ScanNet scaling curve 实验 |
 | `eval/run_steep_eval.sh` | Steep adaptive 实验（旧公式）|
 | `eval/run_steep_v2.sh` | Steep v2 实验（e^γ 公式）|
+| `eval/run_ddd3r_eval.sh` | 统一 DDD3R 评测脚本（paper naming）|
 
 ## Known Issues
 1. **Gate state 每帧重置**: `view["reset"]` 返回 `tensor([False])` 非 None → 用 `reset_mask.any()` 判断。已修复。
