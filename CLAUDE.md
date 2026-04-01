@@ -84,6 +84,27 @@ bash eval/run_auto_gamma_eval.sh 0,1
 - ScanNet: 100 test → 96 preprocessed → 90 valid (90f) / 65-66 valid (1000f)
 - TUM: 8 sequences, all valid
 
+## GhostGPU 协作
+
+服务器部署了 GhostGPU 显存占位守护进程。**实验只需 ~6G 显存，目标卡降到 12% 预留 ~10G 即可，剩余显存继续占位：**
+
+```bash
+# 单卡实验：目标卡降到12%，留~10G给实验，其余继续占；跑完恢复60%
+blend 0 12 && bash eval/run_ddd3r_eval.sh 0 tum_s1_1000 ddd3r ; blend 0 60
+
+# 多个实验串行（同一张卡）
+blend 0 12 && bash eval/run_ddd3r_eval.sh 0 tum_s1_1000 ddd3r && bash eval/run_ddd3r_eval.sh 0 scannet_s3_1000 ddd3r ; blend 0 60
+
+# 双卡并行实验
+blend 0 12 && blend 1 12 && bash eval/run_auto_gamma_eval.sh 0,1 ; blend 0 60 && blend 1 60
+```
+
+**规则：**
+- 实验前目标卡降到 12%：`blend <GPU_ID> 12`（非目标卡不动）
+- 实验结束后恢复：`blend <GPU_ID> 60`
+- 不要用 `coffee`（会释放全部卡全部显存）
+- GPU ID 从 eval 命令的第一个参数读取
+
 ## Known Issues
 1. Gate state reset: `view["reset"]` returns `tensor([False])` not None → use `reset_mask.any()`. Fixed.
 2. ScanNet scene skip: GT contains -inf, evo eigh fails. Consistent across configs.
