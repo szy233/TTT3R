@@ -94,7 +94,7 @@ def compute_error_map(pred, gt):
         return None
     # Resize pred to GT size if needed
     if pred.shape != gt.shape:
-        pred_resized = np.array(Image.fromarray(pred).resize(
+        pred_resized = np.array(Image.fromarray(pred, mode='F').resize(
             (gt.shape[1], gt.shape[0]), Image.BILINEAR))
     else:
         pred_resized = pred
@@ -273,7 +273,7 @@ def make_compact_figure():
         pred_scaled = {}
         for method_label, pred in pred_depths.items():
             if pred is not None and gt_depth is not None:
-                pred_r = np.array(Image.fromarray(pred).resize(
+                pred_r = np.array(Image.fromarray(pred, mode='F').resize(
                     (gt_depth.shape[1], gt_depth.shape[0]), Image.BILINEAR))
                 valid = ~np.isnan(gt_depth) & (gt_depth > 0) & (pred_r > 0)
                 if valid.sum() > 100:
@@ -282,8 +282,8 @@ def make_compact_figure():
                 else:
                     pred_scaled[method_label] = pred_r
             elif pred is not None:
-                pred_scaled[method_label] = np.array(Image.fromarray(pred).resize(
-                    (480, 640), Image.BILINEAR))
+                pred_scaled[method_label] = np.array(Image.fromarray(pred, mode='F').resize(
+                    (640, 480), Image.BILINEAR))
 
         depth_row = si * 2
         error_row = si * 2 + 1

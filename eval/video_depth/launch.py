@@ -35,7 +35,7 @@ def get_args_parser():
         help="value for outdir",
     )
     parser.add_argument(
-        "--no_crop", type=bool, default=True, help="whether to crop input data"
+        "--no_crop", action="store_true", default=False, help="disable input cropping"
     )
 
     parser.add_argument(

@@ -36,7 +36,7 @@ def get_args_parser():
         help="value for outdir",
     )
     parser.add_argument(
-        "--no_crop", type=bool, default=True, help="whether to crop input data"
+        "--no_crop", action="store_true", default=False, help="disable input cropping"
     )
 
     parser.add_argument(
@@ -319,7 +319,6 @@ if __name__ == "__main__":
     from dust3r.utils.geometry import weighted_procrustes, geotrf
 
     args.full_seq = False
-    args.no_crop = False
 
     def recover_cam_params(pts3ds_self, pts3ds_other, conf_self, conf_other):
         B, H, W, _ = pts3ds_self.shape

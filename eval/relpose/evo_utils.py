@@ -137,7 +137,7 @@ def load_iphone_traj(gt_file):
 def load_traj(gt_traj_file, traj_format="sintel", skip=0, stride=1, num_frames=None):
     """Read trajectory format. Return in TUM-RGBD format.
     Returns:
-        traj_tum (N, 7): camera to world poses in (x,y,z,qx,qy,qz,qw)
+        traj_tum (N, 7): camera to world poses in (x,y,z,qw,qx,qy,qz)
         timestamps_mat (N, 1): timestamps
     """
     if traj_format == "replica":
@@ -404,7 +404,7 @@ def save_trajectory_tum_format(traj, filename):
     with Path(filename).open("w") as f:
         for i in range(traj.num_poses):
             f.write(
-                f"{traj.timestamps[i]} {tostr(traj.positions_xyz[i])} {tostr(traj.orientations_quat_wxyz[i][[0,1,2,3]])}\n"
+                f"{traj.timestamps[i]} {tostr(traj.positions_xyz[i])} {tostr(traj.orientations_quat_wxyz[i][[1,2,3,0]])}\n"
             )
     print(f"Saved trajectory to {filename}")
 
@@ -477,11 +477,14 @@ def kitti_odom_eval(pred_poses, gt_poses, lengths=[100, 200, 300, 400, 500, 600,
                 "r_rel": np.mean(len_errors_r),
                 "count": len(len_errors_t),
             }
-            errors_t.extend(len_errors_t)
-            errors_r.extend(len_errors_r)
 
-    t_rel = np.mean(errors_t) if errors_t else float('nan')
-    r_rel = np.mean(errors_r) if errors_r else float('nan')
+    # Standard KITTI: average per-bin means (each length bin gets equal weight)
+    if results_by_length:
+        t_rel = np.mean([v["t_rel"] for v in results_by_length.values()])
+        r_rel = np.mean([v["r_rel"] for v in results_by_length.values()])
+    else:
+        t_rel = float('nan')
+        r_rel = float('nan')
 
     return t_rel, r_rel, results_by_length
 

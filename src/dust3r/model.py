@@ -1531,7 +1531,7 @@ class ARCroco3DStereo(CroCoNet):
             ortho_state['drift_dir'] = delta_dir.detach().clone()
             return state_feat + alpha_novel * delta
 
-        # Update drift direction EMA
+        # Update drift direction EMA (normalized after update for correct projection)
         drift_dir = beta * drift_dir + (1.0 - beta) * delta_dir.detach()
         drift_dir = drift_dir / drift_dir.norm(dim=-1, keepdim=True).clamp(min=1e-8)
         ortho_state['drift_dir'] = drift_dir
@@ -1560,7 +1560,8 @@ class ARCroco3DStereo(CroCoNet):
             else:
                 ema_drift_e = beta * ema_drift_e + (1.0 - beta) * drift_energy.detach()
             ortho_state['ema_drift_energy'] = ema_drift_e
-            # w = e^γ: conservative, preserves ortho at moderate drift energy
+            # w = ē_t^γ where ē_t is EMA-smoothed drift energy (not instantaneous)
+            # EMA smoothing prevents rapid oscillation between ortho/isotropic modes
             w = ema_drift_e ** gamma
             effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
         elif adaptive_mode in ('linear', 'match', 'threshold'):
