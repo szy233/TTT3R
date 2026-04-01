@@ -112,8 +112,12 @@ blend 0 12 && blend 1 12 && bash eval/run_auto_gamma_eval.sh 0,1 ; blend 0 60 &&
 ## Next Steps
 - 🔄 ScanNet scaling curve (200f/500f × 6 methods)
 - 🔄 Auto-gamma experiment: warmup 2/6 done, steep 4/6 running (GPU0: sigmoid/sigmoid_k20, GPU1: clamp/clamp_tight)
+- ✅ Abstract + Introduction — `paper/neurips_2026.tex`, `paper/sec/introduction.tex`
+- ✅ Related work — `paper/sec/related.tex`
 - ✅ Analysis section (M1→M2→M3) — `paper/sec/analysis.tex`
 - ✅ Method section — `paper/sec/method.tex`
-- ✅ Related work (initial draft) — `paper/sec/related.tex`
-- ⬜ Experiments section (5 datasets × 3 tasks + spectrum ablation)
-- ⬜ Intro + abstract
+- ✅ Experiments section — `paper/sec/experiments.tex`
+- ✅ Conclusion — `paper/sec/conclusion.tex`
+- ⬜ .bib file (cite keys are placeholders)
+- ⬜ Figures (scatter plot, method diagram, qualitative vis)
+- ⬜ Appendix (per-scene tables, full hyperparameter sweeps)
