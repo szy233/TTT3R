@@ -53,31 +53,29 @@ def get_args_parser():
         default="cut3r",
         help="model type for state update strategy: cut3r, ttt3r, ttt3r_joint, etc.",
     )
+    # DDD3R unified parameters (paper notation)
+    parser.add_argument("--alpha", type=float, default=0.5, help="DDD3R constant dampening rate")
+    parser.add_argument("--alpha_perp", type=float, default=0.5, help="DDD3R novel component coefficient")
+    parser.add_argument("--alpha_parallel", type=float, default=0.05, help="DDD3R drift component coefficient")
+    parser.add_argument("--beta_ema", type=float, default=0.95, help="DDD3R EMA decay for drift direction")
+    parser.add_argument("--gamma", type=float, default=0.0, help="DDD3R steep adaptive exponent (0=fixed, >0=drift-adaptive)")
+    parser.add_argument("--brake_tau", type=float, default=2.0, help="DDD3R brake temperature")
+    parser.add_argument("--warmup_t0", type=int, default=0, help="DDD3R: no drift suppression for first T0 frames")
+    parser.add_argument("--warmup_window", type=int, default=0, help="DDD3R: linear ramp window after T0")
+    # Keep for abandoned methods
     parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
     parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
     parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
-    parser.add_argument("--random_gate_p", type=float, default=0.5, help="Random gate constant probability")
-    parser.add_argument("--momentum_tau", type=float, default=2.0, help="Momentum gate temperature")
-    parser.add_argument("--gate_base_rate", type=float, default=0.33, help="Centered/novelty gate base dampening rate")
-    parser.add_argument("--gate_tau_sharp", type=float, default=5.0, help="Centered gate sharpness")
-    parser.add_argument("--novelty_tau", type=float, default=5.0, help="Feature novelty gate sharpness")
-    parser.add_argument("--momentum_beta", type=float, default=0.9, help="True momentum EMA decay")
-    parser.add_argument("--momentum_lr", type=float, default=0.33, help="True momentum learning rate")
-    parser.add_argument("--clip_alpha", type=float, default=0.33, help="Delta clip base dampening rate")
-    parser.add_argument("--clip_tau", type=float, default=2.0, help="Delta clip threshold multiplier (tau * EMA norm)")
-    parser.add_argument("--clip_beta", type=float, default=0.99, help="Delta clip EMA decay for norm tracking")
-    parser.add_argument("--attn_protect_beta", type=float, default=0.95, help="Attn protect EMA decay for importance")
-    parser.add_argument("--attn_protect_base", type=float, default=0.33, help="Attn protect base dampening rate")
-    parser.add_argument("--mem_novelty_base", type=float, default=0.33, help="Memory novelty gate base dampening rate")
-    parser.add_argument("--mem_novelty_tau", type=float, default=5.0, help="Memory novelty gate sigmoid sharpness")
-    parser.add_argument("--mem_novelty_beta", type=float, default=0.95, help="Memory novelty EMA decay for past features")
-    parser.add_argument("--ortho_alpha_novel", type=float, default=0.5, help="Delta ortho: novel component learning rate")
-    parser.add_argument("--ortho_alpha_drift", type=float, default=0.05, help="Delta ortho: drift component learning rate")
-    parser.add_argument("--ortho_beta", type=float, default=0.95, help="Delta ortho: EMA decay for drift direction")
-    parser.add_argument("--ortho_adaptive", type=str, default="", help="Delta ortho adaptive mode: '', 'linear', 'match', 'threshold', 'steep'")
-    parser.add_argument("--ortho_gamma", type=float, default=2.0, help="Delta ortho steep mode: transition sharpness (higher = faster brake fallback)")
-    parser.add_argument("--ortho_warmup_t0", type=int, default=0, help="Delta ortho: no drift suppression for first T0 frames")
-    parser.add_argument("--ortho_warmup_window", type=int, default=0, help="Delta ortho: linear ramp window after T0")
+    # Backward-compat aliases (hidden)
+    parser.add_argument("--random_gate_p", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_alpha_novel", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_alpha_drift", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_beta", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_gamma", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_adaptive", type=str, default="", help=argparse.SUPPRESS)
+    parser.add_argument("--momentum_tau", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_warmup_t0", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_warmup_window", type=int, default=None, help=argparse.SUPPRESS)
 
     parser.add_argument(
         "--pose_eval_stride", default=1, type=int, help="stride for pose evaluation"
@@ -100,6 +98,30 @@ def get_args_parser():
     parser.add_argument("--freeze_state", action="store_true", default=False)
     parser.add_argument("--solve_pose", action="store_true", default=False)
     return parser
+
+
+def _resolve_ddd3r_aliases(args):
+    """Map old CLI arg names to new ones (backward compat)."""
+    if args.random_gate_p is not None and args.alpha == 0.5:
+        args.alpha = args.random_gate_p
+    if args.ortho_alpha_novel is not None:
+        args.alpha_perp = args.ortho_alpha_novel
+    if args.ortho_alpha_drift is not None:
+        args.alpha_parallel = args.ortho_alpha_drift
+    if args.ortho_beta is not None:
+        args.beta_ema = args.ortho_beta
+    if args.ortho_gamma is not None:
+        args.gamma = args.ortho_gamma
+    if args.momentum_tau is not None:
+        args.brake_tau = args.momentum_tau
+    if args.ortho_warmup_t0 is not None:
+        args.warmup_t0 = args.ortho_warmup_t0
+    if args.ortho_warmup_window is not None:
+        args.warmup_window = args.ortho_warmup_window
+    # Legacy: ortho_adaptive="steep" → set gamma if not already set
+    if args.ortho_adaptive == 'steep' and args.gamma == 0.0:
+        args.gamma = args.ortho_gamma if args.ortho_gamma is not None else 2.0
+    return args
 
 
 def eval_pose_estimation(args, model, save_dir=None):
@@ -288,6 +310,7 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
 if __name__ == "__main__":
     args = get_args_parser()
     args = args.parse_args()
+    _resolve_ddd3r_aliases(args)
     add_path_to_dust3r(args.weights)
     from dust3r.utils.image import load_images_for_eval as load_images
     from dust3r.post_process import estimate_focal_knowing_depth
@@ -483,34 +506,20 @@ if __name__ == "__main__":
         )
 
     model = ARCroco3DStereo.from_pretrained(args.weights)
-    
-    # set model type and frequency-domain hyperparameters
+
+    # set model type and DDD3R hyperparameters
     model.config.model_update_type = args.model_update_type
+    model.config.alpha = args.alpha
+    model.config.alpha_perp = args.alpha_perp
+    model.config.alpha_parallel = args.alpha_parallel
+    model.config.beta_ema = args.beta_ema
+    model.config.gamma = args.gamma
+    model.config.brake_tau = args.brake_tau
+    model.config.warmup_t0 = args.warmup_t0
+    model.config.warmup_window = args.warmup_window
+    # Keep for abandoned methods
     model.config.spectral_temperature = args.spectral_temperature
     model.config.geo_gate_tau = args.geo_gate_tau
     model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
-    model.config.random_gate_p = args.random_gate_p
-    model.config.momentum_tau = args.momentum_tau
-    model.config.gate_base_rate = args.gate_base_rate
-    model.config.gate_tau_sharp = args.gate_tau_sharp
-    model.config.novelty_base_rate = args.gate_base_rate  # reuse same base rate
-    model.config.novelty_tau = args.novelty_tau
-    model.config.momentum_beta = args.momentum_beta
-    model.config.momentum_lr = args.momentum_lr
-    model.config.clip_alpha = args.clip_alpha
-    model.config.clip_tau = args.clip_tau
-    model.config.clip_beta = args.clip_beta
-    model.config.attn_protect_beta = args.attn_protect_beta
-    model.config.attn_protect_base = args.attn_protect_base
-    model.config.mem_novelty_base = args.mem_novelty_base
-    model.config.mem_novelty_tau = args.mem_novelty_tau
-    model.config.mem_novelty_beta = args.mem_novelty_beta
-    model.config.ortho_alpha_novel = args.ortho_alpha_novel
-    model.config.ortho_alpha_drift = args.ortho_alpha_drift
-    model.config.ortho_beta = args.ortho_beta
-    model.config.ortho_adaptive = args.ortho_adaptive
-    model.config.ortho_gamma = args.ortho_gamma
-    model.config.ortho_warmup_t0 = args.ortho_warmup_t0
-    model.config.ortho_warmup_window = args.ortho_warmup_window
 
     eval_pose_estimation(args, model, save_dir=args.output_dir)
