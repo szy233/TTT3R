@@ -63,9 +63,37 @@ case "$METHOD" in
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --gamma $GAMMA"
         METHOD="ddd3r_g${GAMMA}"
         ;;
+    # --- Auto-gamma methods ---
+    ddd3r_auto_warmup_linear)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma warmup_linear --auto_gamma_warmup 30 --auto_gamma_max 3.0"
+        ;;
+    ddd3r_auto_warmup_threshold)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma warmup_threshold --auto_gamma_warmup 30 --auto_gamma_max 3.0"
+        ;;
+    ddd3r_auto_steep_sigmoid)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma steep_sigmoid --auto_gamma_k 10.0"
+        ;;
+    ddd3r_auto_steep_sigmoid_k20)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma steep_sigmoid --auto_gamma_k 20.0"
+        ;;
+    ddd3r_auto_steep_clamp)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma steep_clamp --auto_gamma_lo 0.3 --auto_gamma_hi 0.6"
+        ;;
+    ddd3r_auto_steep_clamp_tight)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma steep_clamp --auto_gamma_lo 0.35 --auto_gamma_hi 0.55"
+        ;;
     *)
         echo "Unknown method: $METHOD"
         echo "Available: cut3r, ttt3r, ddd3r_constant, ddd3r_constant_p{N}, ddd3r_brake, ddd3r, ddd3r_g{N}"
+        echo "  Auto-gamma: ddd3r_auto_warmup_linear, ddd3r_auto_warmup_threshold"
+        echo "              ddd3r_auto_steep_sigmoid, ddd3r_auto_steep_sigmoid_k20"
+        echo "              ddd3r_auto_steep_clamp, ddd3r_auto_steep_clamp_tight"
         exit 1
         ;;
 esac

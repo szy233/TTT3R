@@ -1541,41 +1541,79 @@ class ARCroco3DStereo(CroCoNet):
         drift_comp    = proj_scalar * drift_dir                         # [B, T, D]
         novel_comp    = delta - drift_comp                              # [B, T, D]
 
+        # Compute per-token drift energy (needed by all adaptive modes)
+        cos_sim = (delta_dir * drift_dir).sum(dim=-1, keepdim=True)  # [B, T, 1]
+        drift_energy = cos_sim ** 2  # [B, T, 1]
+        # Update running EMA of drift energy
+        ema_drift_e = ortho_state.get('ema_drift_energy', None)
+        if ema_drift_e is None:
+            ema_drift_e = drift_energy.detach().clone()
+        else:
+            ema_drift_e = beta * ema_drift_e + (1.0 - beta) * drift_energy.detach()
+        ortho_state['ema_drift_energy'] = ema_drift_e
+
         # Adaptive α_drift: scale with running drift energy
         gamma = getattr(config, 'gamma', None)
         if gamma is None:
             gamma = getattr(config, 'ortho_gamma', 0.0)
         adaptive_mode = getattr(config, 'ortho_adaptive', '')
-        if gamma > 0 or adaptive_mode == 'steep':
-            # steep adaptive path
+        auto_gamma = getattr(config, 'auto_gamma', '')
+
+        # --- Approach A: Sequence-level auto-γ (warmup → resolve γ → fixed DDD3R) ---
+        if auto_gamma.startswith('warmup'):
+            ag_warmup_n = int(getattr(config, 'auto_gamma_warmup', 30))
+            ag_gamma_max = float(getattr(config, 'auto_gamma_max', 3.0))
+
+            # Collect drift energy during warmup
+            warmup_energies = ortho_state.get('warmup_energies', [])
+            if step <= ag_warmup_n:
+                # mean over tokens for this frame
+                warmup_energies.append(ema_drift_e.mean().item())
+                ortho_state['warmup_energies'] = warmup_energies
+
+            resolved_gamma = ortho_state.get('resolved_gamma', None)
+            if step == ag_warmup_n and resolved_gamma is None:
+                e_avg = sum(warmup_energies) / len(warmup_energies)
+                if auto_gamma == 'warmup_linear':
+                    resolved_gamma = ag_gamma_max * (1.0 - e_avg)
+                elif auto_gamma == 'warmup_threshold':
+                    resolved_gamma = 0.0 if e_avg > 0.5 else ag_gamma_max
+                else:
+                    resolved_gamma = ag_gamma_max * (1.0 - e_avg)
+                ortho_state['resolved_gamma'] = resolved_gamma
+
+            if resolved_gamma is None:
+                # Still in warmup: use constant dampening (α_perp for both)
+                effective_alpha_drift = alpha_novel
+            else:
+                # Post-warmup: use resolved γ with standard steep formula
+                if resolved_gamma > 0:
+                    w = ema_drift_e ** resolved_gamma
+                    effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
+                else:
+                    # γ=0 means constant dampening
+                    effective_alpha_drift = alpha_novel
+
+        # --- Approach B: Fixed steep with better self-correction formulas ---
+        elif auto_gamma == 'steep_sigmoid':
+            ag_k = float(getattr(config, 'auto_gamma_k', 10.0))
+            w = torch.sigmoid(ag_k * (ema_drift_e - 0.5))
+            effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
+
+        elif auto_gamma == 'steep_clamp':
+            ag_lo = float(getattr(config, 'auto_gamma_lo', 0.3))
+            ag_hi = float(getattr(config, 'auto_gamma_hi', 0.6))
+            w = ((ema_drift_e - ag_lo) / max(ag_hi - ag_lo, 1e-8)).clamp(0.0, 1.0)
+            effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
+
+        # --- Original steep adaptive (ē^γ) ---
+        elif gamma > 0 or adaptive_mode == 'steep':
             if gamma == 0:
                 gamma = getattr(config, 'ortho_gamma', 2.0)
-            # Per-token drift energy = cos²(delta, drift_dir)
-            cos_sim = (delta_dir * drift_dir).sum(dim=-1, keepdim=True)  # [B, T, 1]
-            drift_energy = cos_sim ** 2  # [B, T, 1]
-            # Update running EMA of drift energy
-            ema_drift_e = ortho_state.get('ema_drift_energy', None)
-            if ema_drift_e is None:
-                ema_drift_e = drift_energy.detach().clone()
-            else:
-                ema_drift_e = beta * ema_drift_e + (1.0 - beta) * drift_energy.detach()
-            ortho_state['ema_drift_energy'] = ema_drift_e
-            # w = ē_t^γ where ē_t is EMA-smoothed drift energy (not instantaneous)
-            # EMA smoothing prevents rapid oscillation between ortho/isotropic modes
             w = ema_drift_e ** gamma
             effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
-        elif adaptive_mode in ('linear', 'match', 'threshold'):
-            # Per-token drift energy = cos²(delta, drift_dir)
-            cos_sim = (delta_dir * drift_dir).sum(dim=-1, keepdim=True)  # [B, T, 1]
-            drift_energy = cos_sim ** 2  # [B, T, 1]
-            # Update running EMA of drift energy
-            ema_drift_e = ortho_state.get('ema_drift_energy', None)
-            if ema_drift_e is None:
-                ema_drift_e = drift_energy.detach().clone()
-            else:
-                ema_drift_e = beta * ema_drift_e + (1.0 - beta) * drift_energy.detach()
-            ortho_state['ema_drift_energy'] = ema_drift_e
 
+        elif adaptive_mode in ('linear', 'match', 'threshold'):
             if adaptive_mode == 'linear':
                 effective_alpha_drift = alpha_drift + (alpha_novel - alpha_drift) * ema_drift_e
             elif adaptive_mode == 'match':

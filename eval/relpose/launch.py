@@ -62,6 +62,12 @@ def get_args_parser():
     parser.add_argument("--brake_tau", type=float, default=2.0, help="DDD3R brake temperature")
     parser.add_argument("--warmup_t0", type=int, default=0, help="DDD3R: no drift suppression for first T0 frames")
     parser.add_argument("--warmup_window", type=int, default=0, help="DDD3R: linear ramp window after T0")
+    parser.add_argument("--auto_gamma", type=str, default="", help="Auto-gamma mode: warmup_linear, warmup_threshold, steep_sigmoid, steep_clamp")
+    parser.add_argument("--auto_gamma_warmup", type=int, default=30, help="Auto-gamma warmup frames")
+    parser.add_argument("--auto_gamma_max", type=float, default=3.0, help="Auto-gamma max gamma value")
+    parser.add_argument("--auto_gamma_k", type=float, default=10.0, help="Auto-gamma sigmoid temperature")
+    parser.add_argument("--auto_gamma_lo", type=float, default=0.3, help="Auto-gamma clamp lower bound")
+    parser.add_argument("--auto_gamma_hi", type=float, default=0.6, help="Auto-gamma clamp upper bound")
     # Keep for abandoned methods
     parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
     parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
@@ -516,6 +522,12 @@ if __name__ == "__main__":
     model.config.brake_tau = args.brake_tau
     model.config.warmup_t0 = args.warmup_t0
     model.config.warmup_window = args.warmup_window
+    model.config.auto_gamma = args.auto_gamma
+    model.config.auto_gamma_warmup = args.auto_gamma_warmup
+    model.config.auto_gamma_max = args.auto_gamma_max
+    model.config.auto_gamma_k = args.auto_gamma_k
+    model.config.auto_gamma_lo = args.auto_gamma_lo
+    model.config.auto_gamma_hi = args.auto_gamma_hi
     # Keep for abandoned methods
     model.config.spectral_temperature = args.spectral_temperature
     model.config.geo_gate_tau = args.geo_gate_tau
