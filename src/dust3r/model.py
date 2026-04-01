@@ -927,10 +927,11 @@ class ARCroco3DStereo(CroCoNet):
                             device=state_feat.device),
                     }
                 # Initialize momentum gate state
-                if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
+                if update_type in ("ttt3r_momentum", "ttt3r_brake_geo",
+                                   "ttt3r_constant_brake", "ttt3r_constant_brake_ortho"):
                     momentum_state = {}
                 # Initialize ortho state
-                if update_type == "ttt3r_ortho":
+                if update_type in ("ttt3r_ortho", "ttt3r_constant_brake_ortho"):
                     ortho_state = {}
             else:
                 if update_type == "cut3r":
@@ -1021,6 +1022,25 @@ class ARCroco3DStereo(CroCoNet):
                         state_feat, new_state_feat, ortho_state, self.config)
                     new_state_feat = updated
                     update_mask1 = update_mask * ttt3r_mask
+                elif update_type == "ttt3r_constant_brake":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
+                elif update_type == "ttt3r_constant_brake_ortho":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -1052,9 +1072,10 @@ class ARCroco3DStereo(CroCoNet):
                             'running_energy': torch.zeros_like(
                                 l2_state['running_energy']),
                         }
-                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
+                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo",
+                                       "ttt3r_constant_brake", "ttt3r_constant_brake_ortho"):
                         momentum_state = {}
-                    if update_type == "ttt3r_ortho":
+                    if update_type in ("ttt3r_ortho", "ttt3r_constant_brake_ortho"):
                         ortho_state = {}
             all_state_args.append(
                 (state_feat, state_pos, init_state_feat, mem, init_mem)
@@ -1514,10 +1535,11 @@ class ARCroco3DStereo(CroCoNet):
                 use_uniform = (ema_drift_e > 0.5).float()
                 effective_alpha_drift = alpha_novel * use_uniform + alpha_drift * (1.0 - use_uniform)
             elif adaptive_mode == 'steep':
-                # Unified ortho-brake: high drift energy → selectivity↓ → brake-like
+                # Unified ortho-brake: high drift energy → isotropic
+                # w = e^γ: conservative, preserves ortho at moderate drift energy
                 gamma = getattr(config, 'ortho_gamma', 2.0)
-                selectivity = (1.0 - ema_drift_e) ** gamma
-                effective_alpha_drift = alpha_novel * (1.0 - selectivity) + alpha_drift * selectivity
+                w = ema_drift_e ** gamma
+                effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
             else:
                 effective_alpha_drift = alpha_drift
         else:
@@ -1970,7 +1992,8 @@ class ARCroco3DStereo(CroCoNet):
                     }
                 # Initialize momentum gate state
                 if update_type in ("ttt3r_momentum", "ttt3r_brake_geo",
-                                   "ttt3r_centered", "ttt3r_true_momentum"):
+                                   "ttt3r_centered", "ttt3r_true_momentum",
+                                   "ttt3r_constant_brake", "ttt3r_constant_brake_ortho"):
                     momentum_state = {}
                 # Initialize delta clip state
                 if update_type == "ttt3r_delta_clip":
@@ -1985,7 +2008,7 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type == "ttt3r_mem_novelty":
                     mem_novelty_state = {}
                 # Initialize delta orthogonalization state
-                if update_type == "ttt3r_ortho":
+                if update_type in ("ttt3r_ortho", "ttt3r_constant_brake_ortho"):
                     ortho_state = {}
                 prev_img = curr_img
             else:
@@ -2206,6 +2229,25 @@ class ARCroco3DStereo(CroCoNet):
                         state_feat, new_state_feat, ortho_state, self.config)
                     new_state_feat = updated
                     update_mask1 = update_mask * ttt3r_mask
+                elif update_type == "ttt3r_constant_brake":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
+                elif update_type == "ttt3r_constant_brake_ortho":
+                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -2246,9 +2288,10 @@ class ARCroco3DStereo(CroCoNet):
                             'running_energy': torch.zeros_like(
                                 l2_state['running_energy']),
                         }
-                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
+                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo",
+                                       "ttt3r_constant_brake", "ttt3r_constant_brake_ortho"):
                         momentum_state = {}
-                    if update_type == "ttt3r_ortho":
+                    if update_type in ("ttt3r_ortho", "ttt3r_constant_brake_ortho"):
                         ortho_state = {}
                     if update_type in ("cut3r_geogate", "ttt3r_geogate",
                                        "cut3r_joint", "ttt3r_joint",
@@ -2433,9 +2476,10 @@ class ARCroco3DStereo(CroCoNet):
                             1, state_feat.shape[1], 1,
                             device=state_feat.device),
                     }
-                if update_type == "ttt3r_momentum":
+                if update_type in ("ttt3r_momentum",
+                                   "ttt3r_constant_brake", "ttt3r_constant_brake_ortho"):
                     momentum_state = {}
-                if update_type == "ttt3r_ortho":
+                if update_type in ("ttt3r_ortho", "ttt3r_constant_brake_ortho"):
                     ortho_state = {}
             else:
                 # Extract depth for geo gate types
@@ -2562,6 +2606,31 @@ class ARCroco3DStereo(CroCoNet):
                         state_feat, new_state_feat, ortho_state, self.config)
                     new_state_feat = updated
                     update_mask1 = update_mask * ttt3r_mask
+                elif update_type == "ttt3r_constant_brake":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
+                elif update_type == "ttt3r_constant_brake_ortho":
+                    cross_attn_rearr = rearrange(
+                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        'l h nstate nimg -> 1 nstate nimg (l h)'
+                    )
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    random_p = getattr(self.config, 'random_gate_p', 0.5)
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
                 else:
                     raise ValueError(f"Invalid model type: {update_type}")
 
@@ -2607,9 +2676,10 @@ class ARCroco3DStereo(CroCoNet):
                             'running_energy': torch.zeros_like(
                                 l2_state['running_energy']),
                         }
-                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo"):
+                    if update_type in ("ttt3r_momentum", "ttt3r_brake_geo",
+                                       "ttt3r_constant_brake", "ttt3r_constant_brake_ortho"):
                         momentum_state = {}
-                    if update_type == "ttt3r_ortho":
+                    if update_type in ("ttt3r_ortho", "ttt3r_constant_brake_ortho"):
                         ortho_state = {}
 
         # Clean up temporary state

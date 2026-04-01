@@ -409,6 +409,111 @@ def save_trajectory_tum_format(traj, filename):
     print(f"Saved trajectory to {filename}")
 
 
+def kitti_odom_eval(pred_poses, gt_poses, lengths=[100, 200, 300, 400, 500, 600, 700, 800]):
+    """Standard KITTI odometry evaluation: t_rel (%) and r_rel (deg/100m).
+
+    Args:
+        pred_poses: list of 4x4 np arrays (aligned to GT scale)
+        gt_poses: list of 4x4 np arrays
+        lengths: sub-sequence lengths in meters
+
+    Returns:
+        t_rel: translational error (%)
+        r_rel: rotational error (deg/100m)
+        results_by_length: dict of per-length results
+    """
+    # Compute cumulative distances from GT
+    gt_poses = [np.array(p) for p in gt_poses]
+    pred_poses = [np.array(p) for p in pred_poses]
+    n = len(gt_poses)
+
+    dist = np.zeros(n)
+    for i in range(1, n):
+        dist[i] = dist[i-1] + np.linalg.norm(gt_poses[i][:3, 3] - gt_poses[i-1][:3, 3])
+
+    total_dist = dist[-1]
+
+    errors_t = []
+    errors_r = []
+    results_by_length = {}
+
+    for length in lengths:
+        if length > total_dist:
+            continue
+
+        len_errors_t = []
+        len_errors_r = []
+
+        for i in range(n):
+            # Find frame j such that distance(i, j) >= length
+            j = np.searchsorted(dist, dist[i] + length)
+            if j >= n:
+                break
+
+            # Relative poses
+            gt_rel = np.linalg.inv(gt_poses[i]) @ gt_poses[j]
+            pred_rel = np.linalg.inv(pred_poses[i]) @ pred_poses[j]
+
+            # Error
+            error_rel = np.linalg.inv(gt_rel) @ pred_rel
+
+            # Translation error (%)
+            t_err = np.linalg.norm(error_rel[:3, 3])
+            path_len = dist[j] - dist[i]
+            t_err_pct = t_err / path_len * 100.0
+
+            # Rotation error (deg)
+            r_err_mat = error_rel[:3, :3]
+            cos_angle = np.clip((np.trace(r_err_mat) - 1.0) / 2.0, -1.0, 1.0)
+            r_err_deg = np.degrees(np.arccos(cos_angle))
+            r_err_per_100m = r_err_deg / path_len * 100.0
+
+            len_errors_t.append(t_err_pct)
+            len_errors_r.append(r_err_per_100m)
+
+        if len(len_errors_t) > 0:
+            results_by_length[length] = {
+                "t_rel": np.mean(len_errors_t),
+                "r_rel": np.mean(len_errors_r),
+                "count": len(len_errors_t),
+            }
+            errors_t.extend(len_errors_t)
+            errors_r.extend(len_errors_r)
+
+    t_rel = np.mean(errors_t) if errors_t else float('nan')
+    r_rel = np.mean(errors_r) if errors_r else float('nan')
+
+    return t_rel, r_rel, results_by_length
+
+
+def kitti_odom_eval_from_tum(pred_traj, gt_traj):
+    """Run KITTI odom eval from TUM-format trajectories (with Sim3 alignment).
+
+    Args:
+        pred_traj: (traj_tum (N,7), timestamps (N,))
+        gt_traj: (traj_tum (N,7), timestamps (N,))
+
+    Returns:
+        t_rel, r_rel, results_by_length
+    """
+    pred_traj_evo = make_traj(pred_traj)
+    gt_traj_evo = make_traj(gt_traj)
+
+    if pred_traj_evo.timestamps.shape[0] == gt_traj_evo.timestamps.shape[0]:
+        pred_traj_evo.timestamps = gt_traj_evo.timestamps
+
+    gt_traj_evo, pred_traj_evo = sync.associate_trajectories(gt_traj_evo, pred_traj_evo)
+
+    # Sim(3) alignment (scale + SE3)
+    pred_traj_evo.align(gt_traj_evo, correct_scale=True)
+
+    # Convert to 4x4 poses
+    pred_poses = pred_traj_evo.poses_se3
+    gt_poses = gt_traj_evo.poses_se3
+
+    return kitti_odom_eval(pred_poses, gt_poses)
+
+
 def extract_metrics(file_path):
     with open(file_path, "r") as file:
         content = file.read()

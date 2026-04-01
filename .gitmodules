@@ -1,0 +1,3 @@
+[submodule "paper"]
+	path = paper
+	url = git@github-szy233:ntujiachen002-star/Formatting-Instructions-For-NeurIPS-2026.git
