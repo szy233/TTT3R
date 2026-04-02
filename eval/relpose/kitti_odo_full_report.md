@@ -259,11 +259,11 @@ Seq 01 (1101 frames, highway driving) is an extreme outlier:
 | Method | Seq 01 ATE Mean | Seq 01 ATE RMSE | All-seq Mean | All-seq RMSE | Mean excl. 01 |
 |--------|-----------------|-----------------|--------------|--------------|---------------|
 | cut3r | 600.32 | 659.71 | 192.84 | 212.59 | 152.09 |
-| brake | 643.76 | 723.75 | 166.89 | 185.68 | 119.20 |
+| brake | 643.76 | 723.75 | 166.89 | 185.68 | 119.21 |
 | ortho | 642.26 | 714.73 | 154.10 | 170.03 | 105.29 |
-| ddd3r_g1 | 449.58 | 551.02 | 149.05 | 166.48 | 119.01 |
-| ddd3r_g2 | 642.42 | 718.11 | 155.19 | 172.24 | 106.47 |
-| auto_warmup_linear | 466.98 | 581.78 | 152.33 | 170.00 | 120.87 |
+| ddd3r_g1 | 449.58 | 551.02 | 149.05 | 166.48 | 115.62 |
+| ddd3r_g2 | 642.42 | 718.11 | 155.19 | 172.24 | 106.20 |
+| auto_warmup_linear | 466.98 | 581.78 | 152.33 | 170.00 | 117.74 |
 
 All methods struggle on highway driving (long straight segments, minimal features). Brake and ortho actually **regress** vs cut3r on this sequence. `ddd3r_g1` and `auto_warmup_linear` partially mitigate the issue.
 
@@ -293,7 +293,7 @@ The auto-gamma variants attempt to learn γ adaptively:
 
 `auto_warmup_linear` is the most reliable auto-gamma variant.
 
-### 5.5 Short vs Long Sequences
+### 5.6 Short vs Long Sequences
 
 | Length | Best Method | ATE |
 |--------|-------------|-----|
@@ -303,7 +303,7 @@ The auto-gamma variants attempt to learn γ adaptively:
 
 On short sequences (03, 04), ortho-family methods show massive gains (e.g., seq 03: cut3r 163.6 → ortho 24.8, **-84.8%**). On long sequences, auto-warmup methods provide more consistent improvement.
 
-### 5.6 Brake Paradox
+### 5.7 Brake Paradox
 
 Brake shows a paradoxical pattern: excellent on some sequences (seq 03: 39.1, seq 06: 60.0) but **catastrophic on seq 01** (723.7 > cut3r 659.7). This is consistent with the brake's known limitation — it relies on consecutive-frame cosine similarity, which is unreliable on highway driving where update directions change rapidly.
 
