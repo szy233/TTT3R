@@ -81,7 +81,8 @@ bash eval/run_auto_gamma_eval.sh 0,1
 | `docs/research_progress.md` | 完整研究日志 |
 | `eval/run_ddd3r_eval.sh` | 统一评测脚本 |
 | `eval/run_auto_gamma_eval.sh` | Auto-gamma 并行评测 |
-| `analysis/` | A1-A7 分析脚本 + 可视化 |
+| `analysis/` | A1-A12 分析脚本 + 可视化 |
+| `eval/relpose/kitti_odo_full_report.md` | KITTI full 14methods×11seqs 完整报告（zjc 分支） |
 
 ## Paths
 - Model weights: `model/cut3r_512_dpt_4_64.pth`
@@ -119,9 +120,10 @@ blend 0 12 && blend 1 12 && bash eval/run_auto_gamma_eval.sh 0,1 ; blend 0 60 &&
 - ✅ ScanNet scaling curve (200f/500f × 6 methods) — 完整 4 点曲线
 - ✅ Auto-gamma all variants (warmup, steep, entropy)
 - ✅ Drift energy scaling analysis (A4b) — drift_e 不随长度变化（场景固有属性）
+- ✅ KITTI Odom full eval (14 methods × 11 seqs, zjc 分支) — ddd3r_g1 ATE best (-22.7%), ortho r_err best (-58.6%)
 - 🔄 Drift energy adaptive (ddd3r_de): TUM 0.057 ✅, ScanNet running
 - ✅ Paper all sections initial draft
-- ⬜ 根据 ddd3r_de 结果更新 paper method/experiments sections
+- ⬜ 根据 ddd3r_de + KITTI full 结果更新 paper method/experiments sections
 - ⬜ .bib file (cite keys are placeholders)
 - ⬜ Figures (scatter plot, method diagram, qualitative vis)
 - ⬜ Appendix (per-scene tables, full hyperparameter sweeps)
