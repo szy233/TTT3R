@@ -361,7 +361,7 @@ Brake shows a paradoxical pattern: excellent on some sequences (seq 03: 39.1, se
 |------|--------|
 | Dataset | KITTI Odometry (Geiger et al., CVPR 2012) |
 | Sequences | 00–10 (all 11 sequences with ground truth poses) |
-| Frame count | 271–4661 per sequence, 22,410 total |
+| Frame count | 271–4661 per sequence, 23,201 total |
 | Frame stride | 1 (every frame used) |
 | Image source | Left camera (image_2), grayscale converted |
 | Ground truth | KITTI official pose files (12-float per line, 3×4 projection matrix) |
