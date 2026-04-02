@@ -22,6 +22,8 @@ state_feat = new * mask1 + old * (1-mask1)
 | `ddd3r_constant` | ttt3r × α | α⊥=α∥=α special case |
 | `ddd3r_brake` | ttt3r × stability brake | baseline (一阶近似) |
 | `ddd3r` | directional decomposition | DDD3R with α⊥>α∥, γ≥0 |
+| `ddd3r` + `--auto_gamma entropy` | attention entropy adaptive | α_∥^(t) = h̄_t·α⊥ + (1-h̄_t)·α∥ |
+| `ddd3r` + `--auto_gamma drift_energy` | drift energy adaptive | α_∥^(t) = e_t·α⊥ + (1-e_t)·α∥, directly measures drift |
 
 ## CLI 参数
 
@@ -34,6 +36,7 @@ state_feat = new * mask1 + old * (1-mask1)
 | γ | `--gamma` | 0.0 |
 | τ (brake) | `--brake_tau` | 2.0 |
 | auto_gamma | `--auto_gamma` | `""` |
+| β_entropy | `--entropy_ema_beta` | 0.95 |
 | auto_gamma_warmup | `--auto_gamma_warmup` | 30 |
 | auto_gamma_max | `--auto_gamma_max` | 3.0 |
 | auto_gamma_k | `--auto_gamma_k` | 10.0 |
@@ -41,7 +44,7 @@ state_feat = new * mask1 + old * (1-mask1)
 
 Old CLI args (`--ortho_alpha_novel`, `--ortho_beta`, etc.) still work as hidden aliases.
 
-**Auto-gamma modes**: `warmup_linear`, `warmup_threshold` (sequence-level), `steep_sigmoid`, `steep_clamp` (per-frame)
+**Auto-gamma modes**: `warmup_linear`, `warmup_threshold` (sequence-level), `steep_sigmoid`, `steep_clamp` (per-frame), `entropy` (attention entropy adaptive, zero-cost)
 
 ## Eval
 
@@ -57,6 +60,8 @@ bash eval/run_ddd3r_eval.sh <GPU> <DATASET> <METHOD>
 #           ddd3r_auto_warmup_linear, ddd3r_auto_warmup_threshold
 #           ddd3r_auto_steep_sigmoid, ddd3r_auto_steep_sigmoid_k20
 #           ddd3r_auto_steep_clamp, ddd3r_auto_steep_clamp_tight
+#           ddd3r_entropy, ddd3r_entropy_b{N} (attention entropy adaptive)
+#           ddd3r_de (drift energy adaptive)
 
 # Auto-gamma parallel eval
 bash eval/run_auto_gamma_eval.sh 0,1
@@ -110,14 +115,13 @@ blend 0 12 && blend 1 12 && bash eval/run_auto_gamma_eval.sh 0,1 ; blend 0 60 &&
 2. ScanNet scene skip: GT contains -inf, evo eigh fails. Consistent across configs.
 
 ## Next Steps
-- 🔄 ScanNet scaling curve (200f/500f × 6 methods)
-- 🔄 Auto-gamma experiment: warmup 2/6 done, steep 4/6 running (GPU0: sigmoid/sigmoid_k20, GPU1: clamp/clamp_tight)
-- ✅ Abstract + Introduction — `paper/neurips_2026.tex`, `paper/sec/introduction.tex`
-- ✅ Related work — `paper/sec/related.tex`
-- ✅ Analysis section (M1→M2→M3) — `paper/sec/analysis.tex`
-- ✅ Method section — `paper/sec/method.tex`
-- ✅ Experiments section — `paper/sec/experiments.tex`
-- ✅ Conclusion — `paper/sec/conclusion.tex`
+- ✅ Attention entropy adaptive (ddd3r_entropy: TUM 0.070, ScanNet 0.294, KITTI seq04 4.93)
+- ✅ ScanNet scaling curve (200f/500f × 6 methods) — 完整 4 点曲线
+- ✅ Auto-gamma all variants (warmup, steep, entropy)
+- ✅ Drift energy scaling analysis (A4b) — drift_e 不随长度变化（场景固有属性）
+- 🔄 Drift energy adaptive (ddd3r_de): TUM 0.057 ✅, ScanNet running
+- ✅ Paper all sections initial draft
+- ⬜ 根据 ddd3r_de 结果更新 paper method/experiments sections
 - ⬜ .bib file (cite keys are placeholders)
 - ⬜ Figures (scatter plot, method diagram, qualitative vis)
 - ⬜ Appendix (per-scene tables, full hyperparameter sweeps)

@@ -1,6 +1,6 @@
 # TTT3R — 研究进展全记录
 
-> 最后更新：2026-03-29
+> 最后更新：2026-04-02
 
 ## 项目概述
 
@@ -320,6 +320,31 @@ state = old + α_novel × novel_comp + α_drift × drift_comp
 > **结果**：TUM pose -66.5% (long) / -55.4% (short, vs TTSA3R -44.2%), video depth -31~59%, 7scenes Comp -54%，零额外 overhead; ScanNet 90f -8% (ortho) / -33% (ttt3r)
 >
 > **贡献**：(1) 揭示 over-update 普遍存在 + scalar gate 退化（双重验证）; (2) 发现方向性本质与 dataset-dependent drift; (3) Delta Orthogonalization: train-free, plug-in, zero overhead; (4) TUM/depth SOTA, 短序列超越 TTSA3R
+
+### Phase 5：Attention Entropy Adaptive（2026-04-02 ~）
+
+**动机**：Phase 4 的 auto-gamma 方案（warmup / steep_sigmoid / steep_clamp）都依赖 drift energy ē 来调节 γ 或 α_∥，但 drift energy 本身需要 EMA 方向估计收敛后才可靠，而且其物理含义("delta 与 drift 方向的对齐度")不直接对应"scene 是否在变化"。
+
+**核心观察**：Cross-attention 每步已经算好 attention distribution（state 查 image），其 entropy 是一个 **zero-cost** 的场景变化指示器：
+- Entropy 高 → attention 分散在多个 key → scene 在变化 / 新信息多 → drift 可能有用，少 suppress
+- Entropy 低 → attention 集中在少数 key → 已收敛 / 信息饱和 → drift 有害，多 suppress
+
+**方案**：
+```
+h_t = mean_over_layers_heads( H(softmax(attn_logits)) / log(N_keys) )   ∈ [0, 1]
+h̄_t = β_h · h̄_{t-1} + (1-β_h) · h_t                                   (EMA smooth)
+α_∥^(t) = h̄_t · α_⊥ + (1-h̄_t) · α_∥
+```
+- h̄→1 (高 entropy, scene 变化) → α_∥ → α_⊥ = 0.5（接近 isotropic，像 ScanNet）
+- h̄→0 (低 entropy, 已收敛) → α_∥ → 0.05（aggressive decomposition，像 TUM）
+
+**优势 vs auto-gamma**：
+1. 完全去掉 γ 超参
+2. 信号来自 attention（已有的计算），不依赖 drift energy 的收敛
+3. 物理含义更直接：entropy 直接度量"当前帧带来多少新信息"
+4. 实现为 `--auto_gamma entropy`，CLI: `--entropy_ema_beta 0.95`
+
+**状态**：⬜ 待验证（TUM + ScanNet 1000f）
 
 ---
 

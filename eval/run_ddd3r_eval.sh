@@ -26,7 +26,8 @@ export CUDA_VISIBLE_DEVICES=$GPU
 export PYTHONPATH=src
 PY=${DDD3R_PYTHON:-/home/szy/anaconda3/envs/ttt3r/bin/python}
 WEIGHTS="model/cut3r_512_dpt_4_64.pth"
-PORT=$((29560 + GPU))
+PORT_OFFSET=${DDD3R_PORT_OFFSET:-0}
+PORT=$((29560 + GPU + PORT_OFFSET))
 
 # Parse method → model_update_type + DDD3R params
 case "$METHOD" in
@@ -88,12 +89,28 @@ case "$METHOD" in
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma steep_clamp --auto_gamma_lo 0.35 --auto_gamma_hi 0.55"
         ;;
+    # --- Attention entropy adaptive ---
+    ddd3r_entropy)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma entropy"
+        ;;
+    ddd3r_de)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_energy"
+        ;;
+    ddd3r_entropy_b*)
+        # e.g. ddd3r_entropy_b9 → entropy_ema_beta=0.9, ddd3r_entropy_b99 → 0.99
+        EBETA=$(echo "$METHOD" | sed 's/ddd3r_entropy_b//' | sed 's/^/0./')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma entropy --entropy_ema_beta $EBETA"
+        ;;
     *)
         echo "Unknown method: $METHOD"
         echo "Available: cut3r, ttt3r, ddd3r_constant, ddd3r_constant_p{N}, ddd3r_brake, ddd3r, ddd3r_g{N}"
         echo "  Auto-gamma: ddd3r_auto_warmup_linear, ddd3r_auto_warmup_threshold"
         echo "              ddd3r_auto_steep_sigmoid, ddd3r_auto_steep_sigmoid_k20"
         echo "              ddd3r_auto_steep_clamp, ddd3r_auto_steep_clamp_tight"
+        echo "  Entropy:    ddd3r_entropy, ddd3r_entropy_b{N}"
         exit 1
         ;;
 esac

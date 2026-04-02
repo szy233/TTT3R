@@ -2,6 +2,12 @@ import os
 import glob
 from tqdm import tqdm
 
+
+def _skip_if_done(save_dir, seq):
+    """Skip scene if eval_metric.txt already exists (resume support)."""
+    return os.path.exists(os.path.join(save_dir, f"{seq}_eval_metric.txt"))
+
+
 # Define the merged dataset metadata dictionary
 dataset_metadata = {
     "davis": {
@@ -178,7 +184,7 @@ scannet_configs = {
         "seq_list": None,
         "full_seq": True,
         "mask_path_seq_func": lambda mask_path, seq: None,
-        "skip_condition": None,
+        "skip_condition": _skip_if_done,
         "process_func": lambda args, img_path: process_scannet(args, img_path),
     }
     for num in scannet_numbers
@@ -199,7 +205,7 @@ tum_configs = {
         "seq_list": None,
         "full_seq": True,
         "mask_path_seq_func": lambda mask_path, seq: None,
-        "skip_condition": None,
+        "skip_condition": _skip_if_done,
         "process_func": None,
         }
     for num in tum_numbers
@@ -218,7 +224,7 @@ dataset_metadata["kitti_odom"] = {
     "seq_list": None,
     "full_seq": True,
     "mask_path_seq_func": lambda mask_path, seq: None,
-    "skip_condition": None,
+    "skip_condition": _skip_if_done,
 }
 
 

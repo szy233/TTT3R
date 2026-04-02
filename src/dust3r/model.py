@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from collections import OrderedDict
@@ -1027,7 +1028,12 @@ class ARCroco3DStereo(CroCoNet):
                     g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
                 elif update_type == "ddd3r":
-                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    cross_attn_cat = torch.cat(cross_attn_state, dim=0)
+                    # Compute attention entropy for adaptive α_∥ (before rearrange)
+                    if getattr(self.config, 'auto_gamma', '') == 'entropy':
+                        entropy_beta = getattr(self.config, 'entropy_ema_beta', getattr(self.config, 'beta_ema', 0.95))
+                        self._compute_attn_entropy(cross_attn_cat, ortho_state, entropy_beta)
+                    cross_attn_state = rearrange(cross_attn_cat, 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
                     updated = self._delta_ortho_update(
@@ -1489,6 +1495,56 @@ class ARCroco3DStereo(CroCoNet):
         return state_feat + alpha * (delta * scale)
 
     @staticmethod
+    def _compute_attn_entropy(cross_attn_raw, ortho_state, beta):
+        """Compute normalized attention entropy from pre-softmax cross-attention logits.
+
+        Memory-efficient: processes per-layer to avoid materializing full [L,H,N,K] float32.
+        Uses H = -sum(p*log(p)) = log_sum_exp - mean(logits under softmax) identity via
+        log_softmax to fuse softmax+log into one pass.
+
+        Args:
+            cross_attn_raw: list of [1, n_heads, n_state, n_img] pre-softmax logits
+                            OR already-concatenated tensor [n_layers, n_heads, n_state, n_img]
+            ortho_state: dict to store/read EMA entropy
+            beta: EMA decay for smoothing entropy
+
+        Returns:
+            h_bar: EMA-smoothed normalized entropy [1, n_state, 1], values in [0, 1]
+        """
+        if isinstance(cross_attn_raw, (list, tuple)):
+            layers = cross_attn_raw
+        else:
+            layers = [cross_attn_raw[i:i+1] for i in range(cross_attn_raw.shape[0])]
+
+        n_keys = layers[0].shape[-1]
+        max_entropy = math.log(n_keys) if n_keys > 1 else 1.0
+        # Accumulate entropy per-layer to save memory
+        entropy_sum = None
+        n_layers = 0
+        for logits in layers:  # each [1, H, n_state, n_img]
+            # log_softmax fuses exp+log into one pass, saves one full-size intermediate
+            log_p = logits.float().log_softmax(dim=-1)  # [1, H, n_state, n_img]
+            p = log_p.exp()
+            ent = -(p * log_p).sum(dim=-1)  # [1, H, n_state]
+            if entropy_sum is None:
+                entropy_sum = ent
+            else:
+                entropy_sum = entropy_sum + ent
+            n_layers += 1
+        # Average over layers and heads, normalize
+        h_t = (entropy_sum / (n_layers * max_entropy)).mean(dim=(0, 1))  # [n_state]
+        h_t = h_t.unsqueeze(0).unsqueeze(-1)  # [1, n_state, 1]
+
+        # EMA smooth
+        h_ema = ortho_state.get('entropy_ema', None)
+        if h_ema is None:
+            h_ema = h_t.detach().clone()
+        else:
+            h_ema = beta * h_ema + (1.0 - beta) * h_t.detach()
+        ortho_state['entropy_ema'] = h_ema
+        return h_ema
+
+    @staticmethod
     def _delta_ortho_update(state_feat, new_state_feat, ortho_state, config):
         """
         Delta Orthogonalization (Drift Subtraction):
@@ -1605,6 +1661,22 @@ class ARCroco3DStereo(CroCoNet):
             ag_hi = float(getattr(config, 'auto_gamma_hi', 0.6))
             w = ((ema_drift_e - ag_lo) / max(ag_hi - ag_lo, 1e-8)).clamp(0.0, 1.0)
             effective_alpha_drift = alpha_novel * w + alpha_drift * (1.0 - w)
+
+        # --- Approach D: Drift energy adaptive α_∥ ---
+        # e_t high (consistent drift) → α_∥ → α_⊥ (preserve drift, like constant)
+        # e_t low  (diverse updates)   → α_∥ stays small (suppress drift, like ortho)
+        elif auto_gamma == 'drift_energy':
+            effective_alpha_drift = ema_drift_e.mean() * alpha_novel + (1.0 - ema_drift_e.mean()) * alpha_drift
+
+        # --- Approach C: Attention entropy adaptive α_∥ ---
+        # h̄_t high (scene changing) → α_∥ → α_⊥ (less suppression)
+        # h̄_t low  (converged)      → α_∥ stays small (aggressive decomposition)
+        elif auto_gamma == 'entropy':
+            h_bar = ortho_state.get('entropy_ema', None)
+            if h_bar is not None:
+                effective_alpha_drift = h_bar * alpha_novel + (1.0 - h_bar) * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel  # first frame fallback
 
         # --- Original steep adaptive (ē^γ) ---
         elif gamma > 0 or adaptive_mode == 'steep':
@@ -2306,7 +2378,11 @@ class ARCroco3DStereo(CroCoNet):
                 elif update_type == "ddd3r":
                     # Delta Orthogonalization: decompose update into
                     # systematic drift (suppress) + novel direction (preserve)
-                    cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    cross_attn_cat = torch.cat(cross_attn_state, dim=0)
+                    if getattr(self.config, 'auto_gamma', '') == 'entropy':
+                        entropy_beta = getattr(self.config, 'entropy_ema_beta', getattr(self.config, 'beta_ema', 0.95))
+                        self._compute_attn_entropy(cross_attn_cat, ortho_state, entropy_beta)
+                    cross_attn_state = rearrange(cross_attn_cat, 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
                     ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
                     updated = self._delta_ortho_update(
@@ -2687,8 +2763,12 @@ class ARCroco3DStereo(CroCoNet):
                     g_geo = self._geo_consistency_gate(curr_depth, geo_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * alpha * g_geo
                 elif update_type == "ddd3r":
+                    cross_attn_cat = torch.cat(list(cross_attn_state_raw), dim=0)
+                    if getattr(self.config, 'auto_gamma', '') == 'entropy':
+                        entropy_beta = getattr(self.config, 'entropy_ema_beta', getattr(self.config, 'beta_ema', 0.95))
+                        self._compute_attn_entropy(cross_attn_cat, ortho_state, entropy_beta)
                     cross_attn_rearr = rearrange(
-                        torch.cat(list(cross_attn_state_raw), dim=0),
+                        cross_attn_cat,
                         'l h nstate nimg -> 1 nstate nimg (l h)'
                     )
                     state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))

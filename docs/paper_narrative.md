@@ -69,3 +69,4 @@ S_t = S_{t-1} + β_t (α⊥ · δ⊥ + α∥ · δ∥)
 - **默认配置**: (α⊥, α∥, β_ema, γ) = (0.5, 0.05, 0.95, 0)，γ>0 作为 ablation
 - **Steep 公式**: `w = e^γ`（保守，已对齐代码）。γ→0 isotropic, γ→∞ pure ortho。实验证明没有单一最优 γ，steep 作为 spectrum 展示而非推荐配置
 - **Auto-gamma**: 两类方案（warmup sequence-level / steep 公式修复），解决 cross-dataset γ 选择问题。实验进行中
+- **Attention Entropy Adaptive (auto_gamma=entropy)**: 第三类方案，用 cross-attention 的归一化 entropy 直接插值 α_∥。h̄_t = EMA(H(attn)/log(N_k))，α_∥^(t) = h̄_t·α_⊥ + (1-h̄_t)·α_∥。entropy 高（scene 在变化）→ α_∥→α_⊥（less suppression, isotropic）；entropy 低（已收敛）→ α_∥ 保持小（aggressive decomposition）。zero-cost：cross-attention 每步已经算好，entropy 只需 softmax+log 额外计算。完全去掉 γ 超参。
