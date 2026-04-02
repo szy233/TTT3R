@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 import torch
 import argparse
-from contextlib import nullcontext
 
 from copy import deepcopy
 from eval.relpose.metadata import dataset_metadata
@@ -54,15 +53,29 @@ def get_args_parser():
         default="cut3r",
         help="model type for state update strategy: cut3r, ttt3r, ttt3r_joint, etc.",
     )
-    parser.add_argument(
-        "--alpha_drift",
-        type=float,
-        default=0.15,
-        help="Residual update floor for stability brake. Use 0.0 for ablation.",
-    )
+    # DDD3R unified parameters (paper notation)
+    parser.add_argument("--alpha", type=float, default=0.5, help="DDD3R constant dampening rate")
+    parser.add_argument("--alpha_perp", type=float, default=0.5, help="DDD3R novel component coefficient")
+    parser.add_argument("--alpha_parallel", type=float, default=0.05, help="DDD3R drift component coefficient")
+    parser.add_argument("--beta_ema", type=float, default=0.95, help="DDD3R EMA decay for drift direction")
+    parser.add_argument("--gamma", type=float, default=0.0, help="DDD3R steep adaptive exponent (0=fixed, >0=drift-adaptive)")
+    parser.add_argument("--brake_tau", type=float, default=2.0, help="DDD3R brake temperature")
+    parser.add_argument("--warmup_t0", type=int, default=0, help="DDD3R: no drift suppression for first T0 frames")
+    parser.add_argument("--warmup_window", type=int, default=0, help="DDD3R: linear ramp window after T0")
+    # Keep for abandoned methods
     parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
     parser.add_argument("--geo_gate_tau", type=float, default=2.0, help="Layer 3 geo gate temperature")
     parser.add_argument("--geo_gate_freq_cutoff", type=int, default=4, help="Layer 3 geo gate freq cutoff denominator")
+    # Backward-compat aliases (hidden)
+    parser.add_argument("--random_gate_p", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_alpha_novel", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_alpha_drift", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_beta", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_gamma", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_adaptive", type=str, default="", help=argparse.SUPPRESS)
+    parser.add_argument("--momentum_tau", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_warmup_t0", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--ortho_warmup_window", type=int, default=None, help=argparse.SUPPRESS)
 
     parser.add_argument(
         "--pose_eval_stride", default=1, type=int, help="stride for pose evaluation"
@@ -84,62 +97,31 @@ def get_args_parser():
     parser.add_argument("--revisit", type=int, default=1)
     parser.add_argument("--freeze_state", action="store_true", default=False)
     parser.add_argument("--solve_pose", action="store_true", default=False)
-    parser.add_argument(
-        "--amp_dtype",
-        type=str,
-        default="auto",
-        choices=["auto", "bf16", "fp16", "fp32"],
-        help="Autocast dtype for inference speed. Use bf16 on H200.",
-    )
-    parser.add_argument(
-        "--tf32",
-        type=int,
-        default=1,
-        help="Enable TF32 matmul/cuDNN on Ampere+ GPUs (1=True, 0=False).",
-    )
-    parser.add_argument(
-        "--cudnn_benchmark",
-        type=int,
-        default=1,
-        help="Enable cuDNN benchmark auto-tuner (1=True, 0=False).",
-    )
-    parser.add_argument(
-        "--inference_mode",
-        type=int,
-        default=1,
-        help="Use torch.inference_mode during forward pass (1=True, 0=False).",
-    )
     return parser
 
 
-def _setup_runtime(args):
-    args.tf32 = bool(args.tf32)
-    args.cudnn_benchmark = bool(args.cudnn_benchmark)
-    args.inference_mode = bool(args.inference_mode)
-
-    torch.set_grad_enabled(False)
-    if torch.cuda.is_available():
-        torch.backends.cuda.matmul.allow_tf32 = args.tf32
-        torch.backends.cudnn.allow_tf32 = args.tf32
-        torch.backends.cudnn.benchmark = args.cudnn_benchmark
-        torch.set_float32_matmul_precision("high")
-
-    if args.amp_dtype == "auto":
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
-            args.amp_dtype = "bf16"
-        elif torch.cuda.is_available():
-            args.amp_dtype = "fp16"
-        else:
-            args.amp_dtype = "fp32"
-
-
-def _autocast_ctx(args, device):
-    if args.amp_dtype == "fp32":
-        return nullcontext()
-    if "cuda" not in str(device):
-        return nullcontext()
-    dtype = torch.bfloat16 if args.amp_dtype == "bf16" else torch.float16
-    return torch.autocast(device_type="cuda", dtype=dtype)
+def _resolve_ddd3r_aliases(args):
+    """Map old CLI arg names to new ones (backward compat)."""
+    if args.random_gate_p is not None and args.alpha == 0.5:
+        args.alpha = args.random_gate_p
+    if args.ortho_alpha_novel is not None:
+        args.alpha_perp = args.ortho_alpha_novel
+    if args.ortho_alpha_drift is not None:
+        args.alpha_parallel = args.ortho_alpha_drift
+    if args.ortho_beta is not None:
+        args.beta_ema = args.ortho_beta
+    if args.ortho_gamma is not None:
+        args.gamma = args.ortho_gamma
+    if args.momentum_tau is not None:
+        args.brake_tau = args.momentum_tau
+    if args.ortho_warmup_t0 is not None:
+        args.warmup_t0 = args.ortho_warmup_t0
+    if args.ortho_warmup_window is not None:
+        args.warmup_window = args.ortho_warmup_window
+    # Legacy: ortho_adaptive="steep" → set gamma if not already set
+    if args.ortho_adaptive == 'steep' and args.gamma == 0.0:
+        args.gamma = args.ortho_gamma if args.ortho_gamma is not None else 2.0
+    return args
 
 
 def eval_pose_estimation(args, model, save_dir=None):
@@ -216,10 +198,7 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
                 )
 
                 start = time.time()
-                mode_ctx = torch.inference_mode if args.inference_mode else torch.no_grad
-                with mode_ctx():
-                    with _autocast_ctx(args, device):
-                        outputs, _ = inference_recurrent_lighter(views, model, device)
+                outputs, _ = inference_recurrent_lighter(views, model, device)
                 end = time.time()
                 fps = len(filelist) / (end - start)
                 print(f"Finished pose estimation for {args.eval_dataset} {seq: <16}, FPS: {fps:.2f}")
@@ -331,7 +310,7 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
 if __name__ == "__main__":
     args = get_args_parser()
     args = args.parse_args()
-    _setup_runtime(args)
+    _resolve_ddd3r_aliases(args)
     add_path_to_dust3r(args.weights)
     from dust3r.utils.image import load_images_for_eval as load_images
     from dust3r.post_process import estimate_focal_knowing_depth
@@ -469,13 +448,13 @@ if __name__ == "__main__":
 
         if solve_pose:
             pts3ds_self = [
-                output["pts3d_in_self_view"].float().cpu() for output in outputs["pred"]
+                output["pts3d_in_self_view"].cpu() for output in outputs["pred"]
             ]
             pts3ds_other = [
-                output["pts3d_in_other_view"].float().cpu() for output in outputs["pred"]
+                output["pts3d_in_other_view"].cpu() for output in outputs["pred"]
             ]
-            conf_self = [output["conf_self"].float().cpu() for output in outputs["pred"]]
-            conf_other = [output["conf"].float().cpu() for output in outputs["pred"]]
+            conf_self = [output["conf_self"].cpu() for output in outputs["pred"]]
+            conf_other = [output["conf"].cpu() for output in outputs["pred"]]
             pr_poses, focal, pp = recover_cam_params(
                 torch.cat(pts3ds_self, 0),
                 torch.cat(pts3ds_other, 0),
@@ -486,16 +465,16 @@ if __name__ == "__main__":
         else:
 
             pts3ds_self = [
-                output["pts3d_in_self_view"].float().cpu() for output in outputs["pred"]
+                output["pts3d_in_self_view"].cpu() for output in outputs["pred"]
             ]
             pts3ds_other = [
-                output["pts3d_in_other_view"].float().cpu() for output in outputs["pred"]
+                output["pts3d_in_other_view"].cpu() for output in outputs["pred"]
             ]
-            conf_self = [output["conf_self"].float().cpu() for output in outputs["pred"]]
-            conf_other = [output["conf"].float().cpu() for output in outputs["pred"]]
+            conf_self = [output["conf_self"].cpu() for output in outputs["pred"]]
+            conf_other = [output["conf"].cpu() for output in outputs["pred"]]
             pts3ds_self = torch.cat(pts3ds_self, 0)
             pr_poses = [
-                pose_encoding_to_camera(pred["camera_pose"].clone()).float().cpu()
+                pose_encoding_to_camera(pred["camera_pose"].clone()).cpu()
                 for pred in outputs["pred"]
             ]
             pr_poses = torch.cat(pr_poses, 0)
@@ -527,10 +506,18 @@ if __name__ == "__main__":
         )
 
     model = ARCroco3DStereo.from_pretrained(args.weights)
-    
-    # set model type and frequency-domain hyperparameters
+
+    # set model type and DDD3R hyperparameters
     model.config.model_update_type = args.model_update_type
-    model.config.alpha_drift = args.alpha_drift
+    model.config.alpha = args.alpha
+    model.config.alpha_perp = args.alpha_perp
+    model.config.alpha_parallel = args.alpha_parallel
+    model.config.beta_ema = args.beta_ema
+    model.config.gamma = args.gamma
+    model.config.brake_tau = args.brake_tau
+    model.config.warmup_t0 = args.warmup_t0
+    model.config.warmup_window = args.warmup_window
+    # Keep for abandoned methods
     model.config.spectral_temperature = args.spectral_temperature
     model.config.geo_gate_tau = args.geo_gate_tau
     model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
