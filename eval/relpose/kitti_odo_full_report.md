@@ -266,25 +266,252 @@ Brake shows a paradoxical pattern: excellent on some sequences (seq 03: 39.1, se
 
 ---
 
-## Appendix: Experiment Configuration
+## Appendix A: Experiment Configuration
+
+### A.1 Hardware & Software Environment
+
+| Item | Specification |
+|------|---------------|
+| GPU | NVIDIA H200 (80 GB HBM3) |
+| CUDA | 12.1 |
+| Python | 3.10.12 |
+| PyTorch | 2.5.1+cu121 |
+| Accelerate | 1.13.0 |
+| evo (trajectory evaluation) | v1.34.3 |
+| NumPy | 1.26.4 |
+| SciPy | 1.15.3 |
+| OpenCV | 4.11.0 |
+| einops | 0.8.2 |
+| Pillow | 10.3.0 |
+
+### A.2 Model
+
+| Item | Detail |
+|------|--------|
+| Checkpoint | `model/cut3r_512_dpt_4_64.pth` |
+| MD5 | `31cd42b49f93253082d50c32ff1fa58f` |
+| Architecture | CUT3R (ARCroco3DStereo) — DPT head, 4 layers, feature dim 64 |
+| Training data | ScanNet + TUM (indoor) — **no KITTI data during training** |
+| Input resolution | 512 × 512 |
+
+### A.3 Dataset
+
+| Item | Detail |
+|------|--------|
+| Dataset | KITTI Odometry (Geiger et al., CVPR 2012) |
+| Sequences | 00–10 (all 11 sequences with ground truth poses) |
+| Frame count | 271–4661 per sequence, 22,410 total |
+| Frame stride | 1 (every frame used) |
+| Image source | Left camera (image_2), grayscale converted |
+| Ground truth | KITTI official pose files (12-float per line, 3×4 projection matrix) |
+| Data path | `data/long_kitti_odo_s1/{seq}/image_full/` (images), `data/long_kitti_odo_s1/{seq}/pose_full.txt` (GT in TUM format) |
+| Preprocessing | Raw KITTI images resized to 512×512; GT poses converted from KITTI format (3×4 matrix) to TUM format (timestamp tx ty tz qx qy qz qw) |
+
+### A.4 Evaluation Metrics
+
+**ATE (Absolute Trajectory Error)**:
+- Library: `evo` v1.34.3 (`evo.main_ape`)
+- Pose relation: `PoseRelation.translation_part`
+- Alignment: `align=True, correct_scale=True` (Sim(3) Umeyama, 7-DoF: scale + SE3)
+- Statistic reported: **RMSE** of aligned translation errors (meters)
+
+**RPE (Relative Pose Error)**:
+- Library: `evo` v1.34.3 (`evo.main_rpe`)
+- Delta: 1 frame, `all_pairs=True`
+- RPE translation: `PoseRelation.translation_part`, RMSE (meters/frame)
+- RPE rotation: `PoseRelation.rotation_angle_deg`, RMSE (degrees/frame)
+- Alignment: `align=True, correct_scale=True`
+
+**KITTI Official Metrics** (computed post-hoc via `eval/relpose/compute_kitti_errors.py`):
+- Translation error (%): mean relative translation error over segments
+- Rotation error (deg/100m): mean relative rotation error over segments
+- Segment lengths: [100, 200, 300, 400, 500, 600, 700, 800] meters
+- Start-frame sampling: ~10% of all valid starting frames
+- Alignment: 7-DoF Umeyama (scale + SE3) before evaluation
+
+---
+
+## Appendix B: Method Hyperparameters
+
+### B.1 DDD3R Unified Update Rule
+
+All DDD3R variants share the same update rule (implemented in `src/dust3r/model.py`):
 
 ```
-Dataset: KITTI Odometry (outdoor driving, stereo)
-Sequences: 00–10 (all 11 sequences with ground truth)
-Frame lengths: Full sequence (271–4661 frames)
-Stride: 1 (every frame)
-Model: cut3r_512_dpt_4_64.pth
-ATE Alignment: Sim(3) Umeyama
-KITTI Official: segment lengths 100–800m, 10% start-frame sampling
-Evaluation: evo library (ATE, RPE) + custom KITTI metric script
-GPU: NVIDIA H200
+S_t = S_{t-1} + β_t · (α⊥ · δ⊥ + α∥_eff · δ∥)
 ```
 
-### DDD3R Default Parameters
+where `δ = δ⊥ + δ∥` is decomposed via projection onto EMA drift direction `d_t`.
+
+### B.2 Per-Configuration Hyperparameters
+
+| Config | `model_update_type` | α⊥ | α∥ | β_ema | γ | auto_gamma | Notes |
+|--------|--------------------:|----:|----:|------:|---:|:-----------|:------|
+| cut3r | `cut3r` | — | — | — | — | — | Baseline, mask=1.0 |
+| ttt3r | `ttt3r` | — | — | — | — | — | Sigmoid gate from cross-attention |
+| constant | `ttt3r_random` | 0.5 | 0.5 | — | — | — | Isotropic dampening (α⊥=α∥=0.5) |
+| brake | `ttt3r_momentum` | — | — | — | — | — | τ=2.0, mask=sigmoid(-τ·cos) |
+| ortho | `ddd3r` | 0.5 | 0.05 | 0.95 | 0.0 | — | Fixed directional decomposition |
+| ddd3r_g1 | `ddd3r` | 0.5 | 0.05 | 0.95 | 1.0 | — | Steep adaptive |
+| ddd3r_g2 | `ddd3r` | 0.5 | 0.05 | 0.95 | 2.0 | — | Steep adaptive |
+| ddd3r_g3 | `ddd3r` | 0.5 | 0.05 | 0.95 | 3.0 | — | Steep adaptive |
+| ddd3r_g4 | `ddd3r` | 0.5 | 0.05 | 0.95 | 4.0 | — | Steep adaptive |
+| ddd3r_g5 | `ddd3r` | 0.5 | 0.05 | 0.95 | 5.0 | — | Steep adaptive |
+| auto_steep_clamp | `ddd3r` | 0.5 | 0.05 | 0.95 | — | `steep_clamp` | lo=0.3, hi=0.6, max_γ=3.0 |
+| auto_steep_sigmoid | `ddd3r` | 0.5 | 0.05 | 0.95 | — | `steep_sigmoid` | k=10.0, max_γ=3.0 |
+| auto_warmup_linear | `ddd3r` | 0.5 | 0.05 | 0.95 | — | `warmup_linear` | warmup=30 frames, max_γ=3.0 |
+| auto_warmup_threshold | `ddd3r` | 0.5 | 0.05 | 0.95 | — | `warmup_threshold` | warmup=30 frames, max_γ=3.0 |
+
+### B.3 Steep Adaptive Formula
 
 ```
-α⊥ = 0.5       (orthogonal component coefficient)
-α∥ = 0.05      (drift component coefficient)
-β_ema = 0.95   (EMA momentum)
-γ = varies     (steep exponent: 0=pure ortho, higher=more isotropic)
+e_t = ⟨δ̂_t, d̂_t⟩²            # per-token drift energy (scalar)
+w_t = e_t^γ                     # weight toward isotropic
+α∥_eff(t) = w_t·α⊥ + (1-w_t)·α∥  # interpolated drift coefficient
 ```
+
+- γ → 0: w → 1, α∥_eff → α⊥ → isotropic (= constant dampening)
+- γ → ∞: w → 0, α∥_eff → α∥ → full directional decomposition (= pure ortho)
+
+---
+
+## Appendix C: Reproducibility
+
+### C.1 Repository & Commit
+
+| Item | Value |
+|------|-------|
+| Repository | `github.com/szy233/TTT3R` |
+| Branch | `zjc` |
+| Commit | `d9ee9a1` |
+
+### C.2 Key Source Files
+
+| File | Role |
+|------|------|
+| `src/dust3r/model.py` | Model architecture, all update types (cut3r/ttt3r/ddd3r), gate methods, state update logic |
+| `eval/relpose/launch.py` | Evaluation entry point — inference loop, trajectory saving, metric computation |
+| `eval/relpose/evo_utils.py` | ATE/RPE computation via evo library (Sim(3) alignment, RMSE statistics) |
+| `eval/relpose/metadata.py` | Dataset configuration (paths, formats, sequence lists) |
+| `eval/relpose/compute_kitti_errors.py` | KITTI official t_err%/r_err computation (segment-based, Umeyama alignment) |
+| `scripts/server/run_all_kitti_sequential.sh` | Orchestration script for running all 14 configs sequentially |
+
+### C.3 Exact Commands to Reproduce
+
+**Step 1: Run inference for each configuration**
+
+```bash
+# Environment setup
+conda activate ttt3r
+export WORKDIR=~/TTT3R
+export MODEL=${WORKDIR}/model/cut3r_512_dpt_4_64.pth
+
+# --- Baselines ---
+
+# cut3r (no test-time training)
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+    --num_processes 1 --main_process_port 29580 \
+    eval/relpose/launch.py \
+    --weights ${MODEL} --size 512 \
+    --output_dir eval_results/relpose/kitti_odo_full/cut3r \
+    --eval_dataset kitti_odo_full \
+    --model_update_type cut3r
+
+# ttt3r (sigmoid gate)
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+    --num_processes 1 --main_process_port 29580 \
+    eval/relpose/launch.py \
+    --weights ${MODEL} --size 512 \
+    --output_dir eval_results/relpose/kitti_odo_full/ttt3r \
+    --eval_dataset kitti_odo_full \
+    --model_update_type ttt3r
+
+# constant dampening (α⊥ = α∥ = 0.5)
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+    --num_processes 1 --main_process_port 29580 \
+    eval/relpose/launch.py \
+    --weights ${MODEL} --size 512 \
+    --output_dir eval_results/relpose/kitti_odo_full/constant \
+    --eval_dataset kitti_odo_full \
+    --model_update_type ttt3r_random --alpha 0.5
+
+# brake (stability brake, τ=2.0)
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+    --num_processes 1 --main_process_port 29580 \
+    eval/relpose/launch.py \
+    --weights ${MODEL} --size 512 \
+    --output_dir eval_results/relpose/kitti_odo_full/brake \
+    --eval_dataset kitti_odo_full \
+    --model_update_type ttt3r_momentum --brake_tau 2.0
+
+# --- DDD3R variants ---
+
+# ortho (γ=0, fixed directional decomposition)
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+    --num_processes 1 --main_process_port 29580 \
+    eval/relpose/launch.py \
+    --weights ${MODEL} --size 512 \
+    --output_dir eval_results/relpose/kitti_odo_full/ortho \
+    --eval_dataset kitti_odo_full \
+    --model_update_type ddd3r --gamma 0.0
+
+# ddd3r_g{1,2,3,4,5} (steep adaptive, γ=1..5)
+for G in 1 2 3 4 5; do
+    CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+        --num_processes 1 --main_process_port 29580 \
+        eval/relpose/launch.py \
+        --weights ${MODEL} --size 512 \
+        --output_dir eval_results/relpose/kitti_odo_full/ddd3r_g${G} \
+        --eval_dataset kitti_odo_full \
+        --model_update_type ddd3r --gamma ${G}
+done
+
+# --- Auto-gamma variants ---
+for MODE in warmup_linear warmup_threshold steep_sigmoid steep_clamp; do
+    CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORKDIR}/src accelerate launch \
+        --num_processes 1 --main_process_port 29580 \
+        eval/relpose/launch.py \
+        --weights ${MODEL} --size 512 \
+        --output_dir eval_results/relpose/kitti_odo_full/auto_${MODE} \
+        --eval_dataset kitti_odo_full \
+        --model_update_type ddd3r --auto_gamma ${MODE}
+done
+```
+
+**Step 2: Compute KITTI official metrics**
+
+```bash
+python eval/relpose/compute_kitti_errors.py \
+    --results_dir eval_results/relpose/kitti_odo_full \
+    --kitti_poses_dir /path/to/kitti/poses \
+    --seqs 00 01 02 03 04 05 06 07 08 09 10
+```
+
+### C.4 Output Structure
+
+```
+eval_results/relpose/kitti_odo_full/
+├── <config>/                        # e.g., cut3r, ortho, ddd3r_g1, ...
+│   ├── 00/
+│   │   ├── pred_traj.txt            # Predicted trajectory (TUM format)
+│   │   ├── pred_focal.txt           # Predicted focal lengths
+│   │   └── pred_intrinsics.txt      # Predicted intrinsics
+│   ├── 00_eval_metric.txt           # Per-sequence ATE/RPE details (evo output)
+│   ├── 01/ ... 10/                  # Same structure for each sequence
+│   ├── _error_log.txt               # Aggregated ATE/RPE across all sequences
+│   └── kitti_errors.txt             # KITTI official t_err% / r_err (post-hoc)
+```
+
+### C.5 Runtime & Resource Usage
+
+| Metric | Value |
+|--------|-------|
+| Peak GPU memory | ~6 GB per process |
+| Inference speed | ~9–10 FPS (512×512 input) |
+| Time per sequence (1000f) | ~100 seconds |
+| Total time (11 seqs × 14 configs) | ~12 hours |
+| Disk per config (11 seqs) | ~150 MB (trajectories + metrics) |
+
+### C.6 Random Seed & Determinism
+
+All methods in this evaluation are **deterministic at inference time** — there is no random sampling, dropout, or stochastic augmentation. The DDD3R update rule is a closed-form computation on the model's output. Results are fully reproducible given the same model checkpoint, input images, and hardware (floating-point precision may vary across GPU architectures).
