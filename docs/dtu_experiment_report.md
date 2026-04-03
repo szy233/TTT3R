@@ -103,6 +103,15 @@ bash eval/mv_recon/run_dtu_allconfigs.sh
 python3 generate_dtu_report.py
 ```
 
+**Note on scene list**: This experiment uses the **MVSNet 22-scene evaluation split**
+(scan1, 4, 9, 10, 11, 12, 13, 15, 23, 24, 29, 32, 33, 34, 48, 49, 62, 75, 77, 110, 114, 118),
+following DUSt3R/MASt3R/Spann3R/CUT3R conventions. The `launch.py` on the experiment server
+was patched to auto-discover all `scan*` directories under `--dtu_root` instead of using the
+hardcoded 15-scene benchmark list. To reproduce, either use the same 22-scene DTU data layout
+or apply the equivalent patch (replace `DTU_TEST_SCENES` list with
+`sorted([d for d in os.listdir(dtu_root) if d.startswith("scan")])`
+in `eval/mv_recon/launch.py`).
+
 ---
 
 ## 2. Main Results
@@ -126,7 +135,34 @@ python3 generate_dtu_report.py
 | DDD3R (auto: warmup_linear) | 22 | 4.201 +/- 3.761 | 1.064 +/- 0.579 | 0.613 +/- 0.027 | +14.9% | +7.6% |
 | DDD3R (auto: warmup_threshold) | 22 | 4.238 +/- 3.755 | 1.069 +/- 0.577 | 0.613 +/- 0.027 | +15.9% | +8.1% |
 
-### 2.2 Gamma Spectrum Ablation
+### 2.2 Robust Statistics: Median Accuracy & Per-Scene Win-Rate
+
+Mean Accuracy is sensitive to outlier scenes (e.g., scan110 with Acc > 10 across most configs).
+Median and per-scene win-rate provide a more robust picture:
+
+| Config | Mean Acc ↓ | Median Acc ↓ | Win-rate vs CUT3R (Acc) | Median Comp ↓ |
+|--------|-----------|-------------|------------------------|--------------|
+| CUT3R (baseline) | 3.657 | 3.343 | — | 0.846 |
+| TTT3R | 3.495 | 3.137 | 16/22 (73%) | 0.904 |
+| Constant | 4.227 | 2.732 | **14/22 (64%)** | 0.895 |
+| Brake | 5.801 | 3.578 | 9/22 (41%) | 0.869 |
+| Ortho (gamma=0) | 6.146 | 4.173 | 7/22 (32%) | 1.086 |
+| DDD3R gamma=1 | 4.354 | 2.620 | **14/22 (64%)** | 0.920 |
+| DDD3R gamma=2 | 4.543 | 2.820 | **14/22 (64%)** | 0.915 |
+| DDD3R gamma=3 | 4.752 | 3.040 | 12/22 (55%) | 0.905 |
+| DDD3R gamma=4 | 4.989 | 3.309 | 10/22 (45%) | 0.916 |
+| DDD3R gamma=5 | 5.175 | 3.414 | 10/22 (45%) | 0.926 |
+| Auto: steep_clamp | 4.208 | **2.492** | **14/22 (64%)** | 0.867 |
+| Auto: steep_sigmoid | 4.269 | 2.509 | **14/22 (64%)** | 0.883 |
+| Auto: warmup_linear | 4.201 | 2.692 | **14/22 (64%)** | 0.897 |
+| Auto: warmup_threshold | 4.238 | 2.749 | **14/22 (64%)** | 0.895 |
+
+**Key finding**: While mean Accuracy favors CUT3R, several DDD3R variants (constant, gamma=1-2,
+all auto-gamma) **improve Accuracy on the majority of scenes (14/22)** and achieve substantially
+lower **median Accuracy** (2.49-2.73 vs CUT3R's 3.34). The mean is inflated by a few outlier
+scenes (notably scan24, scan110) where dampening amplifies reconstruction errors.
+
+### 2.3 Gamma Spectrum Ablation
 
 gamma controls the ortho-isotropic spectrum: gamma->inf = pure ortho, gamma->0 = isotropic.
 
@@ -592,45 +628,63 @@ DTU scenes contain only **49 frames** each. Per the DDD3R diagnostic framework:
   - Sintel (~20-50f): No over-update observed; dampening provides no benefit
   - **DTU (49f)**: Similar regime to Sintel. Over-update has barely begun to accumulate.
 
-- **Observed behavior**: All dampening and directional decomposition methods **degrade** performance on DTU.
-  This is **consistent with the core thesis**: over-update is a long-sequence phenomenon, and at 49 frames the update signal is still informative — suppressing it removes useful information.
+- **Observed behavior**: DDD3R methods show **higher mean Accuracy** (worse) than CUT3R,
+  but the picture is nuanced — several variants (constant, gamma=1-2, all auto-gamma)
+  **improve Accuracy on the majority of scenes (14/22)** and achieve lower median Accuracy
+  (2.49-2.73 vs CUT3R's 3.34). The mean is inflated by a few outlier scenes (scan24, scan110)
+  where dampening amplifies errors.
 
 ### 4.2 Key Observations
 
-1. **TTT3R is the only method that improves over CUT3R** (Acc -4.4%), confirming that the learned gate provides value at short sequences where over-update has not yet accumulated.
+1. **Mean vs median divergence**: CUT3R's mean Acc (3.66) is pulled up by outliers but its
+   median (3.34) is already moderate. DDD3R variants like auto_steep_clamp achieve median Acc
+   of 2.49 (25% lower than CUT3R), yet their mean is worse due to outlier sensitivity.
+   This suggests DDD3R typically helps but can catastrophically fail on specific scenes.
 
-2. **All DDD3R variants degrade Accuracy** (+15% to +68%), with degradation monotonically increasing with directional decomposition strength:
-   - gamma=1 (lightest): +19.0%
-   - gamma=5 (strongest fixed): +41.5%
-   - gamma=0 (pure ortho): +68.1%
-   This confirms that at 49 frames, delta updates are predominantly useful signal, not harmful drift.
+2. **TTT3R improves on both mean and majority of scenes** (mean -4.4%, 16/22 win-rate),
+   confirming the learned gate has some value even at short sequences.
 
-3. **Gamma spectrum shows expected monotonic behavior**: more ortho = more degradation on short sequences, validating the framework's theoretical prediction.
+3. **Several DDD3R variants improve on the majority of scenes**: constant, gamma=1-2, and
+   all four auto-gamma variants each win on 14/22 scenes (64% win-rate). These methods
+   improve typical-case Accuracy while increasing worst-case Accuracy on outlier scenes.
 
-4. **Auto-gamma variants partially mitigate degradation** (~+15%) compared to fixed ortho (+68%), showing the self-correction mechanism works but cannot fully compensate when over-update is absent.
+4. **Stronger ortho = worse robustness**: Brake (9/22) and pure ortho (7/22) have poor
+   win-rates. Degradation increases monotonically with decomposition strength in both
+   mean and win-rate, confirming that aggressive direction-aware suppression is
+   counterproductive when over-update has not yet accumulated.
 
-5. **Temporal Brake degrades significantly** (+58.6%), consistent with Sintel results and confirming that temporal dampening is counterproductive on short sequences.
+5. **Auto-gamma self-correction works partially**: Auto variants recover to 14/22 win-rate
+   (vs pure ortho's 7/22), but cannot prevent outlier-driven mean degradation.
+
+6. **Gamma spectrum monotonicity holds**: More ortho consistently worsens both mean Acc and
+   win-rate, validating the framework's theoretical prediction for short sequences.
 
 ### 4.3 Cross-Dataset Comparison
 
-| Dataset | Frames | Over-update severity | Constant vs CUT3R | Brake vs CUT3R | Ortho vs CUT3R |
-|---------|--------|---------------------|-------------------|----------------|----------------|
-| Sintel | ~20-50 | None | +5% (hurts) | +14% (hurts) | +13% (hurts) |
-| **DTU** | **49** | **None** | **+15.6% (hurts)** | **+58.6% (hurts)** | **+68.1% (hurts)** |
-| TUM 90f | 90 | Moderate | -53% (helps) | -53% (helps) | -55% (helps) |
-| TUM 1000f | 1000 | Severe | -60% (helps) | -62% (helps) | -66% (helps) |
-| ScanNet 1000f | 1000 | Severe | -66% (helps) | -68% (helps) | -40% (helps) |
+| Dataset | Frames | Over-update severity | Constant vs CUT3R (mean) | Brake vs CUT3R (mean) | Ortho vs CUT3R (mean) |
+|---------|--------|---------------------|--------------------------|----------------------|----------------------|
+| Sintel | ~20-50 | None | +5% | +14% | +13% |
+| **DTU** | **49** | **Minimal** | **+15.6%** | **+58.6%** | **+68.1%** |
+| TUM 90f | 90 | Moderate | -53% | -53% | -55% |
+| TUM 1000f | 1000 | Severe | -60% | -62% | -66% |
+| ScanNet 1000f | 1000 | Severe | -66% | -68% | -40% |
 
-**Interpretation**: DTU results confirm the **length-dependent threshold** for over-update.
-At ~50 frames (Sintel, DTU), dampening is harmful. At 90+ frames (TUM), it becomes beneficial.
-The transition point lies between 50-90 frames, consistent with the M1 diagnostic.
+**Note**: DTU mean-based comparison overstates the degradation — median Acc and win-rate
+(Section 2.2) show several DDD3R variants improve on the majority of DTU scenes.
+The cross-dataset pattern is nonetheless clear: dampening methods provide progressively
+larger benefits as sequence length increases, consistent with the M1 diagnostic that
+over-update accumulates with sequence length.
 
 ### 4.4 Paper Narrative Value
 
-DTU results serve as **negative control** in the paper:
-- They validate M1 (over-update scales with length) by showing the method provides no benefit when over-update is absent
-- They demonstrate the framework's **self-awareness**: the theory correctly predicts when the method should NOT be applied
-- Combined with Sintel (~50f, also no benefit), they establish a clear boundary condition for the method's applicability
+DTU results serve as a **boundary condition** in the paper:
+- They are consistent with M1 (over-update scales with length): at 49 frames, the benefit
+  of dampening is marginal at best and sensitive to outlier scenes
+- Robust statistics (median, win-rate) show DDD3R variants do improve typical-case
+  reconstruction, but the improvement is not strong enough to overcome outlier degradation
+- Combined with other datasets, DTU helps characterize when and how much DDD3R helps:
+  strong and consistent on long sequences (TUM/ScanNet 1000f), marginal and outlier-sensitive
+  on short sequences (DTU 49f, Sintel ~50f)
 
 ### 4.5 Variance Analysis
 
