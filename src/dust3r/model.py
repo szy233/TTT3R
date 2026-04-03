@@ -1585,6 +1585,7 @@ class ARCroco3DStereo(CroCoNet):
         drift_dir = ortho_state.get('drift_dir', None)
         if drift_dir is None:
             ortho_state['drift_dir'] = delta_dir.detach().clone()
+            ortho_state['prev_delta'] = delta.detach().clone()
             return state_feat + alpha_novel * delta
 
         # Update drift direction EMA (normalized after update for correct projection)
@@ -1607,6 +1608,24 @@ class ARCroco3DStereo(CroCoNet):
         else:
             ema_drift_e = beta * ema_drift_e + (1.0 - beta) * drift_energy.detach()
         ortho_state['ema_drift_energy'] = ema_drift_e
+
+        # Compute local drift energy: cos(δ_t, δ_{t-1})² per token
+        prev_delta = ortho_state.get('prev_delta', None)
+        if prev_delta is not None:
+            local_cos = torch.nn.functional.cosine_similarity(
+                delta, prev_delta, dim=-1
+            ).unsqueeze(-1)  # [B, T, 1]
+            local_de = local_cos ** 2  # [B, T, 1]
+            # EMA of local drift energy
+            ema_local_de = ortho_state.get('ema_local_de', None)
+            if ema_local_de is None:
+                ema_local_de = local_de.detach().clone()
+            else:
+                ema_local_de = beta * ema_local_de + (1.0 - beta) * local_de.detach()
+            ortho_state['ema_local_de'] = ema_local_de
+        else:
+            ema_local_de = None
+        ortho_state['prev_delta'] = delta.detach().clone()
 
         # Adaptive α_drift: scale with running drift energy
         gamma = getattr(config, 'gamma', None)
@@ -1667,6 +1686,39 @@ class ARCroco3DStereo(CroCoNet):
         # e_t low  (diverse updates)   → α_∥ stays small (suppress drift, like ortho)
         elif auto_gamma == 'drift_energy':
             effective_alpha_drift = ema_drift_e.mean() * alpha_novel + (1.0 - ema_drift_e.mean()) * alpha_drift
+
+        # --- Approach D2: Drift energy gated — isotropic fallback when drift is high ---
+        # High drift energy → decomposition unreliable → skip decomposition, use constant α⊥
+        # Low drift energy  → decomposition meaningful → normal directional update
+        elif auto_gamma == 'drift_energy_gate':
+            de_threshold = float(getattr(config, 'de_gate_threshold', 0.7))
+            e_mean = ema_drift_e.mean().item()
+            if e_mean > de_threshold:
+                # Isotropic fallback: skip decomposition entirely
+                return state_feat + alpha_novel * delta
+            else:
+                effective_alpha_drift = e_mean * alpha_novel + (1.0 - e_mean) * alpha_drift
+
+        # --- Approach E: Local drift energy adaptive α_∥ ---
+        # Uses cos(δ_t, δ_{t-1})² — consecutive delta alignment (scene-intrinsic)
+        # high local_de (ScanNet-like, consistent motion) → α_∥ → α_⊥ (isotropic, less suppression)
+        # low local_de  (TUM-like, diverse updates)       → α_∥ stays small (ortho suppression)
+        elif auto_gamma == 'local_de':
+            if ema_local_de is not None:
+                e_local = ema_local_de.mean()
+                effective_alpha_drift = e_local * alpha_novel + (1.0 - e_local) * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel  # first frame fallback
+
+        # Approach E2: Local DE with sigmoid sharpening
+        elif auto_gamma == 'local_de_sigmoid':
+            if ema_local_de is not None:
+                e_local = ema_local_de.mean()
+                ag_k = float(getattr(config, 'auto_gamma_k', 20.0))
+                w = torch.sigmoid(ag_k * (e_local - 0.5))
+                effective_alpha_drift = w * alpha_novel + (1.0 - w) * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel
 
         # --- Approach C: Attention entropy adaptive α_∥ ---
         # h̄_t high (scene changing) → α_∥ → α_⊥ (less suppression)

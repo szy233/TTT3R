@@ -34,7 +34,7 @@ state_feat = new * mask1 + old * (1-mask1)
 | α∥ | `--alpha_parallel` | 0.05 |
 | β_ema | `--beta_ema` | 0.95 |
 | γ | `--gamma` | 0.0 |
-| τ (brake) | `--brake_tau` | 2.0 |
+| τ (brake) | `--brake_tau` | 1.0 |
 | auto_gamma | `--auto_gamma` | `""` |
 | β_entropy | `--entropy_ema_beta` | 0.95 |
 | auto_gamma_warmup | `--auto_gamma_warmup` | 30 |
@@ -62,6 +62,7 @@ bash eval/run_ddd3r_eval.sh <GPU> <DATASET> <METHOD>
 #           ddd3r_auto_steep_clamp, ddd3r_auto_steep_clamp_tight
 #           ddd3r_entropy, ddd3r_entropy_b{N} (attention entropy adaptive)
 #           ddd3r_de (drift energy adaptive)
+#           ddd3r_local_de, ddd3r_local_de_sig (local drift energy adaptive)
 
 # Auto-gamma parallel eval
 bash eval/run_auto_gamma_eval.sh 0,1
@@ -121,9 +122,11 @@ blend 0 12 && blend 1 12 && bash eval/run_auto_gamma_eval.sh 0,1 ; blend 0 60 &&
 - ✅ Auto-gamma all variants (warmup, steep, entropy)
 - ✅ Drift energy scaling analysis (A4b) — drift_e 不随长度变化（场景固有属性）
 - ✅ KITTI Odom full eval (14 methods × 11 seqs, zjc 分支) — ddd3r_g1 ATE best (-22.7%), ortho r_err best (-58.6%)
-- 🔄 Drift energy adaptive (ddd3r_de): TUM 0.057 ✅, ScanNet running
+- ✅ Drift energy adaptive (ddd3r_de): TUM 0.057, ScanNet 0.374（高 drift 退化，不如 brake/constant）
 - ✅ Paper all sections initial draft
-- ⬜ 根据 ddd3r_de + KITTI full 结果更新 paper method/experiments sections
+- ✅ Local DE adaptive (local_de): TUM 0.067, ScanNet 0.297（比 EMA DE 改善 20%，但仍不如 constant/brake）
+- ✅ A4c 信号分析：EMA drift energy 不可区分 TUM/ScanNet（重叠 69-89%），local drift energy 可区分（gap=0.20）
+- ⬜ 根据完整结果更新 paper method/experiments sections
 - ⬜ .bib file (cite keys are placeholders)
 - ⬜ Figures (scatter plot, method diagram, qualitative vis)
 - ⬜ Appendix (per-scene tables, full hyperparameter sweeps)

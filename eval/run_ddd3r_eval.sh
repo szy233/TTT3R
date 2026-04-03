@@ -51,7 +51,7 @@ case "$METHOD" in
         ;;
     ddd3r_brake)
         UPDATE_TYPE="ddd3r_brake"
-        EXTRA_ARGS="--brake_tau 2.0"
+        EXTRA_ARGS="--brake_tau 1.0"
         ;;
     ddd3r)
         UPDATE_TYPE="ddd3r"
@@ -98,11 +98,36 @@ case "$METHOD" in
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_energy"
         ;;
+    ddd3r_deg)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_energy_gate --de_gate_threshold 0.7"
+        ;;
+    ddd3r_deg_t*)
+        # e.g. ddd3r_deg_t5 → threshold=0.5, ddd3r_deg_t8 → 0.8
+        THRESH=$(echo "$METHOD" | sed 's/ddd3r_deg_t//' | sed 's/^/0./')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_energy_gate --de_gate_threshold $THRESH"
+        ;;
     ddd3r_entropy_b*)
         # e.g. ddd3r_entropy_b9 → entropy_ema_beta=0.9, ddd3r_entropy_b99 → 0.99
         EBETA=$(echo "$METHOD" | sed 's/ddd3r_entropy_b//' | sed 's/^/0./')
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma entropy --entropy_ema_beta $EBETA"
+        ;;
+    # --- Local drift energy adaptive ---
+    ddd3r_local_de)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de"
+        ;;
+    ddd3r_local_de_sig)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_sigmoid --auto_gamma_k 20.0"
+        ;;
+    ddd3r_local_de_sig_k*)
+        # e.g. ddd3r_local_de_sig_k10 → k=10
+        K=$(echo "$METHOD" | sed 's/ddd3r_local_de_sig_k//')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_sigmoid --auto_gamma_k ${K}.0"
         ;;
     *)
         echo "Unknown method: $METHOD"
@@ -118,7 +143,7 @@ esac
 # Parse dataset → eval task type + actual dataset key for launch.py
 EVAL_DATASET="$DATASET"
 case "$DATASET" in
-    tum_*|scannet_*|sintel|kitti_odom)
+    tum|tum_*|scannet_*|sintel|kitti_odom)
         TASK="relpose"
         LAUNCH="eval/relpose/launch.py"
         ;;
