@@ -1,329 +1,279 @@
-# TTT3R - zjc Branch Experiment Log
+# DDD3R on `zjc` Branch
 
-## Project Focus
+## 1. What This Repository Is
 
-This branch is centered on one main story:
+This repository is still named `TTT3R`, and the upstream / baseline identity comes from the original TTT3R project on the `szy` branch:
 
-- recurrent 3D reconstruction suffers from **systematic over-update**
-- constant dampening already helps, which suggests the failure is not rare noise but a persistent update bias
-- the strongest current method is the **Stability Brake**
+- upstream topic: train-free, inference-time improvement for recurrent 3D reconstruction built on CUT3R
+- core model class: `src/dust3r/model.py`
+- main entry points: `demo.py`, `eval/relpose/launch.py`, `eval/video_depth/launch.py`, `eval/mv_recon/launch.py`
 
-Main formulation:
+On the `zjc` branch, however, the research story has changed:
 
-- `alpha_t = sigmoid(-tau * cos(delta_t, delta_{t-1}))`
+- the active project is **DDD3R**
+- DDD3R is a unified state-update control framework for recurrent 3D reconstruction
+- the current paper direction is no longer “TTT3R gate variants” as the main contribution
+- old TTT3R / brake-only naming still exists in code and artifacts, but many of those names are now treated as historical aliases or intermediate stages
 
-Interpretation:
+In short:
 
-- high cosine alignment means consecutive updates are pointing in the same direction, so the model is likely re-updating an already converging state
-- low cosine alignment means the state trajectory changes direction, so new information is likely entering and the brake should release
+- **repository lineage**: TTT3R / CUT3R
+- **current branch identity**: DDD3R
+- **main research question**: how to diagnose and control recurrent state over-update / drift in a unified way
 
-Current branch decision:
+## 2. Read This Branch In The Right Order
 
-- keep the story focused on **brake only**
-- treat the auxiliary gate direction as a dropped side path, not a paper contribution
+If you need to understand `zjc`, trust files in this order:
 
-## Current Main Claim
+1. `docs/DD3R_Training.md`
+2. `src/dust3r/model.py`
+3. `eval/relpose/launch.py`, `eval/video_depth/launch.py`, `eval/mv_recon/launch.py`
+4. `analysis/` and `analysis_results/`
+5. exported summaries under `eval_results_export/`
 
-The current evidence supports the following paper story:
+Treat these as historical or stage-specific, not as the final branch-wide truth:
 
-1. recurrent state updates in CUT3R/TTT3R can over-react over long videos
-2. train-free adaptive dampening in state space is enough to improve stability
-3. the best current train-free variant is `ttt3r_momentum_inv_t1`
-4. the paper should focus on one clean mechanism: `brake`
+- `docs/kitti_brake_summary.md`
+- `docs/waymo_nuscenes_h200_runlog_20260329.md`
+- `CLAUDE_zjc.md`
+- old `ttt3r_*` naming in result folders
 
-## Core Results Already Available
+Reason:
 
-### 1. Formal RelPose Export
+- `zjc` evolved from “brake-only” story toward “DDD3R unified spectrum”
+- some docs describe an earlier paper narrative
+- code already contains backward-compatibility aliases from old names to DDD3R names
 
-Exported from `origin/szy` into `eval_results_export/relpose/`.
+## 3. Current Project Narrative
 
-Datasets and number of exported configs:
+The working DDD3R narrative on `zjc` is:
 
-- `ScanNet`: 22 configs
-- `TUM`: 12 configs
-- `Sintel`: 3 configs
+- recurrent 3D reconstruction suffers from **systematic update mis-regulation**
+- this appears as three linked issues:
+  - **M1**: update magnitude is too large and accumulates with sequence length
+  - **M2**: existing adaptive scalar gates collapse toward near-constant behavior
+  - **M3**: update direction contains structured drift / redundancy, not just random noise
+- DDD3R provides one unified update rule that covers:
+  - constant dampening
+  - temporal brake-like behavior
+  - directional decomposition
+  - drift-adaptive interpolation between them
 
-Best current brake-related result:
+The branch’s main method statement is therefore:
 
-- `scannet_s3_1000 / ttt3r_momentum_inv_t1`: mean ATE `0.26147`, median ATE `0.19217`
-- `tum_s1_1000 / ttt3r_momentum_inv_t1`: mean ATE `0.06339`, median ATE `0.06554`
+`DDD3R = unified train-free state update control for recurrent 3D reconstruction`
 
-Against constant dampening baseline `ttt3r_random`:
+## 4. Canonical Method View
 
-- `ScanNet`: mean ATE `0.27965 -> 0.26147` (`-6.50%`), median ATE `0.20304 -> 0.19217` (`-5.35%`)
-- `TUM`: mean ATE `0.07900 -> 0.06339` (`-19.76%`), median ATE `0.08224 -> 0.06554` (`-20.30%`)
+The most important implementation file is:
 
-Against plain `cut3r`:
+- `src/dust3r/model.py`
 
-- `ScanNet`: mean ATE `0.81687 -> 0.26147` (`-67.99%`)
-- `TUM`: mean ATE `0.16556 -> 0.06339` (`-61.71%`)
+Important facts from the current implementation:
 
-Important qualitative takeaway:
+- old names are aliased to DDD3R paper names near the top of the file
+- for example:
+  - `ttt3r_random` -> `ddd3r_constant`
+  - `ttt3r_momentum` -> `ddd3r_brake`
+  - `ttt3r_ortho` -> `ddd3r`
+- DDD3R-related update types are implemented directly in recurrent forward paths
+- orthogonal / drift decomposition, adaptive gamma, warmup, and alpha settings all live in this file
 
-- `ttt3r_momentum_inv_t1` is clearly the strongest brake-style candidate
-- the story is cleaner if all non-brake gating variants are treated as discarded explorations
+For branch understanding, think in **canonical DDD3R names first**, and only map back to old TTT3R names when reading historical logs.
 
-### 2. A3 Per-Scene Analysis
+## 5. Main Code Areas Added Or Expanded On `zjc`
 
-Generated locally from exported relpose logs.
+### 5.1 Method / model logic
 
-Key comparisons:
+- `src/dust3r/model.py`
+- branch-specific recurrent update logic lives here
+- includes aliases, brake-style control, orthogonal decomposition, constant dampening, and adaptive DDD3R variants
 
-- `ScanNet, ttt3r_random vs ttt3r_momentum_inv_t1`
-  - common scenes: `65`
-  - improved scenes: `31`
-  - degraded scenes: `34`
-  - median ATE: `0.20304 -> 0.19217`
-  - mean relative improvement: `+0.92%`
+### 5.2 Relpose evaluation
 
-- `TUM, ttt3r_random vs ttt3r_momentum_inv_t1`
-  - common scenes: `8`
-  - improved scenes: `7`
-  - degraded scenes: `1`
-  - median ATE: `0.08224 -> 0.065545`
-  - mean relative improvement: `+14.90%`
+- `eval/relpose/launch.py`
+- `eval/relpose/metadata.py`
+- `eval/relpose/prepare_kitti_odometry.py`
+- `eval/relpose/run_*.sh`
+- `scripts/server/run_nuscenes_relpose_pipeline.sh`
+- `scripts/server/run_waymo_relpose_pipeline.sh`
 
-Conclusion from A3:
+This area was expanded heavily on `zjc` for large-scale relpose evaluation and export.
 
-- the brake-only direction is the one that should be kept
-- TUM shows the cleanest improvement pattern
-- ScanNet is more mixed scene-by-scene, but still favors `momentum_inv_t1` in aggregate
-- the auxiliary gate experiments are useful as negative evidence, but should not appear in the main story
+### 5.3 Video depth evaluation
 
-### 3. S3 Tau Sensitivity
+- `eval/video_depth/launch.py`
+- `eval/video_depth/run_kitti.sh`
+- large exported results under `eval_results_export/video_depth/`
 
-Currently available exported tau points:
+This includes the outdoor KITTI bugfix-era comparison that was important during the brake-only stage.
 
-- `tau = 1`
-- `tau = 2`
+### 5.4 Multi-view reconstruction
 
-Results:
+- `eval/mv_recon/launch.py`
+- `eval/mv_recon/generate_7scenes_report.py`
+- `eval/mv_recon/generate_dtu_report.py`
+- `eval/mv_recon/run_7scenes_allconfigs.sh`
+- `eval/mv_recon/run_dtu_allconfigs.sh`
 
-- `ScanNet`
-  - `tau=1`: mean ATE `0.26147`, median ATE `0.19217`
-  - `tau=2`: mean ATE `0.31068`, median ATE `0.26213`
+This area now supports 7Scenes and DTU-style reporting for DDD3R ablations.
 
-- `TUM`
-  - `tau=1`: mean ATE `0.06339`, median ATE `0.06554`
-  - `tau=2`: mean ATE `0.08219`, median ATE `0.05592`
+### 5.5 Analysis pipeline
 
-Interpretation:
+- `analysis/`
+- `analysis_results/`
+- `docs/figures/`
 
-- `tau=1` is the safest default overall
-- `tau=2` is too aggressive on ScanNet
-- TUM median looks better at `tau=2`, but mean becomes worse
-- current paper choice should remain `tau=1`
+This is where much of the paper-facing evidence and plots live:
 
-### 4. Video Depth Export
+- per-scene improvement analysis
+- variance proxies
+- state convergence analysis
+- reset sensitivity
+- overhead / runtime studies
+- paper figure generation
 
-Exported datasets:
+### 5.6 Single-object local benchmark
 
-- `KITTI`
-- `Bonn`
-- `Sintel`
+- `benchmark_single_object/`
 
-Original exported benchmark:
+This is a local experimental sandbox for geometry / stability style comparisons.
 
-- `KITTI / metric`
-  - `cut3r`: Abs Rel `0.15153`
-  - `ttt3r`: Abs Rel `0.13192`
-  - `ttt3r_joint`: Abs Rel `0.13437`
+### 5.7 Dataset preparation and remote workflow
 
-- `Bonn / metric`
-  - `cut3r`: Abs Rel `0.09900`
-  - `ttt3r`: Abs Rel `0.09974`
-  - `ttt3r_joint`: Abs Rel `0.09408`
+- `datasets_preprocess/`
+- `scripts/server/`
+- `docs/REMOTE_KITTI_RUNBOOK.md`
+- `docs/server_quickstart_waymo_nuscenes.md`
+- `WINDOWS_DEV.md`
 
-- `Sintel / metric`
-  - `cut3r`: Abs Rel `1.02167`
-  - `ttt3r`: Abs Rel `0.97764`
-  - `ttt3r_joint`: Abs Rel `0.91725`
+`zjc` is not only a method branch; it also adds a practical remote-eval workflow.
 
-Takeaway from the original export:
+## 6. Core Documents Worth Reading
 
-- `TTT3R` already improves over `CUT3R`
-- `ttt3r_joint` is competitive in video depth, but this is not yet the final brake-only story
+### Branch-level method / paper framing
 
-### 5. KITTI Outdoor Brake Validation
+- `docs/DD3R_Training.md`
 
-This is the most important new result completed on `zjc`.
+This is the closest thing to the current branch manifesto.
 
-#### Initial problem
+### Historical branch summaries
 
-The first `kitti_s1_500` comparison between `ttt3r` and `ttt3r_momentum_inv_t1` produced identical outputs, which was treated as a bug signal.
+- `CLAUDE_zjc.md`
+- `docs/kitti_brake_summary.md`
+- `docs/waymo_nuscenes_h200_runlog_20260329.md`
 
-#### Root cause
+Useful for archaeology, but not authoritative over the newer DDD3R framing.
 
-In `src/dust3r/model.py`, brake-side state was being reset whenever `reset_mask` existed, instead of only when a real reset happened.
+### Generated experiment reports
 
-Effect:
+- `docs/dtu_experiment_report.md`
+- `eval/relpose/kitti_odo_report.md`
+- `eval/relpose/kitti_odo_full_report.md`
+- `docs/reproducibility_safe224_seedstudy.md`
+- `docs/reset_interval_sensitivity_safe224.md`
 
-- brake state was cleared every step
-- `_stability_brake()` repeatedly saw no valid previous delta
-- `ttt3r_momentum_inv_t1` collapsed to plain `ttt3r`
+### Figures / paper export
 
-#### Fix
+- `analysis/paper_figures.py`
+- `analysis_results/paper_figures/`
+- `docs/figures/`
 
-Implemented:
+## 7. Practical Working Rules For This Branch
 
-- `has_reset = reset_mask is not None and bool(torch.any(reset_mask).item())`
+### Naming
 
-Applied to:
+When editing or documenting `zjc`, prefer:
 
-- `_forward_impl`
-- `forward_recurrent_lighter`
-- `forward_recurrent_analysis`
+- `DDD3R`
+- `ddd3r_constant`
+- `ddd3r_brake`
+- `ddd3r`
+- adaptive gamma language
 
-Fix commit:
+Avoid presenting these as the main project identity:
 
-- `4e3e14e` - `fix: only reset brake state on true reset mask`
+- “TTT3R joint”
+- “brake-only final story”
+- “TTT3R gate paper”
 
-#### Final post-bugfix outdoor result
+Those names may still appear in code or exports, but they are not the best top-level framing anymore.
 
-Stored under:
+### Trust the code over historical markdown
 
-- `eval_results_export/video_depth/kitti_s1_500_bugfix_final/`
+If a markdown document conflicts with:
 
-`metric` alignment:
+- `src/dust3r/model.py`
+- current eval scripts
+- current aliases / argument names
 
-- `ttt3r`: Abs Rel `0.128815`, Log RMSE `0.180974`, `delta<1.25 = 0.850601`
-- `ttt3r_momentum_inv_t1`: Abs Rel `0.115049`, Log RMSE `0.171253`, `delta<1.25 = 0.866680`
+then the code wins.
 
-`scale` alignment:
+### Be careful with old exported results
 
-- `ttt3r`: Abs Rel `0.125868`, Log RMSE `0.173581`, `delta<1.25 = 0.867252`
-- `ttt3r_momentum_inv_t1`: Abs Rel `0.118438`, Log RMSE `0.165685`, `delta<1.25 = 0.880861`
+Some exported result folders preserve old method names for continuity.
+When summarizing them:
 
-`scale&shift` alignment:
+- explain the old name
+- map it to the current DDD3R interpretation
+- note if the result belongs to an older narrative stage
 
-- `ttt3r`: Abs Rel `0.116942`, Log RMSE `0.171391`, `delta<1.25 = 0.873662`
-- `ttt3r_momentum_inv_t1`: Abs Rel `0.106303`, Log RMSE `0.162461`, `delta<1.25 = 0.889503`
+### Reproducibility caveat
 
-Relative improvement in Abs Rel:
+Some reports were generated from server-side logs and then copied back locally.
+Before claiming a report is reproducible from the current branch state, verify:
 
-- `metric`: `-10.69%`
-- `scale`: `-5.90%`
-- `scale&shift`: `-9.10%`
+- branch commit
+- eval script scene list
+- output path conventions
+- whether the report was log-derived or directory-derived
 
-Key conclusion:
+## 8. Important Branch Caveats
 
-- after the reset bug is fixed, the brake path is clearly active
-- brake improves outdoor depth metrics on KITTI
-- this is the cleanest outdoor evidence currently available for the paper story
+### Caveat A: repository name and project name differ
 
-### 6. 7Scenes Video Reconstruction
+- repo / upstream label: `TTT3R`
+- current `zjc` paper identity: `DDD3R`
 
-Parsed from `eval_results_export/video_recon/7scenes_200/*/7scenes/logs_all.txt`.
+Do not “fix” all old names mechanically; many are intentionally kept for compatibility.
 
-Mean values:
+### Caveat B: not all docs are synchronized
 
-- `cut3r`: acc `0.092`, comp `0.048`, nc1 `0.582`, nc2 `0.545`
-- `ttt3r`: acc `0.027`, comp `0.023`, nc1 `0.600`, nc2 `0.561`
-- `ttt3r_joint`: acc `0.021`, comp `0.022`, nc1 `0.594`, nc2 `0.565`
+There are at least three narrative layers coexisting:
 
-Takeaway:
+1. upstream TTT3R project description from `szy`
+2. intermediate brake-only story
+3. current DDD3R unified-spectrum story
 
-- recurrent tuning brings a very large reconstruction accuracy gain over `cut3r`
-- `ttt3r_joint` is strongest on acc/comp, but brake-only remains the cleaner paper narrative
+When writing new documentation, align with layer 3 unless the task is explicitly historical.
 
-### 7. A4 State Convergence Evidence
+### Caveat C: old bug-era results exist
 
-Local CO3D sequences used:
+Some brake-era outputs and summaries were affected by implementation bugs later fixed.
+If using those results, check whether the document already labels them as pre-fix or historical.
 
-- `apple`
-- `bottle`
+## 9. Useful Entry Commands
 
-Findings:
+Typical commands still follow upstream TTT3R structure:
 
-- `apple`
-  - `cut3r`: mean delta norm `157.63`, last delta norm `155.86`, mean cosine `0.0518`
-  - `ttt3r`: mean delta norm `95.89`, last delta norm `84.15`, mean cosine `0.4283`
-  - mean update magnitude reduced by `39.2%`
-  - final-step update magnitude reduced by `46.0%`
+```bash
+conda activate ttt3r
 
-- `bottle`
-  - `cut3r`: mean delta norm `251.77`, last delta norm `247.54`, mean cosine `0.2186`
-  - `ttt3r`: mean delta norm `126.87`, last delta norm `117.92`, mean cosine `0.4917`
-  - mean update magnitude reduced by `49.6%`
-  - final-step update magnitude reduced by `52.4%`
+# demo
+python demo.py --model_path MODEL_PATH --seq_path SEQ_PATH --output_dir OUT_DIR
 
-Interpretation:
+# relpose
+PYTHONPATH=src accelerate launch eval/relpose/launch.py ...
 
-- the gated update path produces smaller and more directionally consistent state changes
-- this supports the convergence-based explanation behind the stability brake
+# video depth
+PYTHONPATH=src accelerate launch eval/video_depth/launch.py ...
 
-### 8. Single-Object Local Benchmark
+# multi-view reconstruction
+PYTHONPATH=src accelerate launch eval/mv_recon/launch.py ...
+```
 
-Implemented and organized under `benchmark_single_object/`.
+But when selecting methods, prefer current DDD3R names or confirm which aliases the script accepts.
 
-Available outputs include:
+## 10. If You Need A One-Paragraph Summary
 
-- sequence preparation scripts
-- run scripts
-- metric summaries
-- runtime plots
-- local CO3D benchmark outputs
-
-Current lightweight benchmark observations:
-
-- at length `12`, `ttt3r` is slightly faster than `cut3r`
-- at length `24`, runtime is roughly comparable
-- this benchmark is useful as a controlled local sanity check, but it is not yet a formal paper benchmark
-
-The richer local export under `outputs_wsl_cpu/metrics/per_sequence_results_key_metrics.csv` is now preserved for later use.
-
-## Best Paper Story Right Now
-
-The strongest current narrative is:
-
-1. recurrent 3D reconstruction suffers from over-update
-2. constant dampening helps because it partially suppresses this error accumulation
-3. adaptive dampening based on state-trajectory alignment is a natural train-free extension
-4. `ttt3r_momentum_inv_t1` is the strongest current implementation
-5. the outdoor KITTI bugfix result is the key new validation that this is not only an indoor relpose effect
-
-## What Is Finished On zjc
-
-1. Synced formal evaluation exports from `szy`
-2. Built local A3 per-scene comparison summaries
-3. Built local S3 tau sensitivity summaries
-4. Wrote export summaries into `analysis_results/`
-5. Fixed the brake reset bug in recurrent inference
-6. Re-ran and validated post-fix KITTI outdoor depth results
-7. Pulled full `kitti_s1_500_bugfix_final` outputs from the server into local `TTT3R`
-8. Organized local A4 convergence evidence
-9. Preserved single-object benchmark code and outputs
-
-## What Should Be Done Next
-
-### P0
-
-1. Turn the current results into paper-quality plots and combined tables
-2. Keep the method section centered on `stability brake` only
-3. Add one polished summary figure showing relpose + KITTI + A4 consistency evidence together
-
-### P1
-
-1. Run missing tau points `0.5`, `1.5`, `3.0`
-2. Add overhead analysis for brake computation itself
-3. Upgrade A4 from local proxy evidence to a more formal benchmark setting
-
-### P2
-
-1. Consolidate all final numbers into one camera-ready result sheet
-2. Write the abstract/introduction around the over-update story
-3. Decide whether any full output folders should be uploaded to GitHub or only summarized artifacts
-
-## Important Cautions
-
-- `analysis_results/` is gitignored unless explicitly force-added
-- the worktree still contains many large untracked result folders; avoid accidental bulk commits
-- the full `kitti_s1_500_bugfix_final` directory is large, so upload it only if really needed
-- do not over-claim tau sensitivity before more points are run
-
-## Branch Record
-
-- Branch: `zjc`
-- Main brake bugfix commit: `4e3e14e`
-- KITTI bugfix final metrics commit: `4f1a9b2`
-- Source of formal exported logs: `origin/szy`
+`szy` is the original TTT3R / CUT3R-based project branch. `zjc` has grown into a much larger experimental branch whose real research identity is now DDD3R: a unified, train-free framework for controlling recurrent state updates via constant dampening, brake-like control, directional decomposition, and adaptive interpolation on one spectrum. The most reliable branch-level references are `docs/DD3R_Training.md`, `src/dust3r/model.py`, and the current eval / analysis pipelines; many older brake-only summaries remain useful, but they should be read as intermediate history rather than the final project definition.
