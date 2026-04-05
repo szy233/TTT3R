@@ -42,8 +42,11 @@
       --main_process_port 29560 eval/mv_recon/launch.py \
       --weights model/cut3r_512_dpt_4_64.pth \
       --output_dir eval_results/video_recon/7scenes_200/<config> \
-      --model_update_type <config> --max_frames 200
+      --model_update_type <update_type> --max_frames 200 [extra args]
   ```
+  where `cut3r -> cut3r`, `ttt3r -> ttt3r`, `constant -> ttt3r_random`,
+  `brake -> ttt3r_momentum`, and `ortho` / `ddd3r_g1`--`ddd3r_g5` /
+  `auto_*` use `ddd3r` with additional `--gamma` or `--auto_gamma` arguments.
 
 ### Configurations Evaluated
 
@@ -76,7 +79,7 @@
 | DDD3R (gamma=1) | 0.0292 | 0.0288 | 0.0290 | 0.5780 | -69.7% |
 | Auto-threshold | 0.0286 | 0.0284 | 0.0285 | **0.5788** | -70.3% |
 
-**Key finding**: All DDD3R variants achieve 64--72% reduction in Accuracy error over CUT3R. Brake achieves the best Chamfer distance (0.0271), while auto-threshold achieves the best Normal Consistency (0.5788).
+**Key finding**: The TTT3R/DDD3R family achieves 64--72% reduction in Accuracy error over CUT3R, while the DDD3R variants specifically span 67--72%. Brake achieves the best Chamfer distance (0.0271), while auto-threshold achieves the best Normal Consistency (0.5788).
 
 ---
 
@@ -121,7 +124,7 @@
 | Chamfer (m) | 0.0737 | ~0.07--0.08 | 0.0317 | ~0.03--0.04 |
 | NC | 0.5648 | ~0.56 | 0.5782 | ~0.58 |
 
-Our baseline numbers closely match those reported in TTT3R Figure 9, confirming the correctness of our evaluation pipeline and ensuring fair comparison.
+Our baseline numbers are broadly consistent with the ranges reported in TTT3R Figure 9, which supports that our evaluation pipeline is reasonably aligned with the published setting and that the comparison is directionally fair.
 
 ---
 
