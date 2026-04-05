@@ -523,3 +523,28 @@ if __name__ == "__main__":
     model.config.geo_gate_freq_cutoff = args.geo_gate_freq_cutoff
 
     eval_pose_estimation(args, model, save_dir=args.output_dir)
+
+
+def apply_ddd3r_config(args, model):
+    """Apply DDD3R hyperparameters from args to model config.
+    Shared by relpose and mv_recon evaluation pipelines.
+    """
+    model.config.model_update_type = args.model_update_type
+    model.config.alpha = getattr(args, 'alpha', 0.5)
+    model.config.alpha_perp = getattr(args, 'alpha_perp', 0.5)
+    model.config.alpha_parallel = getattr(args, 'alpha_parallel', 0.05)
+    model.config.beta_ema = getattr(args, 'beta_ema', 0.95)
+    model.config.gamma = getattr(args, 'gamma', 0.0)
+    model.config.brake_tau = getattr(args, 'brake_tau', 2.0)
+    model.config.warmup_t0 = getattr(args, 'warmup_t0', 0)
+    model.config.warmup_window = getattr(args, 'warmup_window', 0)
+    model.config.spectral_temperature = getattr(args, 'spectral_temperature', 1.0)
+    model.config.geo_gate_tau = getattr(args, 'geo_gate_tau', 2.0)
+    model.config.geo_gate_freq_cutoff = getattr(args, 'geo_gate_freq_cutoff', 4)
+    # Auto-gamma (for mv_recon experiments)
+    model.config.auto_gamma = getattr(args, 'auto_gamma', '')
+    model.config.auto_gamma_warmup = getattr(args, 'auto_gamma_warmup', 30)
+    model.config.auto_gamma_max = getattr(args, 'auto_gamma_max', 3.0)
+    model.config.auto_gamma_k = getattr(args, 'auto_gamma_k', 10.0)
+    model.config.auto_gamma_lo = getattr(args, 'auto_gamma_lo', 0.3)
+    model.config.auto_gamma_hi = getattr(args, 'auto_gamma_hi', 0.6)
