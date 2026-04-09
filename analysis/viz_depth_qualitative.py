@@ -24,7 +24,7 @@ METHODS = {
     "CUT3R": "cut3r",
     "TTT3R": "ttt3r",
     "Brake": "ttt3r_momentum_inv_t1",
-    "Ortho": "ttt3r_ortho",
+    "DDD3R": "ttt3r_ortho",
 }
 
 # Representative scenes and frames

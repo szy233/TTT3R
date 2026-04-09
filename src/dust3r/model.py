@@ -939,10 +939,12 @@ class ARCroco3DStereo(CroCoNet):
                     }
                 # Initialize momentum gate state
                 if update_type in ("ddd3r_brake", "ttt3r_brake_geo",
-                                   "ddd3r_constant_brake", "ddd3r_constant_brake_ortho"):
+                                   "ddd3r_constant_brake", "ddd3r_constant_brake_ortho",
+                                   "ddd3r_ortho_brake"):
                     momentum_state = {}
                 # Initialize ortho state
-                if update_type in ("ddd3r", "ddd3r_constant_brake_ortho"):
+                if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
+                                   "ddd3r_ortho_brake"):
                     ortho_state = {}
             else:
                 if update_type == "cut3r":
@@ -1050,6 +1052,21 @@ class ARCroco3DStereo(CroCoNet):
                     m_gate = self._momentum_gate(
                         state_feat, new_state_feat, momentum_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
+                elif update_type == "ddd3r_ortho_brake":
+                    # Ortho decomposition (direction) + brake gate (magnitude)
+                    cross_attn_cat = torch.cat(cross_attn_state, dim=0)
+                    if getattr(self.config, 'auto_gamma', '') == 'entropy':
+                        entropy_beta = getattr(self.config, 'entropy_ema_beta', getattr(self.config, 'beta_ema', 0.95))
+                        self._compute_attn_entropy(cross_attn_cat, ortho_state, entropy_beta)
+                    cross_attn_state = rearrange(cross_attn_cat, 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask * m_gate
                 elif update_type == "ddd3r_constant_brake_ortho":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
@@ -1095,9 +1112,11 @@ class ARCroco3DStereo(CroCoNet):
                                 l2_state['running_energy']),
                         }
                     if update_type in ("ddd3r_brake", "ttt3r_brake_geo",
-                                       "ddd3r_constant_brake", "ddd3r_constant_brake_ortho"):
+                                       "ddd3r_constant_brake", "ddd3r_constant_brake_ortho",
+                                       "ddd3r_ortho_brake"):
                         momentum_state = {}
-                    if update_type in ("ddd3r", "ddd3r_constant_brake_ortho"):
+                    if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
+                                       "ddd3r_ortho_brake"):
                         ortho_state = {}
             all_state_args.append(
                 (state_feat, state_pos, init_state_feat, mem, init_mem)
@@ -1639,23 +1658,37 @@ class ARCroco3DStereo(CroCoNet):
             ag_warmup_n = int(getattr(config, 'auto_gamma_warmup', 30))
             ag_gamma_max = float(getattr(config, 'auto_gamma_max', 3.0))
 
-            # Collect drift energy during warmup
+            # Choose signal source: local_de variants use raw local_de for warmup (no EMA bias),
+            # others use ema_drift_e
+            use_local_de = auto_gamma.startswith('warmup_local_de')
+            if use_local_de:
+                signal = ema_local_de  # for post-warmup use
+                warmup_signal = local_de  # raw cos² for unbiased warmup collection
+            else:
+                signal = ema_drift_e
+                warmup_signal = ema_drift_e
+
+            # Collect energy during warmup
             warmup_energies = ortho_state.get('warmup_energies', [])
-            if step <= ag_warmup_n:
+            if step <= ag_warmup_n and warmup_signal is not None:
                 # mean over tokens for this frame
-                warmup_energies.append(ema_drift_e.mean().item())
+                warmup_energies.append(warmup_signal.mean().item())
                 ortho_state['warmup_energies'] = warmup_energies
 
             resolved_gamma = ortho_state.get('resolved_gamma', None)
             if step == ag_warmup_n and resolved_gamma is None:
-                e_avg = sum(warmup_energies) / len(warmup_energies)
-                if auto_gamma == 'warmup_linear':
+                if len(warmup_energies) > 0:
+                    e_avg = sum(warmup_energies) / len(warmup_energies)
+                else:
+                    e_avg = 0.5  # fallback
+                if auto_gamma in ('warmup_linear', 'warmup_local_de_linear'):
                     resolved_gamma = ag_gamma_max * (1.0 - e_avg)
-                elif auto_gamma == 'warmup_threshold':
+                elif auto_gamma in ('warmup_threshold', 'warmup_local_de', 'warmup_local_de_threshold'):
                     resolved_gamma = 0.0 if e_avg > 0.5 else ag_gamma_max
                 else:
                     resolved_gamma = ag_gamma_max * (1.0 - e_avg)
                 ortho_state['resolved_gamma'] = resolved_gamma
+                pass  # debug print removed
 
             if resolved_gamma is None:
                 # Still in warmup: use constant dampening (α_perp for both)
@@ -1720,6 +1753,124 @@ class ARCroco3DStereo(CroCoNet):
             else:
                 effective_alpha_drift = alpha_novel
 
+        # Approach E3: Per-token local DE (no frame-mean, preserves spatial structure)
+        # Each token gets its own α_∥ based on its local drift energy
+        elif auto_gamma == 'local_de_token':
+            if ema_local_de is not None:
+                effective_alpha_drift = ema_local_de * alpha_novel + (1.0 - ema_local_de) * alpha_drift  # [B, T, 1]
+            else:
+                effective_alpha_drift = alpha_novel
+
+        # Approach E5: Raw local DE per-token (no EMA smoothing)
+        # Uses instantaneous cos(δ_t, δ_{t-1})² directly — maximum responsiveness
+        elif auto_gamma == 'local_de_raw':
+            if prev_delta is not None:
+                effective_alpha_drift = local_de * alpha_novel + (1.0 - local_de) * alpha_drift  # [B, T, 1]
+            else:
+                effective_alpha_drift = alpha_novel
+
+        # Approach E6: Raw local DE with power sharpening
+        # w = local_de^p: p>1 compresses low values → TUM stays ortho-like
+        elif auto_gamma.startswith('local_de_raw_p'):
+            p = float(auto_gamma.replace('local_de_raw_p', ''))
+            if prev_delta is not None:
+                w = local_de ** p  # [B, T, 1]
+                effective_alpha_drift = w * alpha_novel + (1.0 - w) * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel
+
+        # Approach E7: Raw local DE with capped upper bound
+        # α∥ interpolates in [alpha_drift, alpha_cap] instead of [alpha_drift, alpha_novel]
+        # alpha_cap = alpha_novel * cap_ratio (e.g. 0.6 → cap=0.3)
+        elif auto_gamma.startswith('local_de_raw_cap'):
+            cap_ratio = float(auto_gamma.replace('local_de_raw_cap', ''))
+            alpha_cap = alpha_novel * cap_ratio
+            if prev_delta is not None:
+                effective_alpha_drift = local_de * alpha_cap + (1.0 - local_de) * alpha_drift  # [B, T, 1]
+            else:
+                effective_alpha_drift = alpha_cap
+
+        # Approach E4: Per-token local DE with sigmoid sharpening
+        elif auto_gamma == 'local_de_token_sig':
+            if ema_local_de is not None:
+                ag_k = float(getattr(config, 'auto_gamma_k', 20.0))
+                w = torch.sigmoid(ag_k * (ema_local_de - 0.5))  # [B, T, 1]
+                effective_alpha_drift = w * alpha_novel + (1.0 - w) * alpha_drift  # [B, T, 1]
+            else:
+                effective_alpha_drift = alpha_novel
+
+        # Approach I: Momentum decomposition — use unnormalized EMA resultant length
+        # R = |β·m + (1-β)·δ_dir| before normalization
+        # R ≈ 1 when directions consistent (ScanNet) → α∥ → α⊥ (constant)
+        # R ≈ 0 when directions diverse (TUM) → α∥ stays small (ortho)
+        # Zero extra hyperparameters — R naturally emerges from EMA
+        elif auto_gamma == 'momentum_R':
+            raw_ema = ortho_state.get('raw_ema', None)
+            if raw_ema is not None:
+                raw_ema = beta * raw_ema + (1.0 - beta) * delta_dir.detach()
+                R = raw_ema.norm(dim=-1, keepdim=True).clamp(max=1.0)  # [B, T, 1]
+                R_mean = R.mean()  # scalar: frame-mean
+                # R high (consistent) → preserve drift → α∥ → α⊥
+                # R low (diverse) → suppress drift → α∥ stays small
+                effective_alpha_drift = R_mean * alpha_novel + (1.0 - R_mean) * alpha_drift
+            else:
+                raw_ema = delta_dir.detach().clone()
+                effective_alpha_drift = alpha_novel
+            ortho_state['raw_ema'] = raw_ema
+
+        # Approach G: Drift growth rate — suppress expanding drift, preserve converging refinement
+        # g_t = |δ∥_t| / |δ∥_{t-1}|: growth > 1 → drift expanding (destructive) → suppress
+        #                              growth < 1 → drift shrinking (constructive) → preserve
+        # Zero extra hyperparameters (k_growth fixed at 5.0)
+        elif auto_gamma == 'drift_growth':
+            drift_mag = drift_comp.norm(dim=-1, keepdim=True).clamp(min=1e-8)  # [B, T, 1]
+            prev_drift_mag = ortho_state.get('prev_drift_mag', None)
+            if prev_drift_mag is not None:
+                growth = drift_mag / prev_drift_mag.clamp(min=1e-8)  # [B, T, 1]
+                # Frame-mean for stability
+                g_mean = growth.mean()
+                w = torch.sigmoid(5.0 * (g_mean - 1.0))
+                # growth > 1 → w→1 → α∥ → alpha_drift (suppress)
+                # growth < 1 → w→0 → α∥ → alpha_novel (preserve)
+                effective_alpha_drift = w * alpha_drift + (1.0 - w) * alpha_novel
+            else:
+                effective_alpha_drift = alpha_novel  # first frame: constant dampening
+            ortho_state['prev_drift_mag'] = drift_mag.detach().clone()
+
+        # Approach H: Projection fraction — α∥ scales with how much of δ is drift-aligned
+        # f = |δ∥|/|δ|: high fraction → update is mostly drift → likely constructive → preserve
+        #                low fraction → update is mostly novel → decomposition works → suppress drift
+        # Zero extra hyperparameters
+        elif auto_gamma == 'proj_frac':
+            drift_mag = drift_comp.norm(dim=-1, keepdim=True)  # [B, T, 1]
+            delta_mag = delta.norm(dim=-1, keepdim=True).clamp(min=1e-8)  # [B, T, 1]
+            frac = (drift_mag / delta_mag).clamp(0, 1)  # [B, T, 1], per-token
+            # high frac → α∥ → α⊥ (preserve), low frac → α∥ stays small (suppress)
+            effective_alpha_drift = frac * alpha_novel + (1.0 - frac) * alpha_drift
+
+        # Approach F: Frame-mean raw local DE with steep sigmoid (regime switch)
+        # μ_t = mean(cos²(δ_t, δ_{t-1})) over all tokens → robust frame-level signal
+        # Steep sigmoid creates near-binary regime switch:
+        #   μ_t > τ (consistent refinement, ScanNet-like) → α∥ → α⊥ (constant dampening)
+        #   μ_t < τ (diverse novel motion, TUM-like)      → α∥ stays small (full ortho)
+        elif auto_gamma == 'local_de_fmean_sig':
+            if prev_delta is not None:
+                mu_t = local_de.mean()  # scalar: frame-mean over all tokens
+                ag_k = float(getattr(config, 'auto_gamma_k', 20.0))
+                ag_tau = float(getattr(config, 'auto_gamma_tau', 0.5))
+                w = torch.sigmoid(ag_k * (mu_t - ag_tau))
+                effective_alpha_drift = w * alpha_novel + (1.0 - w) * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel
+
+        # Approach F2: Frame-mean raw local DE linear (no sigmoid, direct interpolation)
+        elif auto_gamma == 'local_de_fmean':
+            if prev_delta is not None:
+                mu_t = local_de.mean()  # scalar
+                effective_alpha_drift = mu_t * alpha_novel + (1.0 - mu_t) * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel
+
         # --- Approach C: Attention entropy adaptive α_∥ ---
         # h̄_t high (scene changing) → α_∥ → α_⊥ (less suppression)
         # h̄_t low  (converged)      → α_∥ stays small (aggressive decomposition)
@@ -1729,6 +1880,88 @@ class ARCroco3DStereo(CroCoNet):
                 effective_alpha_drift = h_bar * alpha_novel + (1.0 - h_bar) * alpha_drift
             else:
                 effective_alpha_drift = alpha_novel  # first frame fallback
+
+        # --- Approach J: Drift direction confidence gate ---
+        # Measures how stable the estimated drift direction is over time.
+        # confidence = cos(d_t, d_{t-1})²: high when drift direction is stable → ortho reliable
+        # c_t high (TUM-like, stable drift) → α∥ stays small (trust ortho decomposition)
+        # c_t low  (ScanNet-like, noisy drift dir) → α∥ → α⊥ (fallback to constant/brake-like)
+        # This directly addresses WHY ortho fails on ScanNet: unreliable drift direction estimation.
+        elif auto_gamma == 'drift_conf':
+            prev_drift_dir = ortho_state.get('prev_drift_dir', None)
+            if prev_drift_dir is not None:
+                # Per-token confidence: how stable is drift_dir over consecutive frames?
+                dir_cos = torch.nn.functional.cosine_similarity(
+                    drift_dir, prev_drift_dir, dim=-1
+                ).unsqueeze(-1)  # [B, T, 1]
+                confidence = dir_cos ** 2  # [B, T, 1], in [0, 1]
+                # EMA smoothing for stability
+                ema_conf = ortho_state.get('ema_drift_conf', None)
+                if ema_conf is None:
+                    ema_conf = confidence.detach().clone()
+                else:
+                    ema_conf = beta * ema_conf + (1.0 - beta) * confidence.detach()
+                ortho_state['ema_drift_conf'] = ema_conf
+                # High confidence → small α∥ (ortho); low confidence → large α∥ (constant)
+                c = ema_conf.mean()  # frame-mean for stability
+                effective_alpha_drift = (1.0 - c) * alpha_novel + c * alpha_drift
+            else:
+                effective_alpha_drift = alpha_novel  # first frame
+            ortho_state['prev_drift_dir'] = drift_dir.detach().clone()
+
+        # Approach J2: Per-token drift confidence (no frame-mean)
+        elif auto_gamma == 'drift_conf_token':
+            prev_drift_dir = ortho_state.get('prev_drift_dir', None)
+            if prev_drift_dir is not None:
+                dir_cos = torch.nn.functional.cosine_similarity(
+                    drift_dir, prev_drift_dir, dim=-1
+                ).unsqueeze(-1)
+                confidence = dir_cos ** 2
+                ema_conf = ortho_state.get('ema_drift_conf', None)
+                if ema_conf is None:
+                    ema_conf = confidence.detach().clone()
+                else:
+                    ema_conf = beta * ema_conf + (1.0 - beta) * confidence.detach()
+                ortho_state['ema_drift_conf'] = ema_conf
+                # Per-token: each token gets its own α∥
+                effective_alpha_drift = (1.0 - ema_conf) * alpha_novel + ema_conf * alpha_drift  # [B, T, 1]
+            else:
+                effective_alpha_drift = alpha_novel
+            ortho_state['prev_drift_dir'] = drift_dir.detach().clone()
+
+        # Approach J3: Drift confidence with brake fallback
+        # Instead of interpolating α∥, interpolate between ortho update and brake-style gate
+        # c_t high → full ortho (α⊥·δ⊥ + α∥·δ∥)
+        # c_t low  → isotropic constant (α⊥·δ, skip decomposition entirely)
+        elif auto_gamma == 'drift_conf_fallback':
+            prev_drift_dir = ortho_state.get('prev_drift_dir', None)
+            if prev_drift_dir is not None:
+                dir_cos = torch.nn.functional.cosine_similarity(
+                    drift_dir, prev_drift_dir, dim=-1
+                ).unsqueeze(-1)
+                confidence = dir_cos ** 2
+                ema_conf = ortho_state.get('ema_drift_conf', None)
+                if ema_conf is None:
+                    ema_conf = confidence.detach().clone()
+                else:
+                    ema_conf = beta * ema_conf + (1.0 - beta) * confidence.detach()
+                ortho_state['ema_drift_conf'] = ema_conf
+                c = ema_conf.mean()
+                # Blend: ortho_result vs constant_result
+                ortho_result = state_feat + alpha_novel * novel_comp + alpha_drift * drift_comp
+                constant_result = state_feat + alpha_novel * delta
+                ortho_state['prev_drift_dir'] = drift_dir.detach().clone()
+                # Apply warmup if needed
+                if t0 > 0 and step < t0 + warmup_w:
+                    if step < t0:
+                        return constant_result
+                    else:
+                        ramp = (step - t0) / max(warmup_w, 1)
+                        c = c * ramp
+                return c * ortho_result + (1.0 - c) * constant_result
+            else:
+                ortho_state['prev_drift_dir'] = drift_dir.detach().clone()
+                return state_feat + alpha_novel * delta
 
         # --- Original steep adaptive (ē^γ) ---
         elif gamma > 0 or adaptive_mode == 'steep':
@@ -2199,7 +2432,8 @@ class ARCroco3DStereo(CroCoNet):
                 # Initialize momentum gate state
                 if update_type in ("ddd3r_brake", "ttt3r_brake_geo",
                                    "ttt3r_centered", "ttt3r_true_momentum",
-                                   "ddd3r_constant_brake", "ddd3r_constant_brake_ortho"):
+                                   "ddd3r_constant_brake", "ddd3r_constant_brake_ortho",
+                                   "ddd3r_ortho_brake"):
                     momentum_state = {}
                 # Initialize delta clip state
                 if update_type == "ttt3r_delta_clip":
@@ -2214,7 +2448,8 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type == "ttt3r_mem_novelty":
                     mem_novelty_state = {}
                 # Initialize delta orthogonalization state
-                if update_type in ("ddd3r", "ddd3r_constant_brake_ortho"):
+                if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
+                                   "ddd3r_ortho_brake"):
                     ortho_state = {}
                 prev_img = curr_img
             else:
@@ -2451,6 +2686,20 @@ class ARCroco3DStereo(CroCoNet):
                     m_gate = self._momentum_gate(
                         state_feat, new_state_feat, momentum_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
+                elif update_type == "ddd3r_ortho_brake":
+                    cross_attn_cat = torch.cat(cross_attn_state, dim=0)
+                    if getattr(self.config, 'auto_gamma', '') == 'entropy':
+                        entropy_beta = getattr(self.config, 'entropy_ema_beta', getattr(self.config, 'beta_ema', 0.95))
+                        self._compute_attn_entropy(cross_attn_cat, ortho_state, entropy_beta)
+                    cross_attn_state = rearrange(cross_attn_cat, 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask * m_gate
                 elif update_type == "ddd3r_constant_brake_ortho":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
@@ -2505,9 +2754,11 @@ class ARCroco3DStereo(CroCoNet):
                                 l2_state['running_energy']),
                         }
                     if update_type in ("ddd3r_brake", "ttt3r_brake_geo",
-                                       "ddd3r_constant_brake", "ddd3r_constant_brake_ortho"):
+                                       "ddd3r_constant_brake", "ddd3r_constant_brake_ortho",
+                                       "ddd3r_ortho_brake"):
                         momentum_state = {}
-                    if update_type in ("ddd3r", "ddd3r_constant_brake_ortho"):
+                    if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
+                                       "ddd3r_ortho_brake"):
                         ortho_state = {}
                     if update_type in ("cut3r_geogate", "ttt3r_geogate",
                                        "cut3r_joint", "ttt3r_joint",
@@ -2694,9 +2945,11 @@ class ARCroco3DStereo(CroCoNet):
                             device=state_feat.device),
                     }
                 if update_type in ("ddd3r_brake",
-                                   "ddd3r_constant_brake", "ddd3r_constant_brake_ortho"):
+                                   "ddd3r_constant_brake", "ddd3r_constant_brake_ortho",
+                                   "ddd3r_ortho_brake"):
                     momentum_state = {}
-                if update_type in ("ddd3r", "ddd3r_constant_brake_ortho"):
+                if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
+                                   "ddd3r_ortho_brake"):
                     ortho_state = {}
             else:
                 # Extract depth for geo gate types
@@ -2842,6 +3095,20 @@ class ARCroco3DStereo(CroCoNet):
                     m_gate = self._momentum_gate(
                         state_feat, new_state_feat, momentum_state, self.config)
                     update_mask1 = update_mask * ttt3r_mask * random_p * m_gate
+                elif update_type == "ddd3r_ortho_brake":
+                    cross_attn_cat = torch.cat(list(cross_attn_state_raw), dim=0)
+                    if getattr(self.config, 'auto_gamma', '') == 'entropy':
+                        entropy_beta = getattr(self.config, 'entropy_ema_beta', getattr(self.config, 'beta_ema', 0.95))
+                        self._compute_attn_entropy(cross_attn_cat, ortho_state, entropy_beta)
+                    cross_attn_rearr = rearrange(cross_attn_cat, 'l h nstate nimg -> 1 nstate nimg (l h)')
+                    state_query_img_key = cross_attn_rearr.mean(dim=(-1, -2))
+                    ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
+                    m_gate = self._momentum_gate(
+                        state_feat, new_state_feat, momentum_state, self.config)
+                    updated = self._delta_ortho_update(
+                        state_feat, new_state_feat, ortho_state, self.config)
+                    new_state_feat = updated
+                    update_mask1 = update_mask * ttt3r_mask * m_gate
                 elif update_type == "ddd3r_constant_brake_ortho":
                     cross_attn_rearr = rearrange(
                         torch.cat(list(cross_attn_state_raw), dim=0),
@@ -2904,9 +3171,11 @@ class ARCroco3DStereo(CroCoNet):
                                 l2_state['running_energy']),
                         }
                     if update_type in ("ddd3r_brake", "ttt3r_brake_geo",
-                                       "ddd3r_constant_brake", "ddd3r_constant_brake_ortho"):
+                                       "ddd3r_constant_brake", "ddd3r_constant_brake_ortho",
+                                       "ddd3r_ortho_brake"):
                         momentum_state = {}
-                    if update_type in ("ddd3r", "ddd3r_constant_brake_ortho"):
+                    if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
+                                       "ddd3r_ortho_brake"):
                         ortho_state = {}
 
         # Clean up temporary state

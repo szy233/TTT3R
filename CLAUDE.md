@@ -44,7 +44,7 @@ state_feat = new * mask1 + old * (1-mask1)
 
 Old CLI args (`--ortho_alpha_novel`, `--ortho_beta`, etc.) still work as hidden aliases.
 
-**Auto-gamma modes**: `warmup_linear`, `warmup_threshold` (sequence-level), `steep_sigmoid`, `steep_clamp` (per-frame), `entropy` (attention entropy adaptive, zero-cost)
+**Auto-gamma modes**: `warmup_linear`, `warmup_threshold` (sequence-level), `steep_sigmoid`, `steep_clamp` (per-frame), `entropy` (attention entropy adaptive, zero-cost), `drift_energy`, `local_de`, `local_de_raw`, `local_de_raw_p2`, `local_de_fmean_sig`, `local_de_fmean`, `local_de_token`, `local_de_token_sig`, `drift_growth`, `proj_frac`, `momentum_R`
 
 ## Eval
 
@@ -54,18 +54,20 @@ bash eval/run_ddd3r_eval.sh <GPU> <DATASET> <METHOD>
 # e.g.: bash eval/run_ddd3r_eval.sh 0 tum_s1_1000 ddd3r
 #        bash eval/run_ddd3r_eval.sh 0 scannet_s3_1000 ddd3r_auto_warmup_linear
 
-# Datasets: tum_s1_1000, tum_s1_90, scannet_s3_1000, scannet_s3_90, sintel, kitti_odom
-#           kitti, bonn, sintel_depth (video depth), 7scenes (3D recon)
+# Datasets (TTT3R standard frame configs):
+#   Relpose ScanNet: scannet_s3_{50,90,100,150,200,...,1000} (21 points)
+#   Relpose TUM:     tum_s1_{50,100,150,200,300,...,1000} (12 points)
+#   Video Depth KITTI: kitti_s1_{50,100,150,...,500} (10 points)
+#   Video Depth Bonn:  bonn_s1_{50,100,150,...,500} (10 points)
+#   Fixed: sintel (relpose), sintel_depth (video depth), kitti_odom, 7scenes (3D recon)
 # Methods:  cut3r, ttt3r, ddd3r_constant, ddd3r_constant_p{N}, ddd3r_brake, ddd3r, ddd3r_g{N}
-#           ddd3r_auto_warmup_linear, ddd3r_auto_warmup_threshold
-#           ddd3r_auto_steep_sigmoid, ddd3r_auto_steep_sigmoid_k20
-#           ddd3r_auto_steep_clamp, ddd3r_auto_steep_clamp_tight
-#           ddd3r_entropy, ddd3r_entropy_b{N} (attention entropy adaptive)
-#           ddd3r_de (drift energy adaptive)
-#           ddd3r_local_de, ddd3r_local_de_sig (local drift energy adaptive)
+#           ddd3r_entropy, ddd3r_de, ddd3r_local_de, ddd3r_local_de_raw_p2, ddd3r_fmean_sig
+#           ddd3r_drift_growth, ddd3r_proj_frac, ddd3r_momentum, ddd3r_boost{N}, ddd3r_a{N}
 
-# Auto-gamma parallel eval
-bash eval/run_auto_gamma_eval.sh 0,1
+# Relpose scaling curve (112 jobs, 2-GPU parallel)
+bash eval/run_scaling_curve.sh 0 1
+# Video depth scaling curve (82 jobs, chained after relpose)
+bash eval/run_vdepth_scaling_curve.sh 0 1
 
 # Portable: DDD3R_PYTHON=/path/to/python bash eval/run_ddd3r_eval.sh ...
 ```
@@ -117,16 +119,25 @@ blend 0 12 && blend 1 12 && bash eval/run_auto_gamma_eval.sh 0,1 ; blend 0 60 &&
 2. ScanNet scene skip: GT contains -inf, evo eigh fails. Consistent across configs.
 
 ## Next Steps
-- ✅ Attention entropy adaptive (ddd3r_entropy: TUM 0.070, ScanNet 0.294, KITTI seq04 4.93)
-- ✅ ScanNet scaling curve (200f/500f × 6 methods) — 完整 4 点曲线
-- ✅ Auto-gamma all variants (warmup, steep, entropy)
-- ✅ Drift energy scaling analysis (A4b) — drift_e 不随长度变化（场景固有属性）
-- ✅ KITTI Odom full eval (14 methods × 11 seqs, zjc 分支) — ddd3r_g1 ATE best (-22.7%), ortho r_err best (-58.6%)
-- ✅ Drift energy adaptive (ddd3r_de): TUM 0.057, ScanNet 0.374（高 drift 退化，不如 brake/constant）
+- ✅ Attention entropy adaptive (ddd3r_entropy: TUM 0.070, ScanNet 0.294)
+- ✅ All auto-gamma variants (warmup, steep, entropy, drift_energy, local_de, per-token)
+- ✅ KITTI Odom full eval (14 methods × 11 seqs) — ddd3r_g1 ATE best (-22.7%)
 - ✅ Paper all sections initial draft
-- ✅ Local DE adaptive (local_de): TUM 0.067, ScanNet 0.297（比 EMA DE 改善 20%，但仍不如 constant/brake）
-- ✅ A4c 信号分析：EMA drift energy 不可区分 TUM/ScanNet（重叠 69-89%），local drift energy 可区分（gap=0.20）
-- ⬜ 根据完整结果更新 paper method/experiments sections
+- ✅ All adaptive methods exhausted (drift_growth, proj_frac, momentum, fmean_sig, boost) — Pareto frontier confirmed
+- ✅ α∅ ablation (a10-a25): TUM robust (0.055-0.056), ScanNet monotonically improves (a20=0.367, a25=0.344)
+- ✅ 论文方向 Narrative C：brake 主方法 + scaling curve + ortho analysis
+- ✅ Relpose scaling curve（132 jobs，130 完成，缺 tum_s1_150/brake + scannet_s3_500/brake 异常）
+  - ScanNet 21 points × 4 methods + TUM 12 points × 5 methods (含 ddd3r)
+- ✅ Overnight ablation (α∅ ablation ScanNet a20/a25 完成)
+- ✅ Drift direction confidence gate (drift_conf/token/fallback) — ScanNet 上失败，drift dir 也稳定
+- ✅ Ortho + Brake 叠加 (ortho_brake) — 严重退化 (TUM 0.107)，信号空间不兼容
+- ✅ 自适应方案最终确认穷尽：所有 online 信号维度已探索，Pareto frontier 无法突破
+- ✅ drift_conf_token + drift_conf_fallback ScanNet — 均失败（≈ortho）
+- ✅ ortho_brake ScanNet — 严重退化 (0.589)，OOM killed
+- ✅ Video depth scaling curve — KITTI/Bonn 10pts×5methods + Sintel 全部完成
+  - Bonn: brake 全长度最优 (~8% vs ttt3r)
+  - KITTI: 300f 交叉点，短序列 brake > ortho，长序列 ortho > brake
+- ⬜ 根据最终 scaling curve 数据更新 paper method/experiments sections
 - ⬜ .bib file (cite keys are placeholders)
-- ⬜ Figures (scatter plot, method diagram, qualitative vis)
-- ⬜ Appendix (per-scene tables, full hyperparameter sweeps)
+- ⬜ Figures: scaling curve (主图), method diagram, ablation table, qualitative vis
+- ⬜ Appendix (per-scene tables, adaptive negative results, hyperparameter sweeps)

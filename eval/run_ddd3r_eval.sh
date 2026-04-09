@@ -73,6 +73,14 @@ case "$METHOD" in
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma warmup_threshold --auto_gamma_warmup 30 --auto_gamma_max 3.0"
         ;;
+    ddd3r_warmup_local_de)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma warmup_local_de --auto_gamma_warmup 30 --auto_gamma_max 3.0"
+        ;;
+    ddd3r_warmup_local_de_linear)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma warmup_local_de_linear --auto_gamma_warmup 30 --auto_gamma_max 3.0"
+        ;;
     ddd3r_auto_steep_sigmoid)
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma steep_sigmoid --auto_gamma_k 10.0"
@@ -119,6 +127,22 @@ case "$METHOD" in
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de"
         ;;
+    ddd3r_local_de_raw)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_raw"
+        ;;
+    ddd3r_local_de_raw_p*)
+        # e.g. ddd3r_local_de_raw_p2 → power=2, ddd3r_local_de_raw_p3 → power=3
+        P=$(echo "$METHOD" | sed 's/ddd3r_local_de_raw_p//')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_raw_p${P}"
+        ;;
+    ddd3r_local_de_raw_cap*)
+        # e.g. ddd3r_local_de_raw_cap06 → cap_ratio=0.6
+        CAP=$(echo "$METHOD" | sed 's/ddd3r_local_de_raw_cap//' | sed 's/^/0./')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_raw_cap${CAP}"
+        ;;
     ddd3r_local_de_sig)
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_sigmoid --auto_gamma_k 20.0"
@@ -128,6 +152,87 @@ case "$METHOD" in
         K=$(echo "$METHOD" | sed 's/ddd3r_local_de_sig_k//')
         UPDATE_TYPE="ddd3r"
         EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_sigmoid --auto_gamma_k ${K}.0"
+        ;;
+    # --- Per-token local drift energy adaptive (A: linear, B: sigmoid) ---
+    ddd3r_local_de_token)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_token"
+        ;;
+    ddd3r_local_de_token_sig)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_token_sig --auto_gamma_k 20.0"
+        ;;
+    ddd3r_local_de_token_sig_k*)
+        K=$(echo "$METHOD" | sed 's/ddd3r_local_de_token_sig_k//')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_token_sig --auto_gamma_k ${K}.0"
+        ;;
+    # --- Drift growth rate (G) ---
+    ddd3r_drift_growth)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_growth"
+        ;;
+    # --- Projection fraction (H) ---
+    ddd3r_proj_frac)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma proj_frac"
+        ;;
+    # --- Frame-mean local DE regime switch (F: sigmoid, F2: linear) ---
+    ddd3r_fmean_sig)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_fmean_sig --auto_gamma_k 20.0 --auto_gamma_tau 0.5"
+        ;;
+    ddd3r_fmean_sig_k*)
+        K=$(echo "$METHOD" | sed 's/ddd3r_fmean_sig_k//')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_fmean_sig --auto_gamma_k ${K}.0 --auto_gamma_tau 0.5"
+        ;;
+    ddd3r_fmean_sig_t*)
+        # e.g. ddd3r_fmean_sig_t45 → tau=0.45
+        TAU=$(echo "$METHOD" | sed 's/ddd3r_fmean_sig_t//' | sed 's/^/0./')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_fmean_sig --auto_gamma_k 20.0 --auto_gamma_tau $TAU"
+        ;;
+    ddd3r_fmean)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma local_de_fmean"
+        ;;
+    # --- Momentum decomposition (I): unnormalized EMA resultant length ---
+    ddd3r_momentum)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma momentum_R"
+        ;;
+    # --- Novel boost (J): boost novel instead of suppressing drift ---
+    # α∥ = 0.5-γ, α⊥ = 0.5. e.g. boost02 → γ=0.02, α∥=0.48
+    ddd3r_boost*)
+        GAMMA=$(echo "$METHOD" | sed 's/ddd3r_boost//' | sed 's/^/0./')
+        ALPHA_BASE=$(python3 -c "print(0.5 - $GAMMA)")
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel $ALPHA_BASE --beta_ema 0.95 --gamma 0"
+        ;;
+    # --- Ortho + Brake combination ---
+    ddd3r_ortho_brake)
+        UPDATE_TYPE="ddd3r_ortho_brake"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --gamma 0 --brake_tau 1.0"
+        ;;
+    # --- Drift direction confidence gate (J2) ---
+    ddd3r_drift_conf)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_conf"
+        ;;
+    ddd3r_drift_conf_token)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_conf_token"
+        ;;
+    ddd3r_drift_conf_fallback)
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --auto_gamma drift_conf_fallback"
+        ;;
+    # --- α∅ ablation (K): vary suppression ratio --- (MUST be after ddd3r_auto* patterns)
+    ddd3r_a[0-9]*)
+        AP=$(echo "$METHOD" | sed 's/ddd3r_a//' | sed 's/^/0./')
+        UPDATE_TYPE="ddd3r"
+        EXTRA_ARGS="--alpha_perp 0.5 --alpha_parallel $AP --beta_ema 0.95 --gamma 0"
         ;;
     *)
         echo "Unknown method: $METHOD"
@@ -147,7 +252,7 @@ case "$DATASET" in
         TASK="relpose"
         LAUNCH="eval/relpose/launch.py"
         ;;
-    kitti|bonn|sintel_depth)
+    kitti|kitti_s1_*|bonn|bonn_s1_*|sintel_depth)
         TASK="video_depth"
         LAUNCH="eval/video_depth/launch.py"
         # sintel_depth → launch.py needs "sintel" as eval_dataset key

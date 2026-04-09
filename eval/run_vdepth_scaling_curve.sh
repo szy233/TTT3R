@@ -1,12 +1,14 @@
 #!/bin/bash
 # =============================================================================
-# Scaling Curve — TTT3R standard frame configs, 2-GPU parallel
+# Video Depth Scaling Curve — TTT3R standard frame configs, 2-GPU parallel
 #
-# ScanNet: 50,90,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000
-# TUM:     50,100,150,200,300,400,500,600,700,800,900,1000
+# KITTI: 50,100,150,200,250,300,350,400,450,500
+# Bonn:  50,100,150,200,250,300,350,400,450,500
+# Sintel: fixed (no scaling)
 # Methods: cut3r, ttt3r, ddd3r_constant, ddd3r_brake
+# Align: scale&shift (default, matches CUT3R/MonST3R protocol)
 #
-# Usage: bash eval/run_scaling_curve.sh <GPU0> <GPU1>
+# Usage: bash eval/run_vdepth_scaling_curve.sh <GPU0> <GPU1>
 # =============================================================================
 
 set -e
@@ -16,28 +18,34 @@ GPU0=${1:-0}
 GPU1=${2:-1}
 
 METHODS=(cut3r ttt3r ddd3r_constant ddd3r_brake)
-
-SCANNET_FRAMES=(50 90 100 150 200 250 300 350 400 450 500 550 600 650 700 750 800 850 900 950 1000)
-TUM_FRAMES=(50 100 150 200 300 400 500 600 700 800 900 1000)
+KITTI_FRAMES=(50 100 150 200 250 300 350 400 450 500)
+BONN_FRAMES=(50 100 150 200 250 300 350 400 450 500)
 
 # Build full job list
 ALL_JOBS=()
 for METHOD in "${METHODS[@]}"; do
-    for N in "${SCANNET_FRAMES[@]}"; do
-        ALL_JOBS+=("scannet_s3_${N} ${METHOD}")
+    for N in "${KITTI_FRAMES[@]}"; do
+        ALL_JOBS+=("kitti_s1_${N} ${METHOD}")
     done
-    for N in "${TUM_FRAMES[@]}"; do
-        ALL_JOBS+=("tum_s1_${N} ${METHOD}")
+    for N in "${BONN_FRAMES[@]}"; do
+        ALL_JOBS+=("bonn_s1_${N} ${METHOD}")
     done
+    # Sintel (fixed length)
+    ALL_JOBS+=("sintel_depth ${METHOD}")
 done
 
-# Filter out completed jobs
+# Filter completed jobs (check for depth metric output)
 JOBS=()
 for JOB in "${ALL_JOBS[@]}"; do
     DATASET=$(echo "$JOB" | awk '{print $1}')
     METHOD=$(echo "$JOB" | awk '{print $2}')
-    OUTDIR="eval_results/relpose/${DATASET}/${METHOD}"
-    if ls "$OUTDIR"/*_eval_metric.txt &>/dev/null 2>&1; then
+    OUTDIR="eval_results/video_depth/${DATASET}/${METHOD}"
+    # Check if depth eval results exist (abs_rel file from eval_depth.py)
+    if [ -f "$OUTDIR/depth_metrics_scale_shift.txt" ] 2>/dev/null; then
+        echo "[SKIP] ${DATASET} ${METHOD}"
+    elif [ -f "$OUTDIR/result_metric.json" ] 2>/dev/null; then
+        echo "[SKIP] ${DATASET} ${METHOD}"
+    elif ls "$OUTDIR"/*_eval_metric.txt &>/dev/null 2>&1; then
         echo "[SKIP] ${DATASET} ${METHOD}"
     else
         JOBS+=("$JOB")
@@ -45,9 +53,9 @@ for JOB in "${ALL_JOBS[@]}"; do
 done
 
 TOTAL=${#JOBS[@]}
-echo "=== Scaling Curve: ${TOTAL} jobs (${#ALL_JOBS[@]} total, $((${#ALL_JOBS[@]} - TOTAL)) skipped) ==="
+echo "=== Video Depth Scaling: ${TOTAL} jobs (${#ALL_JOBS[@]} total, $((${#ALL_JOBS[@]} - TOTAL)) skipped) ==="
 
-# Split jobs: even indices → GPU0, odd indices → GPU1
+# Split jobs between GPUs
 GPU0_JOBS=()
 GPU1_JOBS=()
 for i in "${!JOBS[@]}"; do
@@ -83,7 +91,6 @@ run_queue "$GPU1" "${GPU1_JOBS[@]}" &
 PID1=$!
 
 echo "Launched: GPU${GPU0}(pid=${PID0}) GPU${GPU1}(pid=${PID1})"
-echo "Monitor: tail -f /proc/${PID0}/fd/1 or watch nvidia-smi"
 wait $PID0 $PID1
 
-echo "=== All scaling curve jobs complete ==="
+echo "=== All video depth scaling jobs complete ==="

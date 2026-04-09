@@ -67,6 +67,7 @@ def get_args_parser():
     parser.add_argument("--auto_gamma_k", type=float, default=10.0, help="Auto-gamma sigmoid temperature")
     parser.add_argument("--auto_gamma_lo", type=float, default=0.3, help="Auto-gamma clamp lower bound")
     parser.add_argument("--auto_gamma_hi", type=float, default=0.6, help="Auto-gamma clamp upper bound")
+    parser.add_argument("--auto_gamma_tau", type=float, default=0.5, help="Frame-mean local_de sigmoid threshold")
     parser.add_argument("--entropy_ema_beta", type=float, default=0.95, help="EMA decay for attention entropy smoothing (entropy mode)")
     # Keep for abandoned methods
     parser.add_argument("--spectral_temperature", type=float, default=1.0, help="Layer 2 SIASU temperature")
@@ -407,6 +408,7 @@ if __name__ == "__main__":
     model.config.auto_gamma_k = args.auto_gamma_k
     model.config.auto_gamma_lo = args.auto_gamma_lo
     model.config.auto_gamma_hi = args.auto_gamma_hi
+    model.config.auto_gamma_tau = args.auto_gamma_tau
     # Keep for abandoned methods
     model.config.spectral_temperature = args.spectral_temperature
     model.config.geo_gate_tau = args.geo_gate_tau

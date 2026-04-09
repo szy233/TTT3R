@@ -1,6 +1,6 @@
 # TTT3R — 研究进展全记录
 
-> 最后更新：2026-04-02
+> 最后更新：2026-04-09
 
 ## 项目概述
 
@@ -282,7 +282,7 @@ state = old + α_novel × novel_comp + α_drift × drift_comp
 
 ## 八、当前状态与下一步
 
-### 已完成（2026-03-29 更新）
+### 已完成（2026-04-07 更新）
 
 - ✅ Ortho ScanNet/TUM/Sintel 全量评测（relpose + video depth + 7scenes）
 - ✅ Ortho 超参敏感性（TUM + ScanNet，发现两者最优参数完全反转）
@@ -293,33 +293,42 @@ state = old + α_novel × novel_comp + α_drift × drift_comp
 - ✅ A6 over-update 普遍性分析（90f 即可观察，非 emerging problem）
 - ✅ ScanNet 90f 标准协议修正（linspace→first-90，结果翻转：退化→改善）
 - ✅ Sintel relpose（短序列无 over-update，dampening 均无益）
+- ✅ Attention entropy adaptive (ddd3r_entropy)
+- ✅ Drift energy adaptive (ddd3r_de) + local_de + per-token local_de
+- ✅ Scene-level warmup with local_de（失败：前30帧 raw cos² TUM/ScanNet 重叠）
+- ✅ Paper all sections initial draft
+- ✅ KITTI Odom full eval (14 methods × 11 seqs)
+- ✅ α∅ ablation (a10-a25, TUM+ScanNet): TUM robust, ScanNet monotonically improves
+- ✅ 5 新自适应方法 (drift_growth, proj_frac, momentum, fmean_sig, boost)：全部落在 Pareto frontier 上
+- ✅ Pareto frontier 分析：brake 是唯一 Pareto optimal，所有自适应无法打破 tradeoff
+- ✅ Paper 方向确定 Narrative C：brake 主方法 + scaling curve
 
 ### 待完成
 
 | 优先级 | 任务 |
 |--------|------|
-| **P1** | 理论更新 — drift energy bound, adaptive α 推导, emerging problem 理论框架 |
-| **P1** | Depth qualitative viz — 代表帧 depth map 可视化 |
-| **P1** | Per-scene scatter plot — drift energy vs improvement（ScanNet 退化 → insight） |
-| **P1** | ScanNet scaling curve — 不同长度 (100f, 200f, 500f, 1000f) 各方法 ATE |
-| **P2** | Length-aware ortho — 前 T₀ 帧不抑制 drift，之后逐渐增强 |
-| **P2** | Paper writing — method + experiments |
+| **P1** | Scaling curve 完成 + 画图（relpose + video depth，实验已在跑） |
+| **P1** | Paper figures: scaling curve (主图), method diagram, ablation table |
+| **P1** | 恢复 GhostGPU：`blend 0 60 && blend 1 60`（实验全部完成后） |
+| **P2** | 根据最终 scaling curve 数据更新 paper experiments sections |
+| **P2** | .bib file（cite keys 目前是 placeholder） |
+| **P2** | Appendix: per-scene tables, adaptive negative results, hyperparameter sweeps |
 
-### Paper 叙事方向（2026-03-29 更新）
+### Paper 叙事方向（2026-04-07 更新，Narrative C）
 
-**核心叙事**：Over-update 是普遍存在的问题（90f 即可观察） → scalar gate 全退化为常数 → 方向性分析揭示 drift 本质 → Delta Orthogonalization
+**核心叙事**：Unified update rule S_t = S_{t-1} + β_t·(α⊥·δ⊥ + α∅·δ∅)，constant/brake 为主方法（跨数据集鲁棒），ortho 为分析 insight（揭示方向性本质），自适应为 analysis/discussion。
 
-> **问题**：Recurrent 3D 的 state update 存在 systematic over-update，90f 即可观察（TUM -42%, ScanNet -33%），随序列增长加剧
+> **问题**：Recurrent 3D 的 state update 存在 systematic over-update，90f 即可观察，随序列增长加剧
 >
-> **分析**：Scalar adaptive gate 全部退化为常数（A1-A3 + 竞品 TTSA3R A5）；delta 方向有结构性 drift（A4），drift 性质因场景而异（TUM drift energy 40% vs ScanNet 60%）
+> **分析**：Scalar adaptive gate 全退化为常数（A1-A3, A5）；delta 方向有结构性 drift（A4），drift 性质因场景而异
 >
-> **Insight**：问题不是 "何时更新" 而是 "更新方向的哪部分该保留"；超参敏感性在 TUM/ScanNet 上完全反转（β=0.95 vs 0.99）
+> **方法**：三阶段 Decompose→Reweight→Gate。Brake 为默认（跨数据集最优），ortho 为精度变体（TUM -66%）
 >
-> **方法**：Delta Orthogonalization — drift/novel 分解 + 差异化抑制
+> **主评测**：Scaling curve (50→1000f) 对标 TTT3R Figure 7，展示 DDD3R 增益随长度递增
 >
-> **结果**：TUM pose -66.5% (long) / -55.4% (short, vs TTSA3R -44.2%), video depth -31~59%, 7scenes Comp -54%，零额外 overhead; ScanNet 90f -8% (ortho) / -33% (ttt3r)
+> **Ablation**：constant→brake→ortho 三 stage 增量贡献；α∅ ablation 展示压制比效应
 >
-> **贡献**：(1) 揭示 over-update 普遍存在 + scalar gate 退化（双重验证）; (2) 发现方向性本质与 dataset-dependent drift; (3) Delta Orthogonalization: train-free, plug-in, zero overhead; (4) TUM/depth SOTA, 短序列超越 TTSA3R
+> **Analysis**：ortho TUM vs ScanNet 排名反转（drift energy）+ Pareto frontier + 自适应 negative results
 
 ### Phase 5：Attention Entropy Adaptive（2026-04-02 ~）
 
@@ -344,7 +353,99 @@ h̄_t = β_h · h̄_{t-1} + (1-β_h) · h_t                                   (E
 3. 物理含义更直接：entropy 直接度量"当前帧带来多少新信息"
 4. 实现为 `--auto_gamma entropy`，CLI: `--entropy_ema_beta 0.95`
 
-**状态**：⬜ 待验证（TUM + ScanNet 1000f）
+**状态**：✅ 已验证。TUM 0.070, ScanNet 0.294。方向正确但不够好。
+
+### Phase 6：Per-Token Local DE Adaptive（2026-04-03）
+
+**动机**：A4c 发现 local drift energy `cos(δ_t, δ_{t-1})²` 在 TUM (0.40) 和 ScanNet (0.60) 之间有 0.20 gap，但 frame-mean 版本（local_de）只达到 constant 水平。假设 per-token local_de 能保留空间结构，让每个 token 自主决定 drift suppression 强度。
+
+**实现**：去掉 `ema_local_de.mean()`，直接用 per-token [B,T,1] 的 EMA local_de 作为 α_∥ 的调制信号。
+
+**结果**：
+- Per-token linear (local_de_token)：TUM 1000f = 0.066 ≈ constant
+- Per-token sigmoid k=20 (local_de_token_sig)：TUM 1000f = 0.072（退化）
+
+**失败原因**：Per-token local_de std≈0.16，与 between-dataset gap (0.20) 量级相当。同一帧内 ~30% TUM token 被错误映射到 ScanNet regime。Token 级噪声淹没了 scene-level 信号。
+
+**关键洞察**：Drift energy 是 **scene-level 属性**（A4b 确认不随长度变化），per-frame/per-token 粒度过细。所有 per-frame 自适应方法（EMA DE, entropy, local_de, per-token local_de）都受限于信号在帧/token 级别的区分度不足。
+
+**最有希望的方向**：Scene-level warmup with local_de——在 warmup 期间估计 scene 的 avg local_de（只需 30 帧），用 threshold 决策选择 ortho 或 constant regime，然后固定不变。预期可逼近 per-dataset oracle (TUM→0.056, ScanNet→0.280)。
+
+### Phase 7：Exhaustive Adaptive Search + α∥ Ablation（2026-04-06~07）
+
+**动机**：Phase 6 中 local_de 和 per-token 方案都不够好。尝试所有可能的自适应信号形式，同时做 α∅ ablation 理解压制比的影响。
+
+**新自适应方法（全部在 model.py 实现，eval 脚本已添加）**：
+1. **Drift Growth (G)**：`|δ∥_t|/|δ∥_{t-1}|`，检测 drift 是否在扩大。TUM 0.056 (≈ortho)，ScanNet 0.381（退化）。
+2. **Proj Fraction (H)**：`|δ∥|/|δ|` per-token，零额外超参。TUM 0.062，ScanNet 0.315。
+3. **Momentum R (I)**：unnormalized EMA resultant length。TUM 0.064（≈ constant）。
+4. **Frame-mean Sigmoid (F, fmean_sig)**：`sigmoid(k·(mean(local_de)-τ))`。ScanNet 最优 0.279，但 TUM 0.071（最差自适应），2 extra HP。
+5. **Novel Boost (J)**：boost novel 而非 suppress drift。全部差于 ortho，方向错误。
+
+**α∥ ablation**：
+- TUM 对 α∅ 极其鲁棒：α∅=0.05-0.20 → ATE 0.055-0.056
+- ScanNet 随 α∅ 单调改善：0.488→0.437→0.399→0.343
+- Constant TUM 1000f = 0.079（非之前误记的 0.066，0.066 是 ttt3r_random p=0.33）
+
+**Pareto Frontier**：所有自适应方法落在 ortho↔constant 光滑曲线上，无突破。Brake 是唯一 Pareto optimal。
+
+**Narrative C 确定**：brake 为主方法 + scaling curve 对标 TTT3R Figure 7，ortho/自适应为 analysis insight。
+
+### Phase 8：Drift Direction Confidence + Ortho-Brake 叠加（2026-04-07~08）
+
+**动机**：Phase 7 的所有自适应方法都在调 α∅，前提都是 ortho decomposition 本身可信。新假设：ScanNet 上 ortho 失败可能因为 drift direction 估计不可靠 → decomposition 本身有害。
+
+**Drift Direction Confidence Gate**：
+测量 drift direction 的帧间稳定性 c_t = cos(d_t, d_{t-1})²，高 confidence → trust ortho（小 α∅），低 confidence → fallback to constant（大 α∅）。
+
+| Config | TUM 1000f | ScanNet 1000f |
+|--------|-----------|---------------|
+| drift_conf (frame-mean) | 0.059 | 0.484 |
+| drift_conf_token (per-token) | 0.059 | 0.398 |
+| drift_conf_fallback (blend) | 0.058 | ⏳ |
+| ortho (参考) | 0.055 | 0.488 |
+| brake (参考) | 0.063 | 0.261 |
+
+**结果**：ScanNet drift_conf ≈ pure ortho (0.484 vs 0.488)，完全失败。原因：ScanNet 的 drift direction 也很稳定（静态场景+平滑相机），confidence 高 → 方法走 ortho 路径。问题不是 direction 不准，而是 parallel component 在 ScanNet 上是有用的一致性更新，不应被抑制。
+
+**Ortho + Brake 叠加**：
+把 ortho 的方向分解和 brake 的幅度控制结合：`mask = β_t × m_gate`，new_state_feat 由 ortho 修改。
+
+| Config | TUM 1000f | ScanNet 1000f |
+|--------|-----------|---------------|
+| ortho_brake | 0.107 ⚠ | 0.701* (partial) ⚠ |
+
+**严重退化！** 比 ttt3r (0.103) 还差。根因：brake 的 `cos(δ_t, δ_{t-1})` 基于 ortho 修改后的 delta（已不是原始 update），cosine 信号失真 → gate 做出错误决策。两个机制操作于不同表征空间，不可简单叠加。
+
+**Phase 8 结论**：
+1. Drift direction confidence 不是区分 TUM/ScanNet 的有效信号
+2. Ortho 和 brake 的叠加不可行（信号空间不兼容）
+3. 自适应方案已穷尽所有可用的 online 信号维度：EMA drift energy、local cos²、attention entropy、drift direction stability、decomposition output。Pareto frontier 无法突破。
+
+### Phase 9：Video Depth Scaling Curve（2026-04-08~09）
+
+**目标**：补齐 video depth 的 scaling curve 数据（KITTI + Bonn 10 points × 5 methods + Sintel）。
+
+**完成情况**：
+- KITTI: 10 × 5 = 50 jobs ✅
+- Bonn: 10 × 5 = 50 jobs ✅
+- Sintel: 5 methods ✅
+- 110 帧数据不存在（未预处理），跳过
+
+**关键结果**：
+1. **Bonn 全长度 brake 最优**：在所有帧数上一致领先，vs ttt3r 改善 ~8%
+2. **KITTI 300f 交叉点**：50-250f brake > ortho，300f 持平，350-500f ortho 反超
+3. **交叉点与 relpose 一致**：ortho 长序列累积优势在 video depth 上也成立
+4. **Sintel/Bonn 排序 = ScanNet relpose 排序**：brake > constant > ortho
+
+**Phase 9 结论**：Video depth scaling curve 完整验证了 relpose 的发现。Brake 是跨任务跨数据集的 robust default。Ortho 在长序列 KITTI 上有额外优势，与其在 TUM relpose 上的表现一致。
+
+**Scaling Curve 完成度**：
+- Relpose ScanNet: 21 × 4 methods = 84 jobs，83/84 完成（缺 scannet_s3_500/brake 异常值）
+- Relpose TUM: 12 × 5 methods = 60 jobs，59/60 完成（缺 tum_s1_150/brake）
+- Video Depth KITTI: 10 × 5 methods = 50 jobs ✅ 全部完成
+- Video Depth Bonn: 10 × 5 methods = 50 jobs ✅ 全部完成
+- Sintel Depth: 5 methods ✅ 全部完成
 
 ---
 
