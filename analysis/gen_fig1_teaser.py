@@ -523,7 +523,7 @@ def fig_teaser():
     a_lab_x = 0.01
     fig.text(a_lab_x, label_y_fig, "(a)", fontsize=8, fontweight="bold", va="bottom")
     fig.text(
-        a_lab_x + lab_badge_gap, label_y_fig, "ScanNet",
+        a_lab_x + lab_badge_gap, label_y_fig, "ScanNet trajectories",
         fontsize=6.5, fontweight="bold",
         va="bottom", ha="left", color="white",
         bbox=dict(boxstyle="round,pad=0.25", facecolor="black", alpha=0.6),
