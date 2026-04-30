@@ -519,9 +519,15 @@ def fig_teaser():
     # Consistent spacing: label then gap then badge
     lab_badge_gap = 0.05  # gap between (x) and badge
 
-    # (a) label
+    # (a) label + badge
     a_lab_x = 0.01
     fig.text(a_lab_x, label_y_fig, "(a)", fontsize=8, fontweight="bold", va="bottom")
+    fig.text(
+        a_lab_x + lab_badge_gap, label_y_fig, "ScanNet",
+        fontsize=6.5, fontweight="bold",
+        va="bottom", ha="left", color="white",
+        bbox=dict(boxstyle="round,pad=0.25", facecolor="black", alpha=0.6),
+    )
 
     # (b) label + badge
     b_lab_x = right_left - 0.03
