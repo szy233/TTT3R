@@ -562,6 +562,11 @@ def fig_teaser():
     # ── (b) Gate collapse ──
     # Average gate curves per dataset (interpolated to common x-axis)
     gate_groups = {
+        "TUM avg": (
+            ["a1_tum_rgbd_dataset_freiburg3_walking_xyz.npz",
+             "a1_tum_rgbd_dataset_freiburg3_sitting_static.npz"],
+            "#31A354",  # green
+        ),
         "ScanNet avg": (
             ["a1_scannet_scene0707_00.npz", "a1_scannet_scene0710_00.npz",
              "a1_scannet_scene0758_00.npz"],
