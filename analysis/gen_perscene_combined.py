@@ -146,14 +146,16 @@ def panel_drift_energy(ax):
 
     s, i, r, p, _ = stats.linregress(de, imp_ortho)
     xs = np.linspace(de.min(), de.max(), 100)
-    ax.plot(xs, s * xs + i, "-", color=C_HELP, lw=1.1, alpha=0.85, zorder=2,
-            label=rf"DDD3R fit ($r{{=}}{r:+.2f}$, $p{{=}}{p:.3f}$)")
+    ax.plot(xs, s * xs + i, "-", color=C_HELP, lw=1.1, alpha=0.85, zorder=2)
 
     ax.set_title("(b) Drift energy", fontsize=9, loc="left", fontweight="bold", pad=3)
     ax.set_xlabel(r"Drift energy $\bar{e}$")
     ax.set_ylim(-100, 70)
-    ax.legend(loc="upper right", framealpha=0.85, edgecolor="none",
-              borderaxespad=0.3, handletextpad=0.45)
+    # Compact 3-item legend in bottom-left where point density is lowest.
+    leg = ax.legend(loc="lower left", framealpha=0.85, edgecolor="none",
+                    borderaxespad=0.25, handletextpad=0.35, labelspacing=0.2,
+                    fontsize=6, facecolor="white")
+    leg.get_frame().set_linewidth(0)
     ax.tick_params(width=0.5, length=2.5)
 
 
