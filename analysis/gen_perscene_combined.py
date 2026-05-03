@@ -160,8 +160,8 @@ def panel_drift_energy(ax):
 def main():
     # width_ratios so (b) gets ~1.4x the width of (a), giving the legend
     # and the wider data range room without crushing the points
-    fig = plt.figure(figsize=(6.6, 2.5))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.0, 1.45], wspace=0.32)
+    fig = plt.figure(figsize=(5.5, 1.8))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.0, 1.45], wspace=0.30)
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
     panel_gate_variance(ax_a)
