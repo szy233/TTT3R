@@ -18,16 +18,16 @@ from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 OUT_DIR = Path("/home/szy/research/TTT3R/paper/fig")
 
-# Restrained palette: one warm + one cool + neutral grays.
-C_DELTA = "#D87060"   # raw delta — warm coral
-C_DRIFT = "#7E6CB0"   # drift component — muted purple
-C_ORTHO = "#3F86C9"   # orthogonal component — clear blue
-C_FINAL = "#3FA864"   # reweighted delta — green
-C_DARK  = "#2B2B2B"   # decompose / reweight dark
-C_GATE  = "#888888"   # gate gray
-C_AXIS  = "#B7B7B7"   # drift axis dashed
-C_ARROW = "#7A7A7A"   # connector arrows
-C_INK   = "#1F1F1F"
+# Wong-inspired colorblind-safe palette, slightly desaturated for print.
+C_DELTA = "#D55E00"   # raw delta -- vermillion
+C_DRIFT = "#CC79A7"   # drift component -- reddish purple
+C_ORTHO = "#0072B2"   # orthogonal component -- deep blue
+C_FINAL = "#009E73"   # reweighted delta -- bluish green
+C_DARK  = "#1E2A38"   # decompose block -- near-black navy
+C_GATE  = "#9CA3AF"   # gate / EMA input -- slate gray
+C_AXIS  = "#C9CDD2"   # drift axis dashed -- light gray
+C_ARROW = "#6B7280"   # connector arrows -- mid gray
+C_INK   = "#111827"
 
 rcParams.update({
     "font.family": "sans-serif",
