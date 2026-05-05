@@ -73,13 +73,22 @@ def collect_ates(method_subdir):
 
 
 def panel_gate_variance(ax):
-    d = np.load(A2 / "a2_scannet_data.npz")
-    var = d["cos_variances"]
-    imp = d["improvements"]
-    r = float(d["pearson_r"])
-    p = float(d["pearson_p"])
+    """Direct per-scene Var(beta_t) vs improvement, ScanNet n=65.
+
+    Loads gate variance + improvement from
+    analysis_results/a2b_direct_gate_variance/scannet_g{0,1}_data.npz
+    (combined across the two GPU shards). Loaded numeric-only so we
+    avoid allow_pickle on the scene-name array.
+    """
+    direct = BASE / "analysis_results" / "a2b_direct_gate_variance"
+    g0_var = np.load(direct / "scannet_g0_data.npz")["gate_var"]
+    g0_imp = np.load(direct / "scannet_g0_data.npz")["improvement"]
+    g1_var = np.load(direct / "scannet_g1_data.npz")["gate_var"]
+    g1_imp = np.load(direct / "scannet_g1_data.npz")["improvement"]
+    var = np.concatenate([g0_var, g1_var])
+    imp = np.concatenate([g0_imp, g1_imp])
     n = len(imp)
-    n_help = int((imp > 0).sum())
+    r, p = stats.pearsonr(var, imp)
 
     ax.axhline(0, color="#CCC", lw=0.5, zorder=0)
     ax.scatter(var, imp, s=22, alpha=0.65, c=C_HELP, edgecolor="white", lw=0.3,
@@ -91,14 +100,14 @@ def panel_gate_variance(ax):
                 zorder=1)
 
     ax.set_title("(a) Gate variance", fontsize=9, loc="left", fontweight="bold", pad=3)
-    ax.set_xlabel(r"$\mathrm{Var}(\cos(\boldsymbol{\delta}_t, \boldsymbol{\delta}_{t-1}))$")
+    ax.set_xlabel(r"$\mathrm{Var}(\beta_t)$")
     ax.set_ylabel("ATE improvement (%)")
-    # Stats annotation, top-left
+    sig = "" if p < 0.05 else " (n.s.)"
     ax.text(0.04, 0.93,
-            rf"$r{{=}}{r:+.2f}$, $p{{=}}{p:.2f}$ (n.s.)",
+            rf"$r{{=}}{r:+.2f}$, $p{{=}}{p:.3f}${sig}",
             transform=ax.transAxes, ha="left", va="top",
             fontsize=7, color="#222")
-    ax.text(0.96, 0.05, rf"$n{{=}}{n}$ scenes; helped {n_help}/{n}",
+    ax.text(0.96, 0.05, rf"$n{{=}}{n}$ ScanNet scenes",
             transform=ax.transAxes, ha="right", va="bottom",
             fontsize=6.5, color="#666")
     ax.tick_params(width=0.5, length=2.5)
