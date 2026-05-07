@@ -135,10 +135,12 @@ def plot_scaling_panel(ax, frames, data, ylabel, title, show_legend=False,
         ax.axvspan(*highlight_region, alpha=0.04, color='#333333')
 
     if show_legend:
-        leg = ax.legend(frameon=True, framealpha=0.95, edgecolor='#CCCCCC',
+        leg = ax.legend(frameon=True, framealpha=0.55, edgecolor='#CCCCCC',
                         loc='upper left', fontsize=6, handlelength=2.0,
                         borderpad=0.4, labelspacing=0.3)
         leg.get_frame().set_linewidth(0.4)
+        # Also let underlying curves show through the legend body
+        leg.get_frame().set_facecolor((1, 1, 1, 0.55))
 
 
 def fig_relpose_scaling():
