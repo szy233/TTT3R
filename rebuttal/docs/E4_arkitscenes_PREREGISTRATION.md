@@ -170,6 +170,67 @@ All DDD3R operating points beat both CUT3R and TTT3R.
 
 ---
 
-## Post-hoc section (to be appended only after results exist)
+## Post-hoc section — RESULTS
 
-*(empty)*
+Run after the P2 lock commit (`b74c4c0`). Six methods × 18 scenes × 500 frames.
+Raw per-scene numbers: `rebuttal/results/arkit_ate_summary.json`.
+
+### Measured ATE (RMSE, m ↓)
+
+| Method | ATE | vs CUT3R | vs TTT3R | Wilcoxon vs TTT3R |
+|---|---|---|---|---|
+| CUT3R | 0.682 | — | +22.2% | — |
+| TTT3R | 0.558 | −18.1% | — | — |
+| TTSA3R | 0.556 | −18.4% | −0.4% | p=0.523 (n.s.) |
+| **DDD3R_const** | **0.528** | **−22.6%** | **−5.5%** | **p=0.027** ✓ |
+| DDD3R_brake | 0.539 | −20.9% | −3.4% | p=0.304 (n.s.) |
+| DDD3R_ortho | 0.609 | −10.6% | **+9.2%** | p=0.154 (n.s.) |
+
+Paired bootstrap 95% CIs and Wilcoxon signed-rank, n=18 scenes.
+
+### Verdicts
+
+**P1 — HOLDS.** Predicted ē > 0.50; measured **0.632 ± 0.035**.
+
+**P2 — core claim HOLDS, strict ordering FAILS.**
+Predicted `brake < const < ortho`; observed `const (0.528) < brake (0.539) < ortho (0.609)`.
+- const and brake **swapped**, so the literal three-way ordering is falsified. But they differ
+  by 2.2% with Wilcoxon **p=0.671** and 8/18 scene wins — statistically indistinguishable.
+  We do not claim this swap is meaningful in either direction.
+- The **substantive**, discriminating part of the prediction holds decisively: **ortho is the
+  worst of the three DDD3R operating points**, by 13.4% vs const (p=0.027, 14/18 scenes) and
+  11.5% vs brake (p=0.081, 12/18). Predicting *from drift energy alone, before any ATE existed*,
+  that our own flagship variant would lose on unseen real-world data — and being right —
+  is the outcome this experiment was designed to test.
+
+**P3 — FAILS.** Not every DDD3R point beats both baselines. `const` beats both
+(vs TTT3R p=0.027, vs CUT3R p=0.001) and `brake` beats CUT3R (p=0.001) but not TTT3R
+(p=0.304). **`ortho` is 9.2% *worse* than TTT3R** (4/18 scene wins), though still 10.6%
+better than CUT3R (p=0.002).
+
+### Interpretation
+
+Honest summary: **C3 is corroborated, M1 is bounded.**
+
+The drift-energy signal transferred to genuinely unseen real-world data and correctly
+identified, in advance, which operating point would fail. This is predictive rather than
+descriptive use of the theory.
+
+P3's failure is a **real limitation and we report it as such**: in high-drift-energy
+real-world scenes, full directional decomposition is not merely suboptimal, it can fall
+*below* the TTT3R baseline. This matches what the paper already reports on ScanNet 1000f,
+the other high-drift dataset, where ortho (0.488) is likewise worse than TTT3R (0.406).
+ARKitScenes therefore does not reveal a new failure mode; it confirms on real-world data a
+boundary the paper had already observed in-benchmark, and shows that drift energy predicts
+where that boundary lies.
+
+Consequence for the paper's practitioner guidance: `ortho`'s recommended scope narrows to
+**low-drift-energy scenes (ē ≲ 0.45, TUM-like)**; for unknown or high-drift scenes the
+isotropic points (`const`, `brake`) are the safe default. Absolute errors on ARKitScenes are
+high for every method (0.53–0.68 m over 500 frames of handheld capture), so this is a hard
+setting in which no method is close to solved.
+
+### Deviations from protocol
+
+None beyond Amendment 1 (length 1000 → 500, made before any ATE). The scene set, method set,
+metric, and predictions are exactly as registered. No result was excluded.
