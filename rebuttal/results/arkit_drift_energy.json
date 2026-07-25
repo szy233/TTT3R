@@ -1,0 +1,155 @@
+{
+  "dataset": "arkitscenes",
+  "n_scenes": 18,
+  "n_frames": 500,
+  "drift_energy_mean": 0.6323157464361808,
+  "drift_energy_std": 0.035433660485164255,
+  "cos_mean": 0.7895917865675606,
+  "cos_std": 0.023304477656258024,
+  "per_scene": [
+    {
+      "scene": "41069021",
+      "n_frames": 500,
+      "cos_mean": 0.8404183340126383,
+      "cos_std": 0.06821151796257971,
+      "drift_energy_mean": 0.7109557873273379,
+      "drift_energy_std": 0.09083523909804748
+    },
+    {
+      "scene": "41069025",
+      "n_frames": 500,
+      "cos_mean": 0.8006101297233291,
+      "cos_std": 0.08406055997047944,
+      "drift_energy_mean": 0.6480427575581563,
+      "drift_energy_std": 0.11224552580603507
+    },
+    {
+      "scene": "41069042",
+      "n_frames": 500,
+      "cos_mean": 0.7369248121379611,
+      "cos_std": 0.08883722767630253,
+      "drift_energy_mean": 0.5509502317657804,
+      "drift_energy_std": 0.11246686962946638
+    },
+    {
+      "scene": "41069043",
+      "n_frames": 500,
+      "cos_mean": 0.8012756447873278,
+      "cos_std": 0.0787125970997344,
+      "drift_energy_mean": 0.648238331871533,
+      "drift_energy_std": 0.10552760290757693
+    },
+    {
+      "scene": "41069046",
+      "n_frames": 500,
+      "cos_mean": 0.819383507919216,
+      "cos_std": 0.07493690773679772,
+      "drift_energy_mean": 0.6770048731911531,
+      "drift_energy_std": 0.10174655502248243
+    },
+    {
+      "scene": "41069051",
+      "n_frames": 500,
+      "cos_mean": 0.7945727202481402,
+      "cos_std": 0.08742967431973944,
+      "drift_energy_mean": 0.6389897557141848,
+      "drift_energy_std": 0.11857349456861958
+    },
+    {
+      "scene": "41125696",
+      "n_frames": 500,
+      "cos_mean": 0.8012710219782914,
+      "cos_std": 0.09302177039858477,
+      "drift_energy_mean": 0.6506883004302224,
+      "drift_energy_std": 0.12327658316852359
+    },
+    {
+      "scene": "41125700",
+      "n_frames": 500,
+      "cos_mean": 0.7703635643025438,
+      "cos_std": 0.10316801453690946,
+      "drift_energy_mean": 0.6041036604284075,
+      "drift_energy_std": 0.1385141873081853
+    },
+    {
+      "scene": "41125709",
+      "n_frames": 500,
+      "cos_mean": 0.7690166501638168,
+      "cos_std": 0.09466306149787851,
+      "drift_energy_mean": 0.6003477034413293,
+      "drift_energy_std": 0.12970108676885936
+    },
+    {
+      "scene": "41125718",
+      "n_frames": 500,
+      "cos_mean": 0.7628945414133683,
+      "cos_std": 0.11109261877385526,
+      "drift_energy_mean": 0.5943496512643467,
+      "drift_energy_std": 0.14665420026618486
+    },
+    {
+      "scene": "41125722",
+      "n_frames": 500,
+      "cos_mean": 0.7802846275404365,
+      "cos_std": 0.11454174424395445,
+      "drift_energy_mean": 0.621963911150365,
+      "drift_energy_std": 0.14985701182040492
+    },
+    {
+      "scene": "41125731",
+      "n_frames": 500,
+      "cos_mean": 0.7893706273235276,
+      "cos_std": 0.10820963910991793,
+      "drift_energy_mean": 0.6348153132774382,
+      "drift_energy_std": 0.13808899864357077
+    },
+    {
+      "scene": "41125756",
+      "n_frames": 500,
+      "cos_mean": 0.7868064155499778,
+      "cos_std": 0.10196041326824119,
+      "drift_energy_mean": 0.6294602614244347,
+      "drift_energy_std": 0.1349803791713097
+    },
+    {
+      "scene": "41125760",
+      "n_frames": 500,
+      "cos_mean": 0.7941639750957011,
+      "cos_std": 0.08475248407034051,
+      "drift_energy_mean": 0.6378794028958986,
+      "drift_energy_std": 0.1122650245408548
+    },
+    {
+      "scene": "41125763",
+      "n_frames": 500,
+      "cos_mean": 0.7803370327892188,
+      "cos_std": 0.08925751663291039,
+      "drift_energy_mean": 0.6168927890177568,
+      "drift_energy_std": 0.11783469591676787
+    },
+    {
+      "scene": "41142278",
+      "n_frames": 500,
+      "cos_mean": 0.7680486701951476,
+      "cos_std": 0.0855244928296619,
+      "drift_energy_mean": 0.5972131986623056,
+      "drift_energy_std": 0.11412772612218108
+    },
+    {
+      "scene": "41142280",
+      "n_frames": 500,
+      "cos_mean": 0.8191651754036456,
+      "cos_std": 0.06974580553305419,
+      "drift_energy_mean": 0.67589606198354,
+      "drift_energy_std": 0.09124641811851458
+    },
+    {
+      "scene": "41142281",
+      "n_frames": 500,
+      "cos_mean": 0.797744707631802,
+      "cos_std": 0.08657266250101579,
+      "drift_energy_mean": 0.6438914444470641,
+      "drift_energy_std": 0.11637416458155365
+    }
+  ]
+}

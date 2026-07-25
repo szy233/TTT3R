@@ -129,6 +129,47 @@ associated to an image within 50 ms** in every scene (e.g. 1878/1878, 1675/1675,
 
 ---
 
+## P2 BRANCH LOCKED — drift energy measured, ranking predicted, NO ATE YET
+
+**Measured before any ARKitScenes ATE existed.** `rebuttal/results/arkit_drift_energy.json`,
+produced by `rebuttal/scripts/arkit_drift_energy.py`, which calls the paper's own
+`analysis/a4_delta_direction.py:run_detailed_delta_analysis` so the number is directly
+comparable to Table 3.
+
+```
+ARKitScenes drift energy: 0.632 ± 0.035   (n = 18 scenes, 500 f, vga_wide 640×480)
+                     cos: 0.790 ± 0.023
+reference (Table 3):  TUM 0.398 ± 0.041 | ScanNet 0.598 ± 0.054
+```
+
+### P1 — HOLDS
+Predicted `ē > 0.50`; measured **0.632**. ARKitScenes is not merely ScanNet-like, it is
+*more* drift-dominated than ScanNet (0.598), and far from TUM (0.398). Consistent with its
+capture protocol: slow handheld indoor scanning with substantial revisiting.
+The per-scene spread is tight (σ = 0.035, all 18 scenes in 0.55–0.66), so the regime
+assignment is unambiguous rather than an artifact of averaging.
+
+### P2 — ScanNet-like branch selected. **Predicted ranking, locked now:**
+
+> **DDD3R_brake < DDD3R_const < DDD3R_ortho**   (`<` = lower ATE = better)
+
+That is: **isotropic dampening should win, and full directional decomposition should
+*lose***, mirroring ScanNet 1000f (brake 0.261 < const 0.283 < ortho 0.488).
+
+This is a deliberately **falsifiable and counter-intuitive** prediction: it forecasts that our
+own flagship variant (ortho) will be the *worst* of the three DDD3R operating points on this
+dataset. Any outcome in which ortho beats brake falsifies P2.
+
+Secondary expectation (not part of the pass/fail criterion): given ē = 0.632 exceeds
+ScanNet's 0.598, the ortho penalty should be at least as pronounced as on ScanNet.
+
+### P3 — unchanged
+All DDD3R operating points beat both CUT3R and TTT3R.
+
+**Nothing below this line may be written until the ATE runs have completed.**
+
+---
+
 ## Post-hoc section (to be appended only after results exist)
 
 *(empty)*
