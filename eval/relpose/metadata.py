@@ -212,6 +212,28 @@ tum_configs = {
 }
 dataset_metadata.update(tum_configs)
 
+# ARKitScenes (real-world handheld iPad Pro captures, laser-scan GT poses).
+# Prepared by rebuttal/scripts/prepare_arkitscenes.py into the TUM layout.
+arkit_numbers = [100, 200, 300, 500, 1000]
+arkit_configs = {
+    f"arkit_s1_{num}": {
+        "img_path": "data/long_arkit_s1",
+        "mask_path": None,
+        "dir_path_func": lambda img_path, seq, num=num: os.path.join(img_path, seq, f"rgb_{num}"),
+        "gt_traj_func": lambda img_path, anno_path, seq, num=num: os.path.join(
+            img_path, seq, f"groundtruth_{num}.txt"
+        ),
+        "traj_format": "tum",
+        "seq_list": None,
+        "full_seq": True,
+        "mask_path_seq_func": lambda mask_path, seq: None,
+        "skip_condition": _skip_if_done,
+        "process_func": None,
+    }
+    for num in arkit_numbers
+}
+dataset_metadata.update(arkit_configs)
+
 # KITTI Odometry (outdoor, sequences 00-10)
 dataset_metadata["kitti_odom"] = {
     "img_path": "/mnt/sda/rkj/VGGT_Long_outdoor/kitti_00_10",

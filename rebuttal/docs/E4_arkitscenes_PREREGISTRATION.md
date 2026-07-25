@@ -27,6 +27,7 @@ Selection, fixed in advance and free of cherry-picking:
   41125696 41125700 41125709 41125718 41125722 41125731 41125756 41125760 41125763
   41142278 41142280 41142281
 - evaluate the **first 1000 associated frames** of each scene
+  → **amended to 500 frames before any ATE was computed; see "Amendment 1" below**
 
 Preprocessing (`rebuttal/scripts/prepare_arkitscenes.py`), with the two failure modes
 that would silently corrupt ATE handled explicitly:
@@ -86,6 +87,45 @@ consistent with the paper already being a diagnosis-first contribution.
 2. Write the resulting P2 branch into this file **before** running any pose eval.
 3. Run `cut3r, ttt3r, ddd3r_constant, ddd3r_brake, ddd3r` on `arkit_s1_1000`.
 4. Report ATE, ranking, and whether P1/P2/P3 held.
+
+---
+
+## Amendment 1 — sequence length 1000 → 500
+
+**Made before any ATE on ARKitScenes was computed. No result influenced this change.**
+
+The original "first 1000 frames" was extrapolated from the single scene downloaded at
+registration time (41069021, 1878 poses). Having now converted all 20 scenes, the pose
+streams are shorter than that scene suggested (median ≈ 900):
+
+| length | scenes qualifying |
+|---|---|
+| 300 | 20/20 |
+| **500** | **18/20** |
+| 800 | 12/20 |
+| 1000 | 8/20 |
+
+Keeping 1000 would have cut the sample to n=8. We therefore evaluate at **500 frames on
+the 18 qualifying scenes** (all except 41069048 with 330 and 41069050 with 311).
+
+Why this does not weaken the pre-registration:
+- The change is driven purely by **data availability**, which is independent of any
+  method's performance — no ATE existed when this was written.
+- The scene *selection rule* (Validation split, video_id ascending, first 20) is unchanged.
+- 500 frames remains squarely in the long-sequence regime this paper studies: the main
+  video-depth tables (KITTI, Bonn) are themselves reported at 500 frames, and on TUM /
+  ScanNet the methods are already well separated by 500 frames.
+- P1, P2 and P3 are **unchanged** — the predictions are about drift energy and ranking,
+  not about a particular length.
+
+Excluded scenes (too short for 500f): 41069048 (330), 41069050 (311).
+Final evaluation set: **18 scenes × 500 frames, 640×480 (`vga_wide`)**.
+
+## Data preparation outcome (pre-ATE, factual record)
+
+All 20 scenes converted with `--img-asset vga_wide`: **100% of pose timestamps
+associated to an image within 50 ms** in every scene (e.g. 1878/1878, 1675/1675,
+966/966, ...). Resolution is 640×480, matching TUM, so no low-resolution caveat applies.
 
 ---
 
