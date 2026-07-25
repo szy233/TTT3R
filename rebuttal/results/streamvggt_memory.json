@@ -1,0 +1,34 @@
+[
+  {
+    "frames": 2,
+    "kv_cache_bytes": 540278784,
+    "kv_cache_GB": 0.540278784,
+    "per_frame_MB": 270.139392,
+    "n_cached_tensors": 48,
+    "peak_alloc_GB": 6.239695872
+  },
+  {
+    "frames": 4,
+    "kv_cache_bytes": 1080557568,
+    "kv_cache_GB": 1.080557568,
+    "per_frame_MB": 270.139392,
+    "n_cached_tensors": 48,
+    "peak_alloc_GB": 6.848387584
+  },
+  {
+    "frames": 8,
+    "kv_cache_bytes": 2161115136,
+    "kv_cache_GB": 2.161115136,
+    "per_frame_MB": 270.139392,
+    "n_cached_tensors": 48,
+    "peak_alloc_GB": 8.024613376
+  },
+  {
+    "frames": 16,
+    "kv_cache_bytes": 4322230272,
+    "kv_cache_GB": 4.322230272,
+    "per_frame_MB": 270.139392,
+    "n_cached_tensors": 48,
+    "peak_alloc_GB": 10.430759936
+  }
+]

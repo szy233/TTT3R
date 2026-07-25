@@ -1,0 +1,5 @@
+# Bulk experiment artifacts and third-party clones — reproducible from scripts.
+external/
+results/**/*.png
+results/**/*.txt
+results/*.log

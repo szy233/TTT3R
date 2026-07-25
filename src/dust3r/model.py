@@ -946,9 +946,34 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
                                    "ddd3r_ortho_brake"):
                     ortho_state = {}
+                # Initialize TTSA3R (TAUM x SCUM) state
+                if update_type == "ttsa3r":
+                    taum_state = {
+                        'prev_new_state': new_state_feat.detach().clone(),
+                        'prev_feat': feat_i.detach().clone(),
+                    }
             else:
                 if update_type == "cut3r":
                     update_mask1 = update_mask
+                elif update_type == "ttsa3r":
+                    # TTSA3R baseline: TAUM (temporal) x SCUM (spatial) gate.
+                    # Same formula as the cut3r_taum_log analysis path, applied live.
+                    tau_taum = getattr(self.config, 'taum_tau', 1.5)
+                    sc = (new_state_feat - taum_state['prev_new_state']).norm(
+                        dim=-1).squeeze(0)                              # [n_state]
+                    t_mask = torch.sigmoid(sc / sc.mean() - tau_taum)   # [n_state]
+                    fi_n = feat_i / feat_i.norm(dim=-1, keepdim=True)
+                    pf_n = taum_state['prev_feat'] / taum_state['prev_feat'].norm(
+                        dim=-1, keepdim=True)
+                    fd = 1.0 - (fi_n * pf_n).sum(dim=-1)                # [1, n_img]
+                    ca = rearrange(torch.cat(cross_attn_state, dim=0),
+                                   'l h ns ni -> 1 ns ni (l h)')[:, :, 1:, :]
+                    am = ca.mean(dim=-1).abs()                          # [1, n_state, n_img]
+                    ss = (am * fd.unsqueeze(1)).max(dim=-1)[0].squeeze(0)  # [n_state]
+                    s_mask = torch.sigmoid(ss)
+                    update_mask1 = update_mask * (t_mask * s_mask)[None, :, None]
+                    taum_state['prev_new_state'] = new_state_feat.detach().clone()
+                    taum_state['prev_feat'] = feat_i.detach().clone()
                 elif update_type == "ttt3r":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)') # [12, 16, 768, 1 + 576] -> [1, 768, 1 + 576, 12*16]
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
@@ -2451,10 +2476,36 @@ class ARCroco3DStereo(CroCoNet):
                 if update_type in ("ddd3r", "ddd3r_constant_brake_ortho",
                                    "ddd3r_ortho_brake"):
                     ortho_state = {}
+                # Initialize TTSA3R (TAUM x SCUM) state
+                if update_type == "ttsa3r":
+                    taum_state = {
+                        'prev_new_state': new_state_feat.detach().clone(),
+                        'prev_feat': feat_i.detach().clone(),
+                    }
                 prev_img = curr_img
             else:
                 if update_type == "cut3r":
                     update_mask1 = update_mask
+                elif update_type == "ttsa3r":
+                    # TTSA3R baseline: TAUM (temporal) x SCUM (spatial) gate.
+                    # Same formula as cut3r_taum_log below, but applied live so the
+                    # method can be scored head-to-head instead of only logged.
+                    tau_taum = getattr(self.config, 'taum_tau', 1.5)
+                    sc = (new_state_feat - taum_state['prev_new_state']).norm(
+                        dim=-1).squeeze(0)                                 # [n_state]
+                    t_mask = torch.sigmoid(sc / sc.mean() - tau_taum)      # [n_state]
+                    fi_n = feat_i / feat_i.norm(dim=-1, keepdim=True)
+                    pf_n = taum_state['prev_feat'] / taum_state['prev_feat'].norm(
+                        dim=-1, keepdim=True)
+                    fd = 1.0 - (fi_n * pf_n).sum(dim=-1)                   # [1, n_img]
+                    ca = rearrange(torch.cat(cross_attn_state, dim=0),
+                                   'l h ns ni -> 1 ns ni (l h)')[:, :, 1:, :]
+                    am = ca.mean(dim=-1).abs()                             # [1, n_state, n_img]
+                    ss = (am * fd.unsqueeze(1)).max(dim=-1)[0].squeeze(0)  # [n_state]
+                    s_mask = torch.sigmoid(ss)
+                    update_mask1 = update_mask * (t_mask * s_mask)[None, :, None]
+                    taum_state['prev_new_state'] = new_state_feat.detach().clone()
+                    taum_state['prev_feat'] = feat_i.detach().clone()
                 elif update_type == "cut3r_taum_log":
                     # cut3r update + compute & log what TAUM gate would produce
                     update_mask1 = update_mask
