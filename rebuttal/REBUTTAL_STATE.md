@@ -1,61 +1,96 @@
-# REBUTTAL STATE — Submission 8591 (DDD3R)
+# REBUTTAL STATE — NeurIPS 2026 Submission 8591 (DDD3R)
 
 - **Venue**: NeurIPS 2026 · **Format**: text-only · **Limit**: 6000 chars **per reviewer**
-- **Stage**: initial rebuttal
-- **Phase reached**: 4 (draft written) — Phases 5–7 (lints, stress test, finalize) pending experiments
+- **Stage**: initial rebuttal — **Phase 7 complete, ready to post**
 
-## Reviewers
+## Deliverables
 
-| ID | Rating | Quality | Conf | Note |
-|---|---|---|---|---|
-| ULz9 | 4 | 3 | **5** | wants theory + real-world; checks details |
-| DpBu | 4 | 3 | 4 | "Quality could go to 4" if cross-backbone added |
-| 1ake | 4 | **2** | 4 | "I will raise my score if you resolve my concern" |
+| File | Purpose |
+|---|---|
+| `PASTE_READY.txt` | three blocks, paste one per reviewer; macros expanded, counts verified |
+| `REBUTTAL_DRAFT_v1.md` | working draft with LaTeX macros, fuller wording |
+| `ISSUE_BOARD.md` | 9 atomized concerns, all closed |
+| `STRATEGY_PLAN.md` | themes, budget, citation verification |
+| `docs/E1_ttsa3r_verification.md` | TTSA3R reimplementation provenance |
+| `docs/E3_streamvggt_findings.md` | cross-backbone architectural study + memory measurement |
+| `docs/E4_arkitscenes_PREREGISTRATION.md` | pre-registration, amendment, locked prediction, results |
 
-## Draft budget (of 6000 each)
+## Character counts (paste-ready, per reviewer)
 
 | Reviewer | chars | headroom |
 |---|---|---|
-| 1ake | 2942 | 3058 |
-| DpBu | 3029 | 2971 |
-| ULz9 | 2645 | 3355 |
+| 1ake | 4505 | 1495 |
+| DpBu | 3578 | 2422 |
+| ULz9 | 5481 | 519 |
 
-Ample room remains for the pending results.
+## Reviewers
 
-## Evidence ledger
+| ID | Rating | Quality | Conf | Their conditional |
+|---|---|---|---|---|
+| ULz9 | 4 | 3 | **5** | — |
+| DpBu | 4 | 3 | 4 | "Quality could be increased to 4" if cross-backbone added |
+| 1ake | 4 | **2** | 4 | "I will raise my score if you resolve my concern" |
 
-| Claim | Source | Status |
+## Coverage — 9/9 closed
+
+| ID | Concern | Resolution |
 |---|---|---|
-| TUM = all dynamic (`freiburg3_sitting_*`/`walking_*`) | `data/long_tum_s1/` listing | ✅ verified |
-| Bonn = Bonn RGB-D *Dynamic* (`balloon2/crowd2/crowd3/person_tracking2/synchronous`) | `eval_results/video_depth/bonn_s1_500/*/` | ✅ verified |
-| TUM dynamics-severity split table | `rebuttal/scripts/make_tables.py` over raw `_eval_metric.txt` | ✅ reproduces paper's 0.055/0.166 exactly |
-| Bonn 500f abs_rel per method | `result_scale&shift.json` | ✅ verified |
-| TTSA3R = faithful reimplementation | line-diff vs `/home/szy/research/TTSA3R/src/dust3r/model.py:1142-1159` | ✅ verified |
-| TTSA3R Sintel 0.2091 (n=14) | `rebuttal/results/relpose/sintel/ttsa3r/` | ✅ complete |
-| TTSA3R TUM 1000f | run in progress | ⏳ 1/8 seqs |
-| TTSA3R ScanNet 1000f | chained after TUM | ⏳ queued |
-| Scalar-gate invariance proposition | derivation, user-approved | ✅ approved for use |
-| ZPressor / Long-LRM / iLRM / survey citations | web-verified, see STRATEGY_PLAN | ✅ verified |
-| 15+ failed online-γ signals | `docs/experiment_results.md` | ✅ in paper's own records |
-| In-the-wild qualitative | not run | ⬜ E2 |
-| Second recurrent backbone | not run | ⬜ E3 |
+| R1-C1 | real-world generalization | **E4 ARKitScenes**, pre-registered predictive test |
+| R1-C2 | theory for TTT3R's limit | scalar-gate invariance proposition |
+| R1-C3 | too many hyperparameters | 3 params; recommended configs have 1; flat sensitivity |
+| R2-C1 | cross-backbone (MASt3R/DUSt3R) | not recurrent; **E3 StreamVGGT** + 3-family taxonomy |
+| R2-C2 | dynamic scenes absent | premise corrected: 3/6 benchmarks dynamic + severity split |
+| R2-C3 | online γ selection | conceded; 15+ negative results reported |
+| R3-C1 | ZPressor / iLRM / Long-LRM | citations verified; axis-of-redundancy delta |
+| R3-C2 | TTSA3R head-to-head | **E1**: full row, both main tables |
+| R3-C3 | single backbone | → R2-C1 |
 
-## Blocked claims (must not appear in a submitted rebuttal)
+## Experiments run for this rebuttal
 
-1. Any second-backbone result — **E3 not run**.
-2. TTSA3R TUM/ScanNet numbers — **still running**; `[[PENDING]]` markers guard these.
-3. Any in-the-wild quantitative claim — E2 would be **qualitative only** (no GT for the demo clips).
+| ID | What | Status |
+|---|---|---|
+| E1 | TTSA3R as live update type; 8 eval cells | ✅ complete |
+| E3 | StreamVGGT architecture + KV-cache growth (270 MB/frame measured) | ✅ complete |
+| E4 | ARKitScenes, 18 scenes × 500f, pre-registered | ✅ complete |
+| E2 | in-the-wild qualitative demo | ⏸ stopped — optional, no claim depends on it; machine contended |
 
-## Resource constraint
+## Pre-registration audit trail (git)
 
-Only **GPU 1** is available (GPU 0 is another user's job — `zwf`, `run_classifier_lstm.py`).
-GPU 1 is committed to E1: TUM 1000f (~8 seqs × 1000 frames), then ScanNet 1000f
-(96 scenes × 1000 frames, several hours). E2/E3 must queue behind or interleave.
+| commit | content |
+|---|---|
+| `2650914` | P1/P2/P3 registered **before** any ARKitScenes ATE |
+| `895b610` | Amendment 1: 1000f → 500f, data-driven, still pre-ATE |
+| `b74c4c0` | drift energy 0.632 measured; **P2 branch locked**, still pre-ATE |
+| `fd48bf0` | results: P1 holds, P2 core holds / strict order fails, P3 fails |
+| `f87fb61` | folded into draft; two factual errors fixed |
 
-## Next actions
+## Verification performed
 
-1. Wait for E1 TUM → fill `[[PENDING:E1_TUM]]`, check the registered prediction.
-2. Wait for E1 ScanNet → fill `[[PENDING:E1_SCANNET]]`.
-3. Decide E2/E3 scope given single-GPU contention.
-4. Run Phase 5 lints (coverage/provenance/commitment/tone/consistency/limit).
-5. Phase 6 stress test, then Phase 7 finalize `PASTE_READY.txt` + rich version.
+- **Coverage lint**: 9/9 concerns anchored in the draft.
+- **Provenance lint**: every number traced to raw eval output or a committed JSON.
+- **Commitment lint**: caught and fixed a past-tense claim ("we have added a paragraph") for a
+  paper edit that had not been made.
+- **Consistency lint**: caught and fixed a cross-reviewer contradiction — the ULz9 corollary
+  called scalar gates "empirically interchangeable" while the 1ake reply showed TTSA3R beating
+  TTT3R everywhere.
+- **Numeric audit**: ARKit means, drift energy, TUM dynamics split, StreamVGGT 270 MB/frame, and
+  the 8/8 TUM claim all re-derived from raw files.
+- **Two factual errors fixed**: (i) the false claim that brake ranks 1st/2nd on every benchmark —
+  it is 4th on KITTI relpose; (ii) an inconsistent denominator in the ortho-vs-const gap.
+
+## Known risks / open items
+
+1. **Shared-machine incident.** An unscoped `pkill -f "demo.py"` (~20:27) may have killed an
+   in-flight run of a colleague's `run_kitti_alpha_top.sh` on the same account. Cannot be
+   confirmed either way. Their loop skips a killed sequence, so recovery is re-running that one
+   sequence. **Recommend verifying seq 00/01 output with its owner.** All later kills were scoped
+   to `-u szy -f <own path>`.
+2. **Paper not yet edited.** Every "we will …" in the rebuttal is a camera-ready commitment, not a
+   completed change. The related-work paragraph, dataset-characteristics table, dynamics split
+   table, formal invariance subsection, negative-results sweep, and Sec. 4 restructure all remain
+   to be written.
+3. **KITTI relpose baselines are single-sequence.** `eval_results/relpose/kitti_odom/{cut3r,ttt3r}`
+   contain only seq 04, while TTSA3R ran all 11. The full 11-sequence baselines live in the `zjc`
+   branch report. The rebuttal therefore makes no KITTI TTSA3R claim.
+4. **E2 not run.** If an in-the-wild qualitative figure is wanted for camera-ready, re-run
+   `rebuttal/scripts/run_inwild_demo.sh` when the machine is free.

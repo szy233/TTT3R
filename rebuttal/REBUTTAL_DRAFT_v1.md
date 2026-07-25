@@ -17,7 +17,7 @@ We thank you for the precise, actionable review. All three concerns are addresse
 material; two required no change of claim, one required a new experiment.
 
 **W1 — Positioning vs. token-compression / state-bottleneck work.**
-You are right that this line belongs in our related work, and we have added a paragraph citing
+You are right that this line belongs in our related work, and we will add a paragraph citing
 ZPressor [NeurIPS'25], Long-LRM [ICCV'25], iLRM [arXiv'25] and the survey you point to. (We note
 your text mentions *iLRM* while ref. [2] is *Long-LRM* — these are distinct works, so we cite both.)
 The distinction we draw is axis-of-redundancy: ZPressor/Long-LRM/iLRM reduce redundancy along the
@@ -158,11 +158,16 @@ an applied update u_t = g_t·δ_t, and for every g_t ≠ 0:
 The drift-energy fraction — precisely the quantity M3 identifies as harmful — is therefore
 **invariant to the gate**. A scalar gate can only rescale ‖u_t‖; it cannot alter the drift/novelty
 ratio, no matter how adaptive it is. Changing that ratio requires at least two coefficients, which is
-exactly Eq. (5). **Corollary:** TTT3R's attention gate, TTSA3R's TAUM×SCUM, and constant dampening all
-lie in the same equivalence class with respect to directional composition and differ only in their
-magnitude schedule — which explains, structurally, why M2 finds them empirically interchangeable once
-magnitude is tuned. This complements the existing Appendix A.8 derivation, and we will add it as a
-formal subsection in the camera-ready.
+exactly Eq. (5).
+
+**Corollary.** TTT3R's attention gate, TTSA3R's TAUM×SCUM, and constant dampening all lie in the
+same equivalence class *with respect to directional composition*; they can differ only in their
+magnitude schedule. This is a statement about what scalar gating **cannot** do, not a claim that all
+scalar gates perform alike — magnitude schedules do matter, and our new TTSA3R evaluation (reply to
+Reviewer 1ake) shows its spatial gating genuinely helps at short horizons. The point is that no
+magnitude schedule, however sophisticated, addresses M3; and empirically all of them converge to the
+same plateau once over-update accumulates on long sequences. This complements the existing
+Appendix A.8 derivation, and we will add it as a formal subsection in the camera-ready.
 
 **W1/Q1 — Real-world generalization.** We treat these as one concern and answer it with a new
 experiment rather than an argument.
