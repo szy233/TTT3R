@@ -1,0 +1,13 @@
+{
+  "n_events": 39697,
+  "rel_mag_mean": 0.29547648285414607,
+  "rel_mag_median": 0.22027386724948883,
+  "cos_mean": -0.18282022771892345,
+  "cos_std": 0.3483404852358505,
+  "drift_energy_mean": 0.1547643293175468,
+  "drift_energy_std": 0.18624353597849702,
+  "mem_size_first": 768,
+  "mem_size_last": 872,
+  "seq_dir": "data/long_tum_s1/rgbd_dataset_freiburg3_walking_xyz/rgb_1000",
+  "n_frames": 100
+}

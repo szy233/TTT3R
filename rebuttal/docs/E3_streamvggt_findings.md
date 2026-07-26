@@ -38,17 +38,36 @@ overwriting a bounded state — **cannot arise** in an append-only cache.
 
 ## The real taxonomy (this is the answer to give reviewers)
 
-| Family | Mechanism | Memory | Failure mode | DDD3R |
-|---|---|---|---|---|
-| **A. Bounded overwriting state** — CUT3R, TTT3R, TTSA3R | `S_t = S_{t−1} + β_t Δ_t` | **constant** | drift accumulation in the state | **applies** |
-| **B. Append-only cache** — StreamVGGT | `KV_t = [KV_{t−1}; kv_t]` | **grows linearly in T** | unbounded memory/compute | no `Δ_t` to regulate |
-| **C. Stateless** — DUSt3R, MASt3R | pairwise + global alignment | n/a | cannot stream | no state at all |
+We surveyed the leading streaming/recurrent alternatives at the **source level**, not by reputation.
+The discriminating property is not "is it recurrent" but **is a fixed-size state modified in place**.
 
-The two failure modes are **complementary, not competing**: Family A buys constant memory and pays
-in drift; Family B avoids drift by never compressing and pays in unbounded memory. DDD3R targets
-exactly the family that is defined by constant-memory streaming — the deployment regime DpBu
-himself identifies as the motivation ("low-compute streaming reconstruction devices ... robotics
-and AR").
+| Family | Mechanism | Memory | Are written entries later modified? | DDD3R |
+|---|---|---|---|---|
+| **A. Bounded, in-place blend** — CUT3R, TTT3R, TTSA3R | `S_t = S_{t−1} + β_t Δ_t` | **constant** | **yes** — every slot is rewritten each step | **applies** |
+| **B. Unbounded append-only** — StreamVGGT | `KV_t = [KV_{t−1}; kv_t]` | linear in T | no | no `Δ_t` |
+| **B′. Bounded by eviction** — Spann3R | append, then top-k keep | bounded (`long_mem_size=4000`) | **no** — kept or dropped, never edited | no `Δ_t` |
+| **C. Stateless** — DUSt3R, MASt3R | pairwise + global alignment | n/a | n/a | no state |
+
+**Spann3R evidence** (`rebuttal/external/spann3r/spann3r/model.py`): memory is only ever
+`torch.cat`-appended (`add_mem_k/v/c`, lines 42–63), sliced to drop the oldest working-memory frame
+(lines 133–136), or `torch.gather`-ed by a top-k over attention usage in `memory_prune()`
+(lines 185–205). There is **no** expression of the form `mem = a·mem + b·new` anywhere in the file.
+So Spann3R bounds memory by *choosing which tokens survive*, not by *overwriting* them — a token is
+immutable once written, hence again no `Δ_t` for DDD3R to regulate.
+
+**LONG3R** (ICCV'25) would be the other natural candidate, but its repository currently contains
+only a README and assets — no code released — so it cannot be evaluated.
+
+This sharpens the claim considerably. DDD3R does not require "a recurrent model"; it requires
+**a fixed-size state whose entries are blended with new content every step**. That is a specific,
+checkable design decision, and it is exactly the decision that creates drift accumulation: reusing
+the same slots forever is what lets error compound. Families B/B′ avoid drift precisely by never
+editing what they wrote — and pay for it in memory (B) or in discarded observations (B′).
+
+**Honest consequence:** among publicly available models we could not find a *second* family-A
+backbone. CUT3R, TTT3R and TTSA3R — the three update rules we now compare head-to-head — appear to
+be the current membership of that family. We state this as a scoping fact rather than implying
+broader backbone-independence we have not demonstrated.
 
 ## Quantifying the trade-off — MEASURED
 

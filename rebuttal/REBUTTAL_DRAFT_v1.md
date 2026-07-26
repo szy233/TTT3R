@@ -65,23 +65,32 @@ it is still only a gate, and cannot alter the directional composition of the upd
 exactly the invariance we prove in our reply to Reviewer ULz9.
 
 **W3 — Dependence on a single backbone family.**
-We investigated this directly and the answer is more interesting than a simple port. We targeted
-StreamVGGT [ICLR'26], the leading streaming 3D model, and found that it does **not** maintain a
-bounded overwritten state: it keeps an *append-only* KV cache (`k = cat([past_k, k])`,
-`attention.py:60-63` — the only cache-mutation site in the repo; no eviction, pruning or compression
-anywhere). Since nothing is overwritten, the quantity DDD3R regulates, Δ_t = S_t^new − S_{t−1},
-is **undefined** there — and so is the drift-accumulation failure mode itself. Measuring the released
-weights confirms the trade-off is structural: StreamVGGT's cache grows at a constant
-**270 MB/frame** (exactly linear across 4/8/16 frames), so 1000 frames would need ~270 GB and cannot
-run on one 80 GB GPU, whereas the CUT3R/DDD3R state is **1.18 MB in total, constant in T**.
+We ran a cross-backbone study on **Point3R** [NeurIPS'25], a streaming 3D reconstruction model with
+a *different backbone* (DUSt3R ViT-L, not CUT3R's ARCroco3DStereo) and a *different memory design*
+(an explicit set of spatial pointers, each anchored to a 3D position and growing with the scene,
+rather than a fixed 768-token implicit state). Its merge step fully replaces a pointer's feature
+with new content (`memory_feat[idx] = feat_avg`, i.e. β=1, no dampening) — the extreme of our M1.
+We changed only that line to `mem ← mem + α(new − mem)`; α=1 reproduces upstream bit-exactly and
+serves as the baseline.
 
-This yields a clean taxonomy: **(A)** bounded overwriting state — CUT3R/TTT3R/TTSA3R, constant
-memory, drift accumulates, DDD3R applies; **(B)** append-only cache — StreamVGGT, no Δ_t, memory
-linear in T; **(C)** stateless — DUSt3R/MASt3R. Families A and B are complementary rather than
-competing: A buys constant memory and pays in drift, B avoids drift and pays in unbounded memory.
-We therefore scope our claim to family (A) — whose current members are exactly the three update
-rules we now compare head-to-head — and state the falsifier: another family-(A) model showing no
-benefit from directional decomposition.
+The diagnosis **splits**, and both halves are informative.
+*M1 transfers.* Instrumenting the merge, updates have norm ≈28% of the stored feature with no
+dampening. Applying our fix: on ScanNet (n=90) α=0.5 gives **−5.4%** ATE (Wilcoxon p=0.0022, 95% CI
+[−0.0083,−0.0024], better on 56/90 scenes); on TUM (n=8) −20.1%, though n=8 cannot certify that
+(p=0.250). Both datasets select **α=0.5 — the same coefficient we use on CUT3R.**
+*M3 does not transfer.* Drift energy is 0.155–0.170 across 7 sequences and two datasets, versus
+0.398 (TUM) / 0.598 (ScanNet) for CUT3R; on **identical ScanNet scenes** it falls 0.598 → 0.164, and
+cos(δ_t,δ_{t−1}) is *negative*. Anchoring each pointer to a 3D position means it is updated by
+different viewpoints at different times, which decorrelates the update direction.
+
+So over-update is architecture-independent, while directional redundancy is specific to a bounded,
+repeatedly-overwritten *implicit* state; Point3R avoids it by letting memory grow with the scene, at
+the cost of bounded memory. This is also a successful prediction of C3 — low drift energy correctly
+implies directional decomposition should not be used there. We additionally checked StreamVGGT
+[ICLR'26] and Spann3R: both are append-only (`torch.cat`; Spann3R bounds memory by top-k eviction,
+never editing a written token), so no Δ_t exists and DDD3R is undefined rather than ineffective.
+StreamVGGT's cache grows a measured 270 MB/frame (~270 GB at 1000 frames) against DDD3R's constant
+1.18 MB — the memory-vs-drift trade-off that defines the family we target.
 
 ---
 
@@ -119,18 +128,19 @@ add this table.
 **W1/Q1 — Cross-backbone validation on MASt3R and DUSt3R.**
 Respectfully, DUSt3R and MASt3R are **not recurrent**: they are pairwise/global-alignment feed-forward
 models with no persistent state carried across frames, so there is no state update for DDD3R to
-regulate — inapplicable by construction rather than untested. (Our related work states this as
-"cannot accumulate state".) We agree the meaningful test is a *different recurrent* model, so we ran
-that study against **StreamVGGT** [ICLR'26]. Result: StreamVGGT keeps an **append-only KV cache**
-(`k = torch.cat([past_k, k])`, `attention.py:60-63`, the sole cache-mutation site; no eviction or
-compression in the repo) rather than a bounded overwritten state — so Δ_t = S_t^new − S_{t−1} does
-not exist there, and neither does the drift-accumulation failure mode. This gives a taxonomy we will
-add to the paper: **(A)** bounded overwriting state (CUT3R, TTT3R, TTSA3R) — constant memory, drift
-accumulates, DDD3R applies; **(B)** append-only cache (StreamVGGT) — no Δ_t, memory grows linearly
-in T; **(C)** stateless (DUSt3R, MASt3R). Families A and B trade off against each other: A buys
-constant memory and pays in drift; B avoids drift and pays in unbounded memory. DDD3R targets
-exactly the constant-memory family — the regime you rightly highlight for robotics and AR
-deployment. Measured on the released weights, its KV cache grows at a constant **270 MB/frame** (exactly linear across 4/8/16 frames; 1.18 MB *total*, constant in T, for CUT3R/DDD3R), so at 1000 frames it needs ~270 GB and cannot run this paper's benchmarks on one 80 GB GPU.
+regulate — inapplicable by construction rather than untested (our related work states this as
+"cannot accumulate state"). We agree the meaningful test is a *different recurrent* model, and we ran
+one: **Point3R** [NeurIPS'25], which uses the DUSt3R ViT-L backbone with an explicit spatial-pointer
+memory instead of CUT3R's implicit 768-token state. Its merge overwrites a pointer outright
+(β=1); changing that single line to `mem ← mem + α(new − mem)` (α=1 reproduces upstream exactly)
+gives **−5.4% ATE on ScanNet, n=90, p=0.0022** at **α=0.5, the same coefficient we use on CUT3R**
+(TUM n=8: −20.1%, not significant at that sample size). So **M1 transfers across backbones**.
+Interestingly **M3 does not**: Point3R's drift energy is 0.164 on the *same* ScanNet scenes where
+CUT3R's is 0.598, because anchoring each pointer to a 3D position means different viewpoints update
+it at different times, decorrelating the update direction. Point3R avoids the directional pathology
+by letting memory grow with the scene — trading away bounded memory to do so. Full details, plus
+StreamVGGT and Spann3R (both append-only, hence no Δ_t to regulate), are in our reply to Reviewer
+1ake (W3). We will add this cross-backbone study and the resulting scope statement to the paper.
 
 **W3/Q3 — Online γ selection.**
 We concede this fully; it is the paper's main open problem. We report it as a systematic negative
