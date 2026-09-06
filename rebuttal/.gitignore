@@ -2,4 +2,10 @@
 external/
 results/**/*.png
 results/**/*.txt
+results/**/*.npy
+results/**/*.npz
+results/**/*.pth
 results/*.log
+results/inwild/
+results/video_depth/
+results/relpose/
