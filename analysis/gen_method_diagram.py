@@ -1,11 +1,14 @@
-"""DDD3R method diagram — minimalist redesign.
+"""DDD3R method diagram.
 
-Two panels:
-  (a) Geometric decomposition of one per-token delta.
-  (b) Pipeline (decompose -> reweight -> gate).
+Three panels:
+  (a) Geometric decomposition of one per-token delta against the tracked
+      drift direction.
+  (b) The reweighting itself, i.e. what DDD3R actually does to the two
+      components, shown as ghost-vs-solid so the asymmetry is visible.
+  (c) Pipeline, grouped into the three stages of the update rule.
 
-Design principles: solid blocks with white text, no tinted backgrounds,
-no descriptor labels, deliberate arrows, sans-serif.
+Design: solid blocks with white text, colourblind-safe Wong palette, no
+tinted page backgrounds, sans-serif throughout.
 """
 from pathlib import Path
 
@@ -14,20 +17,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon
 
-OUT_DIR = Path("/home/szy/research/TTT3R/paper/fig")
+OUT_DIR = Path(__file__).resolve().parents[1] / "paper" / "fig"
 
-# Wong-inspired colorblind-safe palette, slightly desaturated for print.
-C_DELTA = "#D55E00"   # raw delta -- vermillion
-C_DRIFT = "#CC79A7"   # drift component -- reddish purple
-C_ORTHO = "#0072B2"   # orthogonal component -- deep blue
-C_FINAL = "#009E73"   # reweighted delta -- bluish green
-C_DARK  = "#1E2A38"   # decompose block -- near-black navy
-C_GATE  = "#9CA3AF"   # gate / EMA input -- slate gray
-C_AXIS  = "#C9CDD2"   # drift axis dashed -- light gray
-C_ARROW = "#6B7280"   # connector arrows -- mid gray
+C_DELTA = "#D55E00"   # raw delta, vermillion
+C_DRIFT = "#CC79A7"   # drift-aligned component, reddish purple
+C_ORTHO = "#0072B2"   # orthogonal component, deep blue
+C_FINAL = "#009E73"   # regulated delta, bluish green
+C_DARK  = "#1E2A38"   # decompose block
+C_GATE  = "#9CA3AF"   # gate / EMA input
+C_AXIS  = "#B9BEC6"   # drift axis
+C_ARROW = "#6B7280"   # connectors
+C_BAND  = "#F1F3F5"   # stage band
 C_INK   = "#111827"
+C_MUTE  = "#8A9099"
 
 rcParams.update({
     "font.family": "sans-serif",
@@ -40,167 +44,195 @@ rcParams.update({
 })
 
 
-def varrow(ax, start, end, color, lw=2.4, ls="-",
-           head_length=11, head_width=8, alpha=1.0, zorder=3):
-    a = FancyArrowPatch(
+def varrow(ax, start, end, color, lw=2.4, ls="-", head_length=11,
+           head_width=8, alpha=1.0, zorder=3):
+    ax.add_patch(FancyArrowPatch(
         start, end,
         arrowstyle=f"-|>,head_length={head_length},head_width={head_width}",
         color=color, lw=lw, alpha=alpha, linestyle=ls,
         mutation_scale=1.0, zorder=zorder, capstyle="round",
-        joinstyle="round",
-    )
-    ax.add_patch(a)
+        joinstyle="round"))
 
 
-def carrow(ax, start, end, color=C_ARROW, lw=1.1):
-    a = FancyArrowPatch(
-        start, end,
-        arrowstyle="-|>,head_length=6,head_width=4.2",
-        color=color, lw=lw, alpha=0.9,
-        mutation_scale=1.0, zorder=2, capstyle="round",
-    )
-    ax.add_patch(a)
+def carrow(ax, start, end, color=C_ARROW, lw=1.15, alpha=0.95, zorder=2):
+    ax.add_patch(FancyArrowPatch(
+        start, end, arrowstyle="-|>,head_length=6,head_width=4.2",
+        color=color, lw=lw, alpha=alpha, mutation_scale=1.0,
+        zorder=zorder, capstyle="round"))
 
 
 def block(ax, x, y, w, h, label, fill, fontsize=10, text_color="white",
-          bold=True, italic=False):
-    box = FancyBboxPatch(
-        (x, y), w, h,
-        boxstyle="round,pad=0.0,rounding_size=0.10",
-        facecolor=fill, edgecolor="none",
-    )
-    ax.add_patch(box)
-    ax.text(
-        x + w / 2, y + h / 2, label,
-        ha="center", va="center",
-        fontsize=fontsize, color=text_color,
-        fontweight="bold" if bold else "normal",
-        style="italic" if italic else "normal",
-    )
+          bold=True, zorder=3):
+    ax.add_patch(FancyBboxPatch(
+        (x, y), w, h, boxstyle="round,pad=0.0,rounding_size=0.11",
+        facecolor=fill, edgecolor="none", zorder=zorder))
+    ax.text(x + w / 2, y + h / 2, label, ha="center", va="center",
+            fontsize=fontsize, color=text_color,
+            fontweight="bold" if bold else "normal", zorder=zorder + 1)
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Panel (a): vectors only
-# ─────────────────────────────────────────────────────────────────────
-def panel_geometric(ax):
-    ax.set_xlim(-0.55, 4.4)
-    ax.set_ylim(-0.55, 3.4)
+def band(ax, x, y, w, h, title):
+    ax.add_patch(FancyBboxPatch(
+        (x, y), w, h, boxstyle="round,pad=0.0,rounding_size=0.14",
+        facecolor=C_BAND, edgecolor="none", zorder=0))
+    ax.text(x + w / 2, y + h - 0.16, title, ha="center", va="top",
+            fontsize=8.2, color=C_MUTE, fontweight="bold", zorder=1)
+
+
+DX, DY = 2.55, 2.05          # raw delta
+A_PERP, A_PAR = 0.5, 0.05    # paper defaults
+
+
+def panel_geometry(ax):
+    ax.set_xlim(-0.5, 3.75)
+    ax.set_ylim(-0.62, 2.62)
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # Drift axis (light dashed)
-    varrow(ax, (0, 0), (3.95, 0), C_AXIS,
-           lw=1.0, ls=(0, (4, 2.5)), head_length=7, head_width=5, zorder=1)
-    ax.text(4.0, 0.05, r"$\mathbf{d}_t$",
-            color="#888888", fontsize=10.5, va="bottom", ha="left")
+    # shaded projection triangle makes the decomposition read at a glance
+    ax.add_patch(Polygon([(0, 0), (DX, 0), (DX, DY)], closed=True,
+                         facecolor="#0072B2", alpha=0.05, edgecolor="none",
+                         zorder=0))
 
-    # Raw delta_t
-    delta_x, delta_y = 2.6, 2.2
-    varrow(ax, (0, 0), (delta_x, delta_y), C_DELTA, lw=2.6)
-    ax.text(delta_x + 0.05, delta_y + 0.06,
-            r"$\boldsymbol{\delta}_t$",
-            color=C_DELTA, fontsize=12, va="bottom", ha="left",
-            fontweight="bold")
+    varrow(ax, (0, 0), (3.45, 0), C_AXIS, lw=1.0, ls=(0, (4, 2.5)),
+           head_length=7, head_width=5, zorder=1)
+    ax.text(3.5, 0.03, r"$\mathbf{d}_t$", color=C_MUTE, fontsize=10.5,
+            va="bottom", ha="left")
 
-    # Drift component (parallel)
-    varrow(ax, (0, 0), (delta_x, 0), C_DRIFT, lw=2.4)
-    ax.text(delta_x / 2, -0.22,
-            r"$\boldsymbol{\delta}_t^{\parallel}$",
+    varrow(ax, (0, 0), (DX, DY), C_DELTA, lw=2.6)
+    ax.text(DX + 0.06, DY + 0.05, r"$\boldsymbol{\delta}_t$", color=C_DELTA,
+            fontsize=12, va="bottom", ha="left", fontweight="bold")
+
+    varrow(ax, (0, 0), (DX, 0), C_DRIFT, lw=2.4)
+    ax.text(DX / 2, -0.20, r"$\boldsymbol{\delta}_t^{\parallel}$",
             color=C_DRIFT, fontsize=11.5, va="top", ha="center",
             fontweight="bold")
 
-    # Orthogonal component
-    varrow(ax, (delta_x, 0), (delta_x, delta_y), C_ORTHO, lw=2.4)
-    ax.text(delta_x + 0.10, delta_y / 2,
-            r"$\boldsymbol{\delta}_t^{\perp}$",
+    varrow(ax, (DX, 0), (DX, DY), C_ORTHO, lw=2.4)
+    ax.text(DX + 0.10, DY / 2, r"$\boldsymbol{\delta}_t^{\perp}$",
             color=C_ORTHO, fontsize=11.5, va="center", ha="left",
             fontweight="bold")
 
-    # Right-angle marker
     sz = 0.13
-    ax.plot([delta_x - sz, delta_x - sz, delta_x],
-            [0, sz, sz], color="#999999", lw=0.7, zorder=2)
-
-    # Reweighted delta tilde (green) — alpha_perp >> alpha_par
-    a_perp, a_par = 0.6, 0.10
-    tilde_x, tilde_y = a_par * delta_x, a_perp * delta_y
-    varrow(ax, (0, 0), (tilde_x, tilde_y), C_FINAL, lw=2.8)
-    ax.text(tilde_x - 0.18, tilde_y + 0.08,
-            r"$\tilde{\boldsymbol{\delta}}_t$",
-            color=C_FINAL, fontsize=12, va="bottom", ha="right",
-            fontweight="bold")
-
-    # Equation as a clean caption inside the panel
-    ax.text(2.0, 3.1,
-            r"$\tilde{\boldsymbol{\delta}}_t = \alpha_\perp \boldsymbol{\delta}_t^{\perp} + \alpha_\parallel \boldsymbol{\delta}_t^{\parallel},\;\; \alpha_\perp \!\gg\! \alpha_\parallel$",
-            fontsize=9.5, color=C_INK, ha="center", va="top")
-
-    ax.set_title("(a) Directional decomposition",
-                 fontsize=10, loc="left", fontweight="bold", pad=2,
-                 color=C_INK)
+    ax.plot([DX - sz, DX - sz, DX], [0, sz, sz], color=C_MUTE, lw=0.8,
+            zorder=2)
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Panel (b): pipeline
-# ─────────────────────────────────────────────────────────────────────
-def panel_pipeline(ax):
-    ax.set_xlim(0, 13.4)
-    ax.set_ylim(0, 4.0)
+
+def panel_reweight(ax):
+    """Same construction as (a), with both components scaled by their gain."""
+    ax.set_xlim(-0.5, 3.75)
+    ax.set_ylim(-0.62, 2.62)
+    ax.set_aspect("equal")
     ax.axis("off")
 
-    # Inputs
-    block(ax, 0.30, 2.55, 2.30, 0.78,
-          r"raw $\boldsymbol{\Delta}_t$",
-          C_DELTA, fontsize=10)
-    block(ax, 0.30, 0.55, 2.30, 0.78,
-          r"EMA $\mathbf{d}_{t-1}$",
-          C_GATE, fontsize=10)
+    varrow(ax, (0, 0), (3.45, 0), C_AXIS, lw=1.0, ls=(0, (4, 2.5)),
+           head_length=7, head_width=5, zorder=1)
+    ax.text(3.5, 0.03, r"$\mathbf{d}_t$", color=C_MUTE, fontsize=10.5,
+            va="bottom", ha="left")
 
-    # Decompose (dark block)
-    block(ax, 3.65, 1.55, 2.40, 0.85, "Decompose", C_DARK, fontsize=10.5)
-    carrow(ax, (2.65, 2.94), (3.62, 2.20))
-    carrow(ax, (2.65, 0.94), (3.62, 1.78))
+    # ghost of the unregulated decomposition, mirroring panel (a)
+    varrow(ax, (0, 0), (DX, DY), C_DELTA, lw=2.2, alpha=0.16, zorder=1)
+    varrow(ax, (0, 0), (DX, 0), C_DRIFT, lw=2.0, alpha=0.20, zorder=1)
+    varrow(ax, (DX, 0), (DX, DY), C_ORTHO, lw=2.0, alpha=0.20, zorder=1)
 
-    # Decomposed components
-    block(ax, 6.85, 2.55, 1.40, 0.78,
-          r"$\boldsymbol{\delta}_t^{\perp}$", C_ORTHO, fontsize=11)
-    block(ax, 6.85, 0.55, 1.40, 0.78,
-          r"$\boldsymbol{\delta}_t^{\parallel}$", C_DRIFT, fontsize=11)
-    carrow(ax, (6.08, 2.20), (6.82, 2.94))
-    carrow(ax, (6.08, 1.78), (6.82, 0.94))
+    par, perp = A_PAR * DX, A_PERP * DY
 
-    # Reweight + gate combined
-    block(ax, 9.05, 1.55, 2.95, 0.85,
-          r"$\beta_t \,(\alpha_\perp \boldsymbol{\delta}_t^{\perp} + \alpha_\parallel \boldsymbol{\delta}_t^{\parallel})$",
-          C_FINAL, fontsize=10)
-    carrow(ax, (8.28, 2.94), (9.02, 2.20))
-    carrow(ax, (8.28, 0.94), (9.02, 1.78))
+    # regulated components, same construction, new lengths
+    varrow(ax, (0, 0), (par, 0), C_DRIFT, lw=2.6, head_length=8,
+           head_width=6)
+    varrow(ax, (par, 0), (par, perp), C_ORTHO, lw=2.6)
+    varrow(ax, (0, 0), (par, perp), C_FINAL, lw=2.8)
 
-    # Output
-    carrow(ax, (12.04, 1.97), (12.95, 1.97), lw=1.3)
-    ax.text(13.0, 1.97, r"$\mathbf{S}_t$",
-            color=C_INK, fontsize=11, va="center", ha="left",
+    ax.text(par - 0.10, perp + 0.10, r"$\tilde{\boldsymbol{\delta}}_t$",
+            color=C_FINAL, fontsize=12, va="bottom", ha="left",
+            fontweight="bold")
+    ax.text(par + 0.30, perp * 0.62,
+            r"$\alpha_\perp \boldsymbol{\delta}_t^{\perp}$",
+            color=C_ORTHO, fontsize=10, ha="left", va="center",
+            fontweight="bold")
+    ax.text(par + 0.06, -0.16,
+            r"$\alpha_\parallel \boldsymbol{\delta}_t^{\parallel}$",
+            color=C_DRIFT, fontsize=10, ha="left", va="top",
             fontweight="bold")
 
-    ax.set_title(
-        r"(b) Pipeline: decompose $\to$ reweight $\to$ gate",
-        fontsize=10, loc="left", fontweight="bold", pad=2, color=C_INK,
-    )
+    # faint labels on the ghosts
+    ax.text(DX * 0.72, -0.16, r"$\boldsymbol{\delta}_t^{\parallel}$",
+            color=C_DRIFT, alpha=0.42, fontsize=10, ha="center", va="top",
+            fontweight="bold")
+    ax.text(DX + 0.09, DY * 0.55, r"$\boldsymbol{\delta}_t^{\perp}$",
+            color=C_ORTHO, alpha=0.42, fontsize=10, ha="left", va="center",
+            fontweight="bold")
+
+
+def panel_pipeline(ax):
+    ax.set_xlim(0, 14.6)
+    ax.set_ylim(-0.15, 4.15)
+    ax.axis("off")
+
+    band(ax, 3.30, 0.30, 3.05, 3.45, "decompose")
+    band(ax, 6.60, 0.30, 3.05, 3.45, "reweight")
+    band(ax, 9.90, 0.30, 3.45, 3.45, "gate")
+
+    block(ax, 0.20, 2.42, 2.35, 0.80, r"raw $\boldsymbol{\Delta}_t$",
+          C_DELTA, fontsize=10)
+    block(ax, 0.20, 0.72, 2.35, 0.80, r"EMA $\mathbf{d}_{t-1}$",
+          C_GATE, fontsize=10)
+
+    block(ax, 3.60, 1.55, 2.45, 0.88, "project", C_DARK, fontsize=10.5)
+    carrow(ax, (2.60, 2.82), (3.56, 2.20))
+    carrow(ax, (2.60, 1.12), (3.56, 1.78))
+
+    block(ax, 6.90, 2.42, 2.45, 0.80,
+          r"$\alpha_\perp\,\boldsymbol{\delta}_t^{\perp}$", C_ORTHO,
+          fontsize=11)
+    block(ax, 6.90, 0.72, 2.45, 0.80,
+          r"$\alpha_\parallel\,\boldsymbol{\delta}_t^{\parallel}$", C_DRIFT,
+          fontsize=11)
+    carrow(ax, (6.08, 2.20), (6.86, 2.82))
+    carrow(ax, (6.08, 1.78), (6.86, 1.12))
+
+    block(ax, 10.20, 1.55, 2.85, 0.88,
+          r"$\beta_t\,\tilde{\boldsymbol{\delta}}_t$", C_FINAL, fontsize=11)
+    carrow(ax, (9.38, 2.82), (10.16, 2.20))
+    carrow(ax, (9.38, 1.12), (10.16, 1.78))
+
+    # explicit state update, so the reader sees this is S_{t-1} -> S_t
+    ax.text(13.42, 1.99, r"$\oplus$", fontsize=13, color=C_INK,
+            ha="center", va="center")
+    carrow(ax, (13.07, 1.99), (13.24, 1.99), lw=1.3)
+    ax.text(13.42, 2.52, r"$\mathbf{S}_{t-1}$", fontsize=10, color=C_MUTE,
+            ha="center", va="bottom")
+    carrow(ax, (13.42, 2.46), (13.42, 2.18), lw=1.1)
+    carrow(ax, (13.60, 1.99), (14.02, 1.99), lw=1.3)
+    ax.text(14.10, 1.99, r"$\mathbf{S}_t$", fontsize=11.5, color=C_INK,
+            va="center", ha="left", fontweight="bold")
+
+
 
 
 def main():
-    fig = plt.figure(figsize=(10.6, 2.55))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1, 2.25], wspace=0.10)
-    ax_left = fig.add_subplot(gs[0, 0])
-    ax_right = fig.add_subplot(gs[0, 1])
+    fig = plt.figure(figsize=(11.4, 2.78))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 2.55], wspace=0.06)
+    axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
+    panel_geometry(axes[0])
+    panel_reweight(axes[1])
+    panel_pipeline(axes[2])
 
-    panel_geometric(ax_left)
-    panel_pipeline(ax_right)
+    # Panel titles are placed in figure coordinates so that they line up
+    # despite the equal-aspect vector panels having a shorter axes box.
+    fig.canvas.draw()
+    titles = ["(a) Decompose", r"(b) Reweight  ($\alpha_\perp \gg \alpha_\parallel$)",
+              "(c) Pipeline"]
+    for ax, t in zip(axes, titles):
+        x0 = ax.get_position().x0
+        fig.text(x0, 0.985, t, fontsize=10, fontweight="bold", color=C_INK,
+                 ha="left", va="top")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_DIR / "method_diagram.pdf")
     fig.savefig(OUT_DIR / "method_diagram.png", dpi=200)
-    print("Saved method_diagram.pdf/.png")
+    print("Saved", OUT_DIR / "method_diagram.pdf")
     plt.close(fig)
 
 
