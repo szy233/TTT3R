@@ -44,8 +44,8 @@ rcParams.update({
 })
 
 
-def varrow(ax, start, end, color, lw=2.4, ls="-", head_length=11,
-           head_width=8, alpha=1.0, zorder=3):
+def varrow(ax, start, end, color, lw=1.5, ls="-", head_length=7,
+           head_width=4.5, alpha=1.0, zorder=3):
     ax.add_patch(FancyArrowPatch(
         start, end,
         arrowstyle=f"-|>,head_length={head_length},head_width={head_width}",
@@ -54,9 +54,9 @@ def varrow(ax, start, end, color, lw=2.4, ls="-", head_length=11,
         joinstyle="round"))
 
 
-def carrow(ax, start, end, color=C_ARROW, lw=1.15, alpha=0.95, zorder=2):
+def carrow(ax, start, end, color=C_ARROW, lw=1.0, alpha=0.95, zorder=2):
     ax.add_patch(FancyArrowPatch(
-        start, end, arrowstyle="-|>,head_length=6,head_width=4.2",
+        start, end, arrowstyle="-|>,head_length=5,head_width=3.4",
         color=color, lw=lw, alpha=alpha, mutation_scale=1.0,
         zorder=zorder, capstyle="round"))
 
@@ -84,7 +84,7 @@ A_PERP, A_PAR = 0.5, 0.05    # paper defaults
 
 
 def panel_geometry(ax):
-    ax.set_xlim(-0.5, 3.75)
+    ax.set_xlim(-0.45, 3.80)
     ax.set_ylim(-0.62, 2.62)
     ax.set_aspect("equal")
     ax.axis("off")
@@ -94,74 +94,87 @@ def panel_geometry(ax):
                          facecolor="#0072B2", alpha=0.05, edgecolor="none",
                          zorder=0))
 
-    varrow(ax, (0, 0), (3.45, 0), C_AXIS, lw=1.0, ls=(0, (4, 2.5)),
-           head_length=7, head_width=5, zorder=1)
-    ax.text(3.5, 0.03, r"$\mathbf{d}_t$", color=C_MUTE, fontsize=10.5,
+    varrow(ax, (0, 0), (3.45, 0), C_AXIS, lw=0.85, ls=(0, (4, 2.5)),
+           head_length=5, head_width=3.4, zorder=1)
+    ax.text(3.52, 0.03, r"$\mathbf{d}_t$", color=C_MUTE, fontsize=10.5,
             va="bottom", ha="left")
 
-    varrow(ax, (0, 0), (DX, DY), C_DELTA, lw=2.6)
+    varrow(ax, (0, 0), (DX, DY), C_DELTA, lw=1.7)
     ax.text(DX + 0.06, DY + 0.05, r"$\boldsymbol{\delta}_t$", color=C_DELTA,
             fontsize=12, va="bottom", ha="left", fontweight="bold")
 
-    varrow(ax, (0, 0), (DX, 0), C_DRIFT, lw=2.4)
+    varrow(ax, (0, 0), (DX, 0), C_DRIFT, lw=1.5)
     ax.text(DX / 2, -0.20, r"$\boldsymbol{\delta}_t^{\parallel}$",
             color=C_DRIFT, fontsize=11.5, va="top", ha="center",
             fontweight="bold")
 
-    varrow(ax, (DX, 0), (DX, DY), C_ORTHO, lw=2.4)
+    varrow(ax, (DX, 0), (DX, DY), C_ORTHO, lw=1.5)
     ax.text(DX + 0.10, DY / 2, r"$\boldsymbol{\delta}_t^{\perp}$",
             color=C_ORTHO, fontsize=11.5, va="center", ha="left",
             fontweight="bold")
 
     sz = 0.13
-    ax.plot([DX - sz, DX - sz, DX], [0, sz, sz], color=C_MUTE, lw=0.8,
+    ax.plot([DX - sz, DX - sz, DX], [0, sz, sz], color=C_MUTE, lw=0.75,
             zorder=2)
 
 
-
 def panel_reweight(ax):
-    """Same construction as (a), with both components scaled by their gain."""
-    ax.set_xlim(-0.5, 3.75)
+    """Ghost of (a), then the reweighted components, then their sum.
+
+    Drawing the sum on top of its own components would put three arrows in a
+    0.13-wide band, because alpha_parallel is a twentieth of DX. Stating it
+    head-to-tail and restating the resultant beside an equals sign keeps the
+    gains at true scale and still legible.
+    """
+    ax.set_xlim(-0.45, 6.10)
     ax.set_ylim(-0.62, 2.62)
     ax.set_aspect("equal")
     ax.axis("off")
 
-    varrow(ax, (0, 0), (3.45, 0), C_AXIS, lw=1.0, ls=(0, (4, 2.5)),
-           head_length=7, head_width=5, zorder=1)
-    ax.text(3.5, 0.03, r"$\mathbf{d}_t$", color=C_MUTE, fontsize=10.5,
+    varrow(ax, (0, 0), (5.70, 0), C_AXIS, lw=0.85, ls=(0, (4, 2.5)),
+           head_length=5, head_width=3.4, zorder=1)
+    ax.text(5.77, 0.03, r"$\mathbf{d}_t$", color=C_MUTE, fontsize=10.5,
             va="bottom", ha="left")
 
     # ghost of the unregulated decomposition, mirroring panel (a)
-    varrow(ax, (0, 0), (DX, DY), C_DELTA, lw=2.2, alpha=0.16, zorder=1)
-    varrow(ax, (0, 0), (DX, 0), C_DRIFT, lw=2.0, alpha=0.20, zorder=1)
-    varrow(ax, (DX, 0), (DX, DY), C_ORTHO, lw=2.0, alpha=0.20, zorder=1)
+    varrow(ax, (0, 0), (DX, DY), C_DELTA, lw=1.5, alpha=0.18, zorder=1)
+    varrow(ax, (0, 0), (DX, 0), C_DRIFT, lw=1.4, alpha=0.22, zorder=1)
+    varrow(ax, (DX, 0), (DX, DY), C_ORTHO, lw=1.4, alpha=0.22, zorder=1)
+    ax.text(DX * 0.5, -0.19, r"$\boldsymbol{\delta}_t^{\parallel}$",
+            color=C_DRIFT, alpha=0.45, fontsize=10, ha="center", va="top",
+            fontweight="bold")
+    ax.text(DX + 0.09, DY * 0.5, r"$\boldsymbol{\delta}_t^{\perp}$",
+            color=C_ORTHO, alpha=0.45, fontsize=10, ha="left", va="center",
+            fontweight="bold")
 
     par, perp = A_PAR * DX, A_PERP * DY
+    X0, X1 = 3.30, 4.70                    # components, then the resultant
 
-    # regulated components, same construction, new lengths
-    varrow(ax, (0, 0), (par, 0), C_DRIFT, lw=2.6, head_length=8,
-           head_width=6)
-    varrow(ax, (par, 0), (par, perp), C_ORTHO, lw=2.6)
-    varrow(ax, (0, 0), (par, perp), C_FINAL, lw=2.8)
+    varrow(ax, (X0, 0), (X0 + par, 0), C_DRIFT, lw=1.5, head_length=4,
+           head_width=3.0)
+    varrow(ax, (X0 + par, 0), (X0 + par, perp), C_ORTHO, lw=1.5)
+    sz = 0.11
+    ax.plot([X0 + par - sz, X0 + par - sz, X0 + par], [0, sz, sz],
+            color=C_MUTE, lw=0.7, zorder=2)
 
-    ax.text(par - 0.10, perp + 0.10, r"$\tilde{\boldsymbol{\delta}}_t$",
-            color=C_FINAL, fontsize=12, va="bottom", ha="left",
-            fontweight="bold")
-    ax.text(par + 0.30, perp * 0.62,
+    ax.text(X0 + par, perp + 0.14,
             r"$\alpha_\perp \boldsymbol{\delta}_t^{\perp}$",
-            color=C_ORTHO, fontsize=10, ha="left", va="center",
+            color=C_ORTHO, fontsize=10.5, ha="center", va="bottom",
             fontweight="bold")
-    ax.text(par + 0.06, -0.16,
-            r"$\alpha_\parallel \boldsymbol{\delta}_t^{\parallel}$",
-            color=C_DRIFT, fontsize=10, ha="left", va="top",
-            fontweight="bold")
+    # the reweighted drift component is too short to letter directly
+    ax.annotate(r"$\alpha_\parallel \boldsymbol{\delta}_t^{\parallel}$",
+                xy=(X0 + par * 0.55, -0.04),
+                xytext=(X0 - 0.62, -0.45), color=C_DRIFT, fontsize=10.5,
+                ha="center", va="center", fontweight="bold",
+                arrowprops=dict(arrowstyle="-", lw=0.7, color=C_DRIFT,
+                                alpha=0.75, shrinkA=3, shrinkB=1.5))
 
-    # faint labels on the ghosts
-    ax.text(DX * 0.72, -0.16, r"$\boldsymbol{\delta}_t^{\parallel}$",
-            color=C_DRIFT, alpha=0.42, fontsize=10, ha="center", va="top",
-            fontweight="bold")
-    ax.text(DX + 0.09, DY * 0.55, r"$\boldsymbol{\delta}_t^{\perp}$",
-            color=C_ORTHO, alpha=0.42, fontsize=10, ha="left", va="center",
+    ax.text(0.5 * (X0 + par + X1), perp * 0.45, r"$=$", fontsize=14,
+            color=C_MUTE, ha="center", va="center")
+
+    varrow(ax, (X1, 0), (X1 + par, perp), C_FINAL, lw=1.9)
+    ax.text(X1 + par * 0.5, perp + 0.14, r"$\tilde{\boldsymbol{\delta}}_t$",
+            color=C_FINAL, fontsize=12, va="bottom", ha="center",
             fontweight="bold")
 
 
@@ -212,22 +225,25 @@ def panel_pipeline(ax):
 
 
 def main():
-    fig = plt.figure(figsize=(11.4, 2.78))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 2.55], wspace=0.06)
+    fig = plt.figure(figsize=(12.8, 2.78))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.545, 2.20], wspace=0.05)
     axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
     panel_geometry(axes[0])
     panel_reweight(axes[1])
     panel_pipeline(axes[2])
 
-    # Panel titles are placed in figure coordinates so that they line up
-    # despite the equal-aspect vector panels having a shorter axes box.
+    # Panel titles sit in figure coordinates because the equal-aspect vector
+    # panels letterbox their content, so an axes-relative title drifts away
+    # from what it labels. Centred on the panel and nudged left by the same
+    # amount everywhere.
     fig.canvas.draw()
-    titles = ["(a) Decompose", r"(b) Reweight  ($\alpha_\perp \gg \alpha_\parallel$)",
+    titles = ["(a) Decompose",
+              r"(b) Reweight  ($\alpha_\perp \gg \alpha_\parallel$)",
               "(c) Pipeline"]
     for ax, t in zip(axes, titles):
-        x0 = ax.get_position().x0
-        fig.text(x0, 0.985, t, fontsize=10, fontweight="bold", color=C_INK,
-                 ha="left", va="top")
+        box = ax.get_position()
+        fig.text(0.5 * (box.x0 + box.x1) - 0.013, 0.985, t, fontsize=10,
+                 fontweight="bold", color=C_INK, ha="center", va="top")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_DIR / "method_diagram.pdf")
