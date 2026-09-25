@@ -26,10 +26,10 @@ C_DRIFT = "#CC79A7"   # drift-aligned component, reddish purple
 C_ORTHO = "#0072B2"   # orthogonal component, deep blue
 C_FINAL = "#009E73"   # regulated delta, bluish green
 C_DARK  = "#1E2A38"   # decompose block
-C_GATE  = "#9CA3AF"   # gate / EMA input
+C_GATE  = "#6B7280"   # gate / EMA input
 C_AXIS  = "#B9BEC6"   # drift axis
 C_ARROW = "#6B7280"   # connectors
-C_BAND  = "#F1F3F5"   # stage band
+C_BAND_EDGE = "#D7DCE2"  # stage band outline
 C_INK   = "#111827"
 C_MUTE  = "#8A9099"
 
@@ -61,20 +61,22 @@ def carrow(ax, start, end, color=C_ARROW, lw=1.0, alpha=0.95, zorder=2):
         zorder=zorder, capstyle="round"))
 
 
-def block(ax, x, y, w, h, label, fill, fontsize=10, text_color="white",
-          bold=True, zorder=3):
+def block(ax, x, y, w, h, label, color, fontsize=10, text_color=None,
+          zorder=3):
+    """Outlined box, to match the line drawing of panels (a) and (b)."""
     ax.add_patch(FancyBboxPatch(
         (x, y), w, h, boxstyle="round,pad=0.0,rounding_size=0.11",
-        facecolor=fill, edgecolor="none", zorder=zorder))
+        facecolor="none", edgecolor=color, lw=1.5, zorder=zorder))
     ax.text(x + w / 2, y + h / 2, label, ha="center", va="center",
-            fontsize=fontsize, color=text_color,
-            fontweight="bold" if bold else "normal", zorder=zorder + 1)
+            fontsize=fontsize, color=text_color or color,
+            fontweight="bold", zorder=zorder + 1)
 
 
 def band(ax, x, y, w, h, title):
     ax.add_patch(FancyBboxPatch(
         (x, y), w, h, boxstyle="round,pad=0.0,rounding_size=0.14",
-        facecolor=C_BAND, edgecolor="none", zorder=0))
+        facecolor="none", edgecolor=C_BAND_EDGE, lw=0.9,
+        linestyle=(0, (5, 3)), zorder=0))
     ax.text(x + w / 2, y + h - 0.16, title, ha="center", va="top",
             fontsize=8.2, color=C_MUTE, fontweight="bold", zorder=1)
 
@@ -181,22 +183,22 @@ def panel_reweight(ax):
 
 
 def panel_pipeline(ax):
-    ax.set_xlim(0, 14.6)
+    ax.set_xlim(0, 15.5)
     ax.set_ylim(-0.15, 4.15)
     ax.axis("off")
 
     band(ax, 3.30, 0.30, 3.05, 3.45, "decompose")
     band(ax, 6.60, 0.30, 3.05, 3.45, "reweight")
-    band(ax, 9.90, 0.30, 3.45, 3.45, "gate")
+    band(ax, 9.90, 0.30, 3.20, 3.45, "gate")
 
-    block(ax, 0.20, 2.42, 2.35, 0.80, r"raw $\boldsymbol{\Delta}_t$",
+    block(ax, 0.15, 2.42, 2.62, 0.80, r"raw $\boldsymbol{\Delta}_t$",
           C_DELTA, fontsize=10)
-    block(ax, 0.20, 0.72, 2.35, 0.80, r"EMA $\mathbf{d}_{t-1}$",
+    block(ax, 0.15, 0.72, 2.62, 0.80, r"EMA $\mathbf{d}_{t-1}$",
           C_GATE, fontsize=10)
 
     block(ax, 3.60, 1.55, 2.45, 0.88, "project", C_DARK, fontsize=10.5)
-    carrow(ax, (2.60, 2.82), (3.56, 2.20))
-    carrow(ax, (2.60, 1.12), (3.56, 1.78))
+    carrow(ax, (2.84, 2.82), (3.54, 2.24))
+    carrow(ax, (2.84, 1.12), (3.54, 1.74))
 
     block(ax, 6.90, 2.42, 2.45, 0.80,
           r"$\alpha_\perp\,\boldsymbol{\delta}_t^{\perp}$", C_ORTHO,
@@ -204,31 +206,30 @@ def panel_pipeline(ax):
     block(ax, 6.90, 0.72, 2.45, 0.80,
           r"$\alpha_\parallel\,\boldsymbol{\delta}_t^{\parallel}$", C_DRIFT,
           fontsize=11)
-    carrow(ax, (6.08, 2.20), (6.86, 2.82))
-    carrow(ax, (6.08, 1.78), (6.86, 1.12))
+    carrow(ax, (6.11, 2.22), (6.84, 2.82))
+    carrow(ax, (6.11, 1.76), (6.84, 1.12))
 
-    block(ax, 10.20, 1.55, 2.85, 0.88,
+    block(ax, 10.20, 1.55, 2.60, 0.88,
           r"$\beta_t\,\tilde{\boldsymbol{\delta}}_t$", C_FINAL, fontsize=11)
-    carrow(ax, (9.38, 2.82), (10.16, 2.20))
-    carrow(ax, (9.38, 1.12), (10.16, 1.78))
+    carrow(ax, (9.41, 2.82), (10.14, 2.22))
+    carrow(ax, (9.41, 1.12), (10.14, 1.76))
 
     # explicit state update, so the reader sees this is S_{t-1} -> S_t
-    ax.text(13.42, 1.99, r"$\oplus$", fontsize=13, color=C_INK,
+    cx = 13.72
+    ax.text(cx, 1.99, r"$\oplus$", fontsize=13, color=C_INK,
             ha="center", va="center")
-    carrow(ax, (13.07, 1.99), (13.24, 1.99), lw=1.3)
-    ax.text(13.42, 2.52, r"$\mathbf{S}_{t-1}$", fontsize=10, color=C_MUTE,
+    carrow(ax, (12.84, 1.99), (cx - 0.26, 1.99))
+    ax.text(cx, 2.78, r"$\mathbf{S}_{t-1}$", fontsize=10, color=C_MUTE,
             ha="center", va="bottom")
-    carrow(ax, (13.42, 2.46), (13.42, 2.18), lw=1.1)
-    carrow(ax, (13.60, 1.99), (14.02, 1.99), lw=1.3)
-    ax.text(14.10, 1.99, r"$\mathbf{S}_t$", fontsize=11.5, color=C_INK,
+    carrow(ax, (cx, 2.70), (cx, 2.26))
+    carrow(ax, (cx + 0.26, 1.99), (14.72, 1.99))
+    ax.text(14.84, 1.99, r"$\mathbf{S}_t$", fontsize=11.5, color=C_INK,
             va="center", ha="left", fontweight="bold")
 
 
-
-
 def main():
-    fig = plt.figure(figsize=(11.6, 2.78))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 2.05], wspace=0.09)
+    fig = plt.figure(figsize=(11.9, 2.78))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 2.20], wspace=0.09)
     axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
     panel_geometry(axes[0])
     panel_reweight(axes[1])
