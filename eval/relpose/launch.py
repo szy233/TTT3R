@@ -121,6 +121,8 @@ def get_args_parser():
                         help="Save each token's applied update norm per frame here")
     parser.add_argument("--norm_replay_dir", type=str, default=None,
                         help="Move each token by the logged norm along its raw delta")
+    parser.add_argument("--pose_only", action="store_true", default=False,
+                        help="Keep only camera poses per frame, which is all ATE and RPE need")
     return parser
 
 
@@ -275,14 +277,16 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
                     cam_dict,
                     pr_poses,
                 ) = prepare_output(
-                    outputs, revisit=args.revisit, solve_pose=args.solve_pose
+                    outputs, revisit=args.revisit, solve_pose=args.solve_pose,
+                    pose_only=args.pose_only,
                 )
 
                 pred_traj = get_tum_poses(pr_poses)
                 os.makedirs(f"{save_dir}/{seq}", exist_ok=True)
                 save_tum_poses(pr_poses, f"{save_dir}/{seq}/pred_traj.txt")
-                save_focals(cam_dict, f"{save_dir}/{seq}/pred_focal.txt")
-                save_intrinsics(cam_dict, f"{save_dir}/{seq}/pred_intrinsics.txt")
+                if cam_dict is not None:
+                    save_focals(cam_dict, f"{save_dir}/{seq}/pred_focal.txt")
+                    save_intrinsics(cam_dict, f"{save_dir}/{seq}/pred_intrinsics.txt")
                 # save_depth_maps(pts3ds_self,f'{save_dir}/{seq}', conf_self=conf_self)
                 # save_conf_maps(conf_self,f'{save_dir}/{seq}')
                 # save_rgb_imgs(colors,f'{save_dir}/{seq}')
@@ -503,10 +507,17 @@ if __name__ == "__main__":
             return new_views
         return views
 
-    def prepare_output(outputs, revisit=1, solve_pose=False):
+    def prepare_output(outputs, revisit=1, solve_pose=False, pose_only=False):
         valid_length = len(outputs["pred"]) // revisit
         outputs["pred"] = outputs["pred"][-valid_length:]
         outputs["views"] = outputs["views"][-valid_length:]
+
+        if pose_only:
+            pr_poses = [
+                pose_encoding_to_camera(pred["camera_pose"].clone()).cpu()
+                for pred in outputs["pred"]
+            ]
+            return None, None, None, None, None, None, torch.cat(pr_poses, 0)
 
         if solve_pose:
             pts3ds_self = [
@@ -579,6 +590,7 @@ if __name__ == "__main__":
     model.config.brake_tau = args.brake_tau
     model.config.ortho_norm_match = args.norm_match
     model.config.ortho_project_prev = args.project_prev
+    model.pose_only_outputs = args.pose_only
     model.config.warmup_t0 = args.warmup_t0
     model.config.warmup_window = args.warmup_window
     model.config.auto_gamma = args.auto_gamma

@@ -62,9 +62,9 @@
 
 | ID | 问题 | 证据 | 严重度 |
 |---|---|---|---|
-| S1 | brake 的 τ 写错 | 论文写 τ=2。TUM/ScanNet relpose 与 `inv_t1` 逐位相同，其余任务由脚本参数确认是 τ=1；**KITTI 汇总是 τ=2**（zjc 报告，`--brake_tau 2.0`）。真 τ=2 时 brake 输给 const：TUM 0.0822 对 0.0786，ScanNet 0.3107 对 0.2827。**补丁在 `patches/tau_fix.patch`，尚未应用到论文** | critical |
+| S1 | brake 的 τ 写错 | 论文写 τ=2。TUM/ScanNet relpose 与 `inv_t1` 逐位相同，其余任务由脚本参数确认是 τ=1；**KITTI 汇总是 τ=2**（zjc 报告，`--brake_tau 2.0`），表 5 的 KITTI 04 也是 τ=2（复现出 7.05001，τ=1 是 5.556）。真 τ=2 时 brake 输给 const：TUM 0.0822 对 0.0786，ScanNet 0.3107 对 0.2827。**补丁在 `patches/tau_fix.patch`，尚未应用到论文** | critical |
 | S2 | KITTI 列的指标标错 | 表 2 的 192.84/161.14/156.61/166.89/154.10 是 **ATE Mean**，论文写的是 ATE RMSE。RMSE 应为 212.59/183.16/179.33/185.68/170.03，排名不变 | major |
-| S3 | 论文混用两套 KITTI 结果 | 表 2 来自 `kitti_odo_full`（`data/long_kitti_odo_s1`），表 5 的 KITTI 03、04 来自 `kitti_odom`（`/mnt/sda/rkj/VGGT_Long_outdoor/kitti_00_10`）。同一序列差很多：seq 04 ortho 10.28 对 17.79，seq 03 ortho 24.83 对 39.91。**表 5 这两列 brake 的 τ 查不到记录** | major |
+| S3 | **表 2 的 KITTI 列很可能跑在另一条 RoPE 路径上** | 数据相同：在本机重建 `kitti_odo_full` 后，结果与 `kitti_odom` 逐位相同。seq 04 RMSE（报告 / 编译版 / 回退加 clamp）：CUT3R 32.45 / 21.85 / 31.31，brake τ=2 6.66 / 7.05 / 6.90，ortho 10.28 / 17.79 / 12.28。zjc 的提交 `cd57a18` 给回退 RoPE 加了 clamp，把 pose token 的位置 −1 改成 0，相当于改变了模型行为。**证据很强但未最终确认，需要问 zjc。** 受影响：表 2 KITTI 列、排名表、建议 (iii)、KITTI 上的 20.1% / 7.6% / 58.6% | critical |
 | S4 | 论文完全没有报告 RPE | 相对 CUT3R 的 RPE rot：TUM const −13%、brake +71%、ortho +25%；ScanNet const +91%、brake +158%、ortho +321%。论文却引用了 KITTI 上旋转误差 −58.6% | major |
 | S5 | brake “最优”缺乏统计支持 | ScanNet brake 对 const(0.5)：−7.5%，36/65，CI 跨 0，p=0.31。TUM brake 对 const(0.33)：−3.8%，4/8，p=0.55。ScanNet 没跑过 const(0.33) | major |
 | S6 | “漂移能量”有三种算法 | 表 3 是逐帧先平均 cos 再平方（对 δ_{t-1}）；方程 12 是对 EMA d_t，代码还再做一次 EMA；Point3R 是逐事件 cos² 的均值。而 A4c 显示 EMA 版方向相反（TUM 0.786 > ScanNet 0.660，90f） | major |

@@ -37,6 +37,8 @@ case "$ARM" in
     ttsa3r_log)             TYPE=ttsa3r;         EXTRA="--gate_log_dir $GATES/ttsa3r" ;;
     ttsa3r_frozen)          TYPE=ttsa3r;         EXTRA="--frozen_gate_dir $GATES/ttsa3r" ;;
     const033)               TYPE=ddd3r_constant; EXTRA="--alpha 0.33" ;;
+    const05)                TYPE=ddd3r_constant; EXTRA="--alpha 0.5" ;;
+    ttt3r_plain)            TYPE=ttt3r;          EXTRA="" ;;
     brake_t1)               TYPE=ddd3r_brake;    EXTRA="--brake_tau 1.0" ;;
     brake_t2)               TYPE=ddd3r_brake;    EXTRA="--brake_tau 2.0" ;;
     cut3r)                  TYPE=cut3r;          EXTRA="" ;;
@@ -60,7 +62,7 @@ CUDA_VISIBLE_DEVICES=$GPU PYTHONPATH=${DDD3R_SRC:-src} \
     eval/relpose/launch.py \
     --weights model/cut3r_512_dpt_4_64.pth --size 512 \
     --output_dir "$OUT" --eval_dataset "$DATASET" \
-    --model_update_type "$TYPE" $EXTRA "${SEQ_ARGS[@]}" > "$LOG" 2>&1
+    --model_update_type "$TYPE" $EXTRA --pose_only "${SEQ_ARGS[@]}" > "$LOG" 2>&1
 STATUS=$?
 
 RESULT=$(grep -a 'Average ATE' "$OUT/_error_log.txt" 2>/dev/null | tail -1)

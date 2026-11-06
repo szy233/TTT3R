@@ -160,3 +160,70 @@ The outcome table of E1 applies with `normreplay` in place of `normmatch`, and *
 - ScanNet arms run only on the 65 scenes valid in the existing TTT3R log. The other 31 fail on non-finite ground truth under every method, so this exclusion does not depend on any result.
 - Speed measured on this machine is about 5 FPS, not 10, so the estimate rises to about 25 GPU-hours. Three workers should finish in about 10 hours, inside the 2026-11-14 limit.
 - E5's full run is stopped as registered and goes to the author for a decision.
+
+---
+
+## E5 check — result, 2026-11-06
+
+**The registered check fails, so the full E5 run did not start.** KITTI sequence 04, ATE RMSE, same data in all three columns. Rebuilding `kitti_odo_full` here gives the same numbers as the logged `kitti_odom` runs, so the data preparation is not the cause.
+
+| Arm | Report (origin/zjc, H200) | Compiled RoPE, this machine | Python fallback with clamp, this machine |
+|---|---|---|---|
+| CUT3R | 32.45 | 21.85 | 31.31 |
+| brake τ=2 | 6.66 | 7.05 | 6.90 |
+| ortho | 10.28 | 17.79 (logged) | 12.28 |
+
+**Finding.** Commit `cd57a18` on `origin/zjc` ("fix: guard rope fallback indices") clamps positions in the Python RoPE fallback. The pose token's position is −1 (`src/dust3r/model.py`, `pose_pos_i = -torch.ones`), so the clamp maps it to 0. Without the clamp the fallback crashes, and the compiled extension handles −1 directly. All three arms are closer to the fallback column than to the compiled one.
+
+**Status of this conclusion.** Strong evidence, not proof. The ortho gap to the report is still about 19%, and the report's own speed note (9–10 FPS on an H200) was not explained. The author of the report can settle whether their run had the compiled extension.
+
+**Table 5 provenance, as registered.** Brake τ=2 reproduces the logged sequence 04 value of 7.05001 exactly and τ=1 gives 5.55621, so Table 5's KITTI 04 brake entry is τ=2 under compiled RoPE. Sequence 03 is queued.
+
+**Fresh run of the instrument check.** The first TUM sequences of the full `ddd3r` rerun match the log to every printed digit.
+
+---
+
+## Amendment 2 — 2026-11-06, KITTI rerun approved by the author
+
+Committed before any of the arms below started on the full sequences.
+
+### E5b — all five methods on compiled RoPE
+
+**Why.** The report's KITTI numbers are not comparable with the rest of the paper (E5 check above), so the whole column is rerun rather than only brake.
+
+**Arms.** `cut3r`, `ttt3r_plain`, `const05` (α=0.5), `brake_t1` (τ=1), `ortho_plain` on `kitti_odo_full`, 11 sequences, full length, compiled RoPE. **No directional prediction**, as registered in E5.
+
+**Protocol check after the run.** Sequences 03 and 04 must match the earlier compiled-RoPE values within 0.5%. A miss blocks every ruling below until explained.
+
+| Arm | Seq 04 | Seq 03 |
+|---|---|---|
+| `cut3r` | 21.84807 | 150.29048 |
+| `ttt3r_plain` | 11.06465 | 103.25776 |
+| `const05` | 5.09581 | 60.68427 |
+| `brake_t1` | 5.55621 | not run before |
+| `ortho_plain` | 17.78537 | 39.90691 |
+
+**Reported.** Per-sequence and average ATE RMSE and ATE mean, paired tests over the 11 sequences by the common rule, and official `t_rel` and `r_rel` recomputed from the new trajectories with `eval/relpose/eval_kitti_odom.py`.
+
+**TTSA3R.** The earlier run in `rebuttal/results/relpose/kitti_odom/ttsa3r` fills the table's empty row only if sequence 04 reruns to the same value within 0.5%.
+
+**Consequences, fixed now.**
+
+- Table 2's KITTI column, the ranking table and Table 5's KITTI columns are replaced by these runs, whichever way the numbers go. Table 2 is labelled with the metric it actually prints.
+- Recommendation (iii) and the sentence calling KITTI the strongest domain-shift test keep their claims only if the new numbers support them. If `ortho_plain` is not better than all four others by the common rule, "best aggregate for outdoor driving" is withdrawn.
+- The 20.1%, 7.6% and 58.6% figures are replaced by the recomputed values or removed.
+- `kitti_odo_full_report.md` is no longer a source for any number in the paper.
+
+### Pose-only outputs
+
+A shared-machine risk turned up: full per-frame outputs peak at about 44 GB for a 1000-frame sequence, so three workers would exceed the memory available. All later arms use `--pose_only`, which keeps only camera poses and leaves the state update untouched.
+
+Checked: sequence 04 gives 21.84807 and 7.05001, identical to the full-output runs, and peak memory falls to 6.6 GB. The TUM `ortho_check` that was already running keeps full outputs.
+
+### Table 5 provenance, completed
+
+Brake τ=2 on KITTI sequence 03 gives 25.37579, matching Table 5's 25.38. Both KITTI columns of Table 5 are τ=2 under compiled RoPE.
+
+### Time estimate
+
+A 1000-frame sequence takes about 7 minutes here, so the "about 10 hours" in Amendment 1 is too low. The longest worker should take about 30 hours, ending around the morning of 2026-11-08 and inside the 2026-11-14 limit. E5b adds about 8 GPU-hours as a fourth worker.

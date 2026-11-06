@@ -53,6 +53,8 @@ PYEOF
     export DDD3R_PORT_OFFSET=0
     arm 1 tum_s1_1000 ortho_check
     instrument_check
+    # A crashed check must release the other workers rather than leave them waiting.
+    [ -f "$OK" ] || [ -f "$BAD" ] || : > "$BAD"
     wait_for_check || exit 4
     arm 1 tum_s1_1000 normreplay
     arm 1 tum_s1_1000 normmatch

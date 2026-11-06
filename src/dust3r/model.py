@@ -1589,6 +1589,11 @@ class ARCroco3DStereo(CroCoNet):
         return h_ema
 
     @staticmethod
+    def _outputs_to_keep(res, pose_only):
+        """Per-frame outputs to retain. Dropping them never affects the state update."""
+        return {'camera_pose': res['camera_pose']} if pose_only else res
+
+    @staticmethod
     def _gate_probe(gate, probe):
         """Record a per-token gate [1, n, 1], or replace it with a frozen one."""
         if probe is None:
@@ -2452,7 +2457,7 @@ class ARCroco3DStereo(CroCoNet):
                 dec[self.dec_depth].float(),
             ]
             res = self._downstream_head(head_input, shape, pos=pos_i)
-            res_cpu = to_cpu(res)
+            res_cpu = to_cpu(self._outputs_to_keep(res, getattr(self, 'pose_only_outputs', False)))
             ress.append(res_cpu)
             img_mask = view["img_mask"]
             update = view.get("update", None)

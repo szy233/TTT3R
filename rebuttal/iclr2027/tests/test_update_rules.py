@@ -198,6 +198,19 @@ class NormReplay(unittest.TestCase):
         )
 
 
+class PoseOnly(unittest.TestCase):
+    def setUp(self):
+        self.res = {"camera_pose": torch.zeros(1, 7), "pts3d_in_self_view": torch.zeros(1, 4, 4, 3)}
+
+    def test_default_keeps_every_output(self):
+        self.assertEqual(set(Model._outputs_to_keep(self.res, False)), set(self.res))
+
+    def test_pose_only_keeps_just_the_camera_pose(self):
+        kept = Model._outputs_to_keep(self.res, True)
+        self.assertEqual(set(kept), {"camera_pose"})
+        self.assertIs(kept["camera_pose"], self.res["camera_pose"])
+
+
 class GateProbe(unittest.TestCase):
     def setUp(self):
         self.gate = torch.tensor([0.2, 0.4, 0.6]).view(1, 3, 1)
