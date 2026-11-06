@@ -1,0 +1,3 @@
+[submodule "paper"]
+	path = paper
+	url = git@github-szy233:szy233/ddd3r.git

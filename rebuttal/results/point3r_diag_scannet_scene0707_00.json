@@ -1,0 +1,13 @@
+{
+  "n_events": 20609,
+  "rel_mag_mean": 0.29392902905699786,
+  "rel_mag_median": 0.20886467397212982,
+  "cos_mean": -0.1749462671828992,
+  "cos_std": 0.36485205097614626,
+  "drift_energy_mean": 0.16372321550273075,
+  "drift_energy_std": 0.19290206786562944,
+  "mem_size_first": 736,
+  "mem_size_last": 984,
+  "seq_dir": "data/long_scannet_s3/scene0707_00//color_1000",
+  "n_frames": 100
+}

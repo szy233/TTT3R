@@ -25,7 +25,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 MODEL_PATH = str(BASE / "model/cut3r_512_dpt_4_64.pth")
 SIZE = 512
-MAX_FRAMES = 200  # cap to match eval pipeline
+MAX_FRAMES = 1000  # match 1000-frame eval setting for consistent drift energy statistics
 
 
 def load_model(device="cuda"):
@@ -111,12 +111,12 @@ def run_detailed_delta_analysis(model, img_paths, device="cuda", beta=0.95):
     cosines = np.array(analysis_data['cosine_history'])  # frame-level mean cos
     delta_norms = np.array(analysis_data['delta_norm_history'])
 
-    # Compute drift energy ratio from cosine values
-    # If cos(δ_t, drift_dir) ≈ c, then drift_energy ≈ c^2 (fraction in drift direction)
-    # But we only have cos(δ_t, δ_{t-1}), not cos(δ_t, EMA_drift)
-    # Approximate: with β=0.95, drift_dir ≈ recent direction, so cos(δ,δ_prev) is a proxy
-
-    # Drift energy ratio = cos^2 (projection fraction)
+    # Drift energy: paper defines e_t = ⟨δ̂_t, d̂_t⟩² where d̂_t is EMA drift direction.
+    # Here we approximate with cos(δ_t, δ_{t-1})² (consecutive frame cosine).
+    # This is a lower bound since E[cos]² ≤ E[cos²] (Jensen's inequality on per-token values).
+    # With β=0.95 EMA, d_t is dominated by recent frames, making this a reasonable proxy.
+    # NOTE: for paper, should either (a) implement true EMA drift energy, or
+    # (b) explicitly state the approximation used.
     drift_energy = cosines[1:] ** 2  # skip frame 0
 
     return {

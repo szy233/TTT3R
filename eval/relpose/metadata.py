@@ -2,6 +2,12 @@ import os
 import glob
 from tqdm import tqdm
 
+
+def _skip_if_done(save_dir, seq):
+    """Skip scene if eval_metric.txt already exists (resume support)."""
+    return os.path.exists(os.path.join(save_dir, f"{seq}_eval_metric.txt"))
+
+
 # Define the merged dataset metadata dictionary
 dataset_metadata = {
     "davis": {
@@ -178,7 +184,7 @@ scannet_configs = {
         "seq_list": None,
         "full_seq": True,
         "mask_path_seq_func": lambda mask_path, seq: None,
-        "skip_condition": None,
+        "skip_condition": _skip_if_done,
         "process_func": lambda args, img_path: process_scannet(args, img_path),
     }
     for num in scannet_numbers
@@ -199,12 +205,49 @@ tum_configs = {
         "seq_list": None,
         "full_seq": True,
         "mask_path_seq_func": lambda mask_path, seq: None,
-        "skip_condition": None,
+        "skip_condition": _skip_if_done,
         "process_func": None,
         }
     for num in tum_numbers
 }
 dataset_metadata.update(tum_configs)
+
+# ARKitScenes (real-world handheld iPad Pro captures, laser-scan GT poses).
+# Prepared by rebuttal/scripts/prepare_arkitscenes.py into the TUM layout.
+arkit_numbers = [100, 200, 300, 500, 1000]
+arkit_configs = {
+    f"arkit_s1_{num}": {
+        "img_path": "data/long_arkit_s1",
+        "mask_path": None,
+        "dir_path_func": lambda img_path, seq, num=num: os.path.join(img_path, seq, f"rgb_{num}"),
+        "gt_traj_func": lambda img_path, anno_path, seq, num=num: os.path.join(
+            img_path, seq, f"groundtruth_{num}.txt"
+        ),
+        "traj_format": "tum",
+        "seq_list": None,
+        "full_seq": True,
+        "mask_path_seq_func": lambda mask_path, seq: None,
+        "skip_condition": _skip_if_done,
+        "process_func": None,
+    }
+    for num in arkit_numbers
+}
+dataset_metadata.update(arkit_configs)
+
+# KITTI Odometry (outdoor, sequences 00-10)
+dataset_metadata["kitti_odom"] = {
+    "img_path": "/mnt/sda/rkj/VGGT_Long_outdoor/kitti_00_10",
+    "mask_path": None,
+    "dir_path_func": lambda img_path, seq: os.path.join(img_path, seq, "image_2"),
+    "gt_traj_func": lambda img_path, anno_path, seq: os.path.join(
+        img_path, "gt_poses_kitti", f"{seq}.txt"
+    ),
+    "traj_format": "replica",  # same format: 12 floats per line (3x4 row-major)
+    "seq_list": None,
+    "full_seq": True,
+    "mask_path_seq_func": lambda mask_path, seq: None,
+    "skip_condition": _skip_if_done,
+}
 
 
 # Define processing functions for each dataset
