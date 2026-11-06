@@ -106,7 +106,43 @@ def get_args_parser():
     parser.add_argument("--revisit", type=int, default=1)
     parser.add_argument("--freeze_state", action="store_true", default=False)
     parser.add_argument("--solve_pose", action="store_true", default=False)
+    # Rebuttal instruments, see rebuttal/iclr2027/docs/PREREG_E1_E5.md
+    parser.add_argument("--norm_match", action="store_true", default=False,
+                        help="Apply the directional rule's per-token norm along the raw delta")
+    parser.add_argument("--project_prev", action="store_true", default=False,
+                        help="Project onto the EMA direction from before this frame")
+    parser.add_argument("--gate_log_dir", type=str, default=None,
+                        help="Save the per-token gate of each sequence here")
+    parser.add_argument("--frozen_gate_dir", type=str, default=None,
+                        help="Replace the gate with each token's time mean from these logs")
+    parser.add_argument("--gain_log_dir", type=str, default=None,
+                        help="Save the per-frame mean gain of the directional rule here")
     return parser
+
+
+def _attach_probes(args, model, seq, device):
+    """Set the per-sequence gate and gain instruments on the model."""
+    probe = {}
+    if args.gate_log_dir:
+        probe["log"] = []
+    if args.frozen_gate_dir:
+        log = np.load(os.path.join(args.frozen_gate_dir, f"{seq}.npy"))
+        probe["frozen"] = model._frozen_gate_from_log(log).to(device)
+    model.gate_probe = probe or None
+    model.config.gain_log = [] if args.gain_log_dir else None
+
+
+def _save_probes(args, model, seq):
+    """Write the instruments of a finished sequence to disk."""
+    if args.gate_log_dir:
+        os.makedirs(args.gate_log_dir, exist_ok=True)
+        np.save(
+            os.path.join(args.gate_log_dir, f"{seq}.npy"),
+            torch.stack(model.gate_probe["log"]).numpy(),
+        )
+    if args.gain_log_dir:
+        os.makedirs(args.gain_log_dir, exist_ok=True)
+        np.save(os.path.join(args.gain_log_dir, f"{seq}.npy"), np.array(model.config.gain_log))
 
 
 def _resolve_ddd3r_aliases(args):
@@ -206,9 +242,11 @@ def eval_pose_estimation_dist(args, model, img_path, save_dir=None, mask_path=No
                     update=not args.freeze_state,
                 )
 
+                _attach_probes(args, model, seq, device)
                 start = time.time()
                 outputs, _ = inference_recurrent_lighter(views, model, device)
                 end = time.time()
+                _save_probes(args, model, seq)
                 fps = len(filelist) / (end - start)
                 print(f"Finished pose estimation for {args.eval_dataset} {seq: <16}, FPS: {fps:.2f}")
 
@@ -523,6 +561,8 @@ if __name__ == "__main__":
     model.config.beta_ema = args.beta_ema
     model.config.gamma = args.gamma
     model.config.brake_tau = args.brake_tau
+    model.config.ortho_norm_match = args.norm_match
+    model.config.ortho_project_prev = args.project_prev
     model.config.warmup_t0 = args.warmup_t0
     model.config.warmup_window = args.warmup_window
     model.config.auto_gamma = args.auto_gamma

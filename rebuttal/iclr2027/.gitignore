@@ -1,0 +1,7 @@
+# Bulk experiment output, reproducible from scripts/
+data/
+results/relpose/
+results/logs/
+results/gates/
+results/gains/
+results/queue_*.log

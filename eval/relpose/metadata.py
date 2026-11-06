@@ -249,6 +249,22 @@ dataset_metadata["kitti_odom"] = {
     "skip_condition": _skip_if_done,
 }
 
+# KITTI Odometry as evaluated in eval/relpose/kitti_odo_full_report.md (origin/zjc).
+# Rebuilt on this machine by rebuttal/iclr2027/scripts/prepare_kitti_data.sh.
+dataset_metadata["kitti_odo_full"] = {
+    "img_path": "rebuttal/iclr2027/data/long_kitti_odo_s1",
+    "mask_path": None,
+    "dir_path_func": lambda img_path, seq: os.path.join(img_path, seq, "image_full"),
+    "gt_traj_func": lambda img_path, anno_path, seq: os.path.join(
+        img_path, seq, "pose_full.txt"
+    ),
+    "traj_format": "tum",
+    "seq_list": None,
+    "full_seq": True,
+    "mask_path_seq_func": lambda mask_path, seq: None,
+    "skip_condition": _skip_if_done,
+}
+
 
 # Define processing functions for each dataset
 def process_kitti(args, img_path):

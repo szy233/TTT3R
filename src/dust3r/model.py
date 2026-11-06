@@ -1589,6 +1589,21 @@ class ARCroco3DStereo(CroCoNet):
         return h_ema
 
     @staticmethod
+    def _gate_probe(gate, probe):
+        """Record a per-token gate [1, n, 1], or replace it with a frozen one."""
+        if probe is None:
+            return gate
+        if probe.get('log') is not None:
+            probe['log'].append(gate.view(-1).detach().cpu())
+        frozen = probe.get('frozen')
+        return gate if frozen is None else frozen
+
+    @staticmethod
+    def _frozen_gate_from_log(log):
+        """Time-mean of a logged gate [frames, n], shaped as a gate [1, n, 1]."""
+        return torch.as_tensor(log).mean(dim=0).view(1, -1, 1)
+
+    @staticmethod
     def _delta_ortho_update(state_feat, new_state_feat, ortho_state, config):
         """
         Delta Orthogonalization (Drift Subtraction):
@@ -1633,13 +1648,15 @@ class ARCroco3DStereo(CroCoNet):
             return state_feat + alpha_novel * delta
 
         # Update drift direction EMA (normalized after update for correct projection)
+        prev_drift_dir = drift_dir
         drift_dir = beta * drift_dir + (1.0 - beta) * delta_dir.detach()
         drift_dir = drift_dir / drift_dir.norm(dim=-1, keepdim=True).clamp(min=1e-8)
         ortho_state['drift_dir'] = drift_dir
 
         # Decompose: project delta onto drift direction
-        proj_scalar   = (delta * drift_dir).sum(dim=-1, keepdim=True)  # [B, T, 1]
-        drift_comp    = proj_scalar * drift_dir                         # [B, T, D]
+        ref_dir = prev_drift_dir if getattr(config, 'ortho_project_prev', False) else drift_dir
+        proj_scalar   = (delta * ref_dir).sum(dim=-1, keepdim=True)    # [B, T, 1]
+        drift_comp    = proj_scalar * ref_dir                           # [B, T, D]
         novel_comp    = delta - drift_comp                              # [B, T, D]
 
         # Compute per-token drift energy (needed by all adaptive modes)
@@ -2017,6 +2034,17 @@ class ARCroco3DStereo(CroCoNet):
                 # Ramp phase: linearly interpolate from alpha_novel to target
                 ramp = (step - t0) / max(warmup_w, 1)
                 effective_alpha_drift = alpha_novel + (effective_alpha_drift - alpha_novel) * ramp
+
+        norm_match = getattr(config, 'ortho_norm_match', False)
+        gain_log = getattr(config, 'gain_log', None)
+        if norm_match or gain_log is not None:
+            applied = alpha_novel * novel_comp + effective_alpha_drift * drift_comp
+            gain = applied.norm(dim=-1, keepdim=True) / delta_norm
+            if gain_log is not None:
+                gain_log.append(gain.mean().item())
+            if norm_match:
+                # Same per-token norm as the directional rule, direction of the raw delta.
+                return state_feat + gain * delta
 
         return state_feat + alpha_novel * novel_comp + effective_alpha_drift * drift_comp
 
@@ -2503,7 +2531,8 @@ class ARCroco3DStereo(CroCoNet):
                     am = ca.mean(dim=-1).abs()                             # [1, n_state, n_img]
                     ss = (am * fd.unsqueeze(1)).max(dim=-1)[0].squeeze(0)  # [n_state]
                     s_mask = torch.sigmoid(ss)
-                    update_mask1 = update_mask * (t_mask * s_mask)[None, :, None]
+                    update_mask1 = update_mask * self._gate_probe(
+                        (t_mask * s_mask)[None, :, None], getattr(self, 'gate_probe', None))
                     taum_state['prev_new_state'] = new_state_feat.detach().clone()
                     taum_state['prev_feat'] = feat_i.detach().clone()
                 elif update_type == "cut3r_taum_log":
@@ -2537,7 +2566,9 @@ class ARCroco3DStereo(CroCoNet):
                 elif update_type == "ttt3r":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)') # [12, 16, 768, 1 + 576] -> [1, 768, 1 + 576, 12*16]
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))
-                    update_mask1 = update_mask * torch.sigmoid(state_query_img_key)[..., None] * 1.0
+                    update_mask1 = update_mask * self._gate_probe(
+                        torch.sigmoid(state_query_img_key)[..., None],
+                        getattr(self, 'gate_probe', None)) * 1.0
                 elif update_type == "ttt3r_conf":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))

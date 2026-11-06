@@ -1,0 +1,35 @@
+diff --git a/sec/appendix_supp.tex b/sec/appendix_supp.tex
+index 0d53a4e..4893a9b 100644
+--- a/sec/appendix_supp.tex
++++ b/sec/appendix_supp.tex
+@@ -48,7 +48,7 @@ We compare two baselines and three operating points along the DDD3R spectrum (\c
+ (i) \textbf{CUT3R}~\cite{cut3r}: full state replacement ($\beta_t \equiv 1$).
+ (ii) \textbf{TTT3R}~\cite{ttt3r}: attention-derived per-token gate.
+ (iii) \dddconst{} ($\alpha_\perp{=}\alpha_\parallel{=}0.5$, $\gamma{=}0$): isotropic dampening, the $\alpha_\perp{=}\alpha_\parallel$ degenerate case of \cref{eq:ddd3r}.
+-(iv) \dddbrake{} ($\tau{=}2$): the temporal-brake scalar relaxation of \cref{eq:ddd3r} (see \cref{app:brake_ortho}).
++(iv) \dddbrake{} ($\tau{=}1$, except the aggregate KITTI Odometry results, which used $\tau{=}2$): the temporal-brake scalar relaxation of \cref{eq:ddd3r} (see \cref{app:brake_ortho}).
+ (v) \dddortho{} ($\alpha_\perp{=}0.5$, $\alpha_\parallel{=}0.05$, $\beta_{\text{ema}}{=}0.95$, $\gamma{=}0$): default full directional decomposition.
+ 
+ \paragraph{Datasets and protocols.}
+@@ -256,7 +256,7 @@ g_t^{\text{brake}}(c) = \tfrac{1}{2} \;-\; \tfrac{\tau}{4}\,c \;+\; \mathcal{O}(
+ i.e.\ an \emph{odd} function around $c{=}0$: it dampens only when consecutive deltas are aligned ($c{>}0$) and \emph{passes through or amplifies} when they disagree ($c{<}0$). The two gates therefore agree only on the constant term ($\alpha_\perp{\approx}\tfrac{1}{2}$) and have qualitatively different behaviour for anti-aligned deltas; brake is not, in any strict Taylor sense, a first-order approximation of DDD3R.
+ 
+ \paragraph{Why brake is still a useful surrogate in practice.}
+-Empirically, $c$ is far from zero throughout long sequences: $\bar{c}\in[0.62, 0.77]$ on TUM and ScanNet (\cref{tab:drift}). In this practical regime $c{>}0$, both gates are monotone-decreasing in $c$ and pull the update toward a smaller magnitude. Setting $\tau{=}2$ matches their values at the high-drift end ($g^{\text{DDD3R}}(1){=}\alpha_\parallel{=}0.05$ vs.\ $g^{\text{brake}}(1){=}\mathrm{sigmoid}(-2){\approx}0.12$) and at $c{=}0$ ($\alpha_\perp{=}0.5$ vs.\ $\mathrm{sigmoid}(0){=}0.5$) to within a factor of $\sim$2. So in the actual operating regime brake delivers \emph{the same qualitative drift--novelty trade-off} as DDD3R, with three caveats below.
++Empirically, $c$ is far from zero throughout long sequences: $\bar{c}\in[0.62, 0.77]$ on TUM and ScanNet (\cref{tab:drift}). In this practical regime $c{>}0$, both gates are monotone-decreasing in $c$ and pull the update toward a smaller magnitude. Under the single-frame setup above, $\tau{=}1$ makes the two gates nearly coincide over this range, with $g^{\text{DDD3R}}\in[0.32, 0.39]$ from \cref{eq:effgate} and $g^{\text{brake}}\in[0.32, 0.35]$, a gap of at most 13\%. They also share the value $0.5$ at $c{=}0$ and separate only toward pure drift, where $g^{\text{DDD3R}}(1){=}\alpha_\parallel{=}0.05$ while $g^{\text{brake}}(1){=}\mathrm{sigmoid}(-1){\approx}0.27$. So in the actual operating regime brake applies nearly the same update magnitude as DDD3R, with three caveats below.
+ 
+ \paragraph{Three losses of the relaxation.}
+ \textbf{(L1) Asymmetric handling of anti-aligned deltas.} For $c{<}0$ (rare but possible during scene transitions), DDD3R still suppresses the drift component to $\alpha_\parallel\|\boldsymbol{\delta}_t\||c|$, while brake \emph{boosts} the update via $\mathrm{sigmoid}(+\tau|c|){>}\tfrac{1}{2}$. \textbf{(L2) No directional separation.} Brake produces a single per-token scalar that multiplies the entire $\boldsymbol{\delta}_t$, so it cannot suppress drift while preserving novelty within the same delta; DDD3R applies $\alpha_\parallel{<}\alpha_\perp$ separately along $\boldsymbol{\delta}_t^{\parallel}$ and $\boldsymbol{\delta}_t^{\perp}$. \textbf{(L3) Single-frame history.} Brake compares only consecutive deltas, while DDD3R's drift direction is an EMA over the full history; in scenes where underlying drift varies slowly but per-frame deltas are noisy, EMA cancels the noise and brake does not.
+diff --git a/sec/v2/experiments.tex b/sec/v2/experiments.tex
+index f00e319..e7a3a4b 100644
+--- a/sec/v2/experiments.tex
++++ b/sec/v2/experiments.tex
+@@ -7,7 +7,7 @@
+ % The shared appendix still points at sec:method:spectrum, which the advisor
+ % revision moved out of the method section, so the label is kept here.
+ \label{sec:method:spectrum}
+-All methods use the same pretrained checkpoint and differ only in how the state is updated, so no model is retrained. CUT3R~\cite{cut3r} applies the full update and TTT3R~\cite{ttt3r} scales it with its confidence gate $\beta_t$, and we report TTSA3R~\cite{ttsa3r} where its results are available. We compare three variants of DDD3R that correspond to the two problems measured in \cref{sec:analysis}. \dddconst{} sets $\alpha_\perp{=}\alpha_\parallel{=}0.5$ and so damps all directions equally, which isolates the effect of smaller updates. \dddbrake{} replaces the two coefficients with a single per-token factor $g_t = \operatorname{sigmoid}(-\tau\cos(\boldsymbol{\delta}_t,\boldsymbol{\delta}_{t-1}))$ with $\tau{=}2$, which shrinks an update when it repeats the previous one but cannot separate directions within it (\cref{app:brake_ortho}). \dddortho{} is the full rule of \cref{eq:ddd3r} with $\alpha_\perp{=}0.5$ and $\alpha_\parallel{=}0.05$, our default. A variant that adapts $\alpha_\parallel$ to each token's drift energy is reported in \cref{app:gamma,app:spectrum}.
++All methods use the same pretrained checkpoint and differ only in how the state is updated, so no model is retrained. CUT3R~\cite{cut3r} applies the full update and TTT3R~\cite{ttt3r} scales it with its confidence gate $\beta_t$, and we report TTSA3R~\cite{ttsa3r} where its results are available. We compare three variants of DDD3R that correspond to the two problems measured in \cref{sec:analysis}. \dddconst{} sets $\alpha_\perp{=}\alpha_\parallel{=}0.5$ and so damps all directions equally, which isolates the effect of smaller updates. \dddbrake{} replaces the two coefficients with a single per-token factor $g_t = \operatorname{sigmoid}(-\tau\cos(\boldsymbol{\delta}_t,\boldsymbol{\delta}_{t-1}))$ with $\tau{=}1$ (the aggregate KITTI Odometry results used $\tau{=}2$), which shrinks an update when it repeats the previous one but cannot separate directions within it (\cref{app:brake_ortho}). \dddortho{} is the full rule of \cref{eq:ddd3r} with $\alpha_\perp{=}0.5$ and $\alpha_\parallel{=}0.05$, our default. A variant that adapts $\alpha_\parallel$ to each token's drift energy is reported in \cref{app:gamma,app:spectrum}.
+ 
+ \paragraph{Benchmarks.}
+ We evaluate relative pose on TUM~\cite{tum}, ScanNet~\cite{scannet}, Sintel~\cite{sintel} and KITTI~\cite{kitti}, video depth on KITTI, Bonn~\cite{bonn} and Sintel, and 3D reconstruction on 7-Scenes~\cite{7scenes}. We report ATE RMSE after Sim(3) alignment for pose, scale-and-shift-invariant absolute relative error for depth, and accuracy, completeness and normal consistency for reconstruction, with per-dataset protocols in \cref{app:setup}.
