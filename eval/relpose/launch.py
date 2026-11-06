@@ -117,6 +117,10 @@ def get_args_parser():
                         help="Replace the gate with each token's time mean from these logs")
     parser.add_argument("--gain_log_dir", type=str, default=None,
                         help="Save the per-frame mean gain of the directional rule here")
+    parser.add_argument("--norm_log_dir", type=str, default=None,
+                        help="Save each token's applied update norm per frame here")
+    parser.add_argument("--norm_replay_dir", type=str, default=None,
+                        help="Move each token by the logged norm along its raw delta")
     return parser
 
 
@@ -130,6 +134,12 @@ def _attach_probes(args, model, seq, device):
         probe["frozen"] = model._frozen_gate_from_log(log).to(device)
     model.gate_probe = probe or None
     model.config.gain_log = [] if args.gain_log_dir else None
+    model.norm_replay = None
+    if args.norm_log_dir:
+        model.norm_replay = {"log": []}
+    if args.norm_replay_dir:
+        norms = torch.from_numpy(np.load(os.path.join(args.norm_replay_dir, f"{seq}.npy")))
+        model.norm_replay = {"norms": norms, "step": 0}
 
 
 def _save_probes(args, model, seq):
@@ -143,6 +153,12 @@ def _save_probes(args, model, seq):
     if args.gain_log_dir:
         os.makedirs(args.gain_log_dir, exist_ok=True)
         np.save(os.path.join(args.gain_log_dir, f"{seq}.npy"), np.array(model.config.gain_log))
+    if args.norm_log_dir:
+        os.makedirs(args.norm_log_dir, exist_ok=True)
+        np.save(
+            os.path.join(args.norm_log_dir, f"{seq}.npy"),
+            torch.stack(model.norm_replay["log"]).numpy(),
+        )
 
 
 def _resolve_ddd3r_aliases(args):

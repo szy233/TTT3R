@@ -4,4 +4,5 @@ results/relpose/
 results/logs/
 results/gates/
 results/gains/
+results/norms/
 results/queue_*.log

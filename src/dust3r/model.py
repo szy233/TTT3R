@@ -1604,6 +1604,23 @@ class ARCroco3DStereo(CroCoNet):
         return torch.as_tensor(log).mean(dim=0).view(1, -1, 1)
 
     @staticmethod
+    def _apply_norm_replay(state_feat, raw_new_state, updated, gate, update_mask, replay):
+        """Log each token's applied update norm, or replay a logged run's norms along the raw delta.
+
+        Replayed norms already include that run's gate, so the mask here is only update_mask.
+        Returns the candidate state and the mask to apply it with.
+        """
+        if 'log' in replay:
+            applied = ((updated - state_feat) * gate).norm(dim=-1).view(-1)
+            replay['log'].append(applied.detach().cpu())
+            return updated, update_mask * gate
+        target = replay['norms'][replay['step']].to(state_feat).view(1, -1, 1)
+        replay['step'] += 1
+        delta = raw_new_state - state_feat
+        direction = delta / delta.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+        return state_feat + target * direction, update_mask
+
+    @staticmethod
     def _delta_ortho_update(state_feat, new_state_feat, ortho_state, config):
         """
         Delta Orthogonalization (Drift Subtraction):
@@ -2756,8 +2773,13 @@ class ARCroco3DStereo(CroCoNet):
                     ttt3r_mask = torch.sigmoid(state_query_img_key)[..., None]
                     updated = self._delta_ortho_update(
                         state_feat, new_state_feat, ortho_state, self.config)
-                    new_state_feat = updated
-                    update_mask1 = update_mask * ttt3r_mask
+                    replay = getattr(self, 'norm_replay', None)
+                    if replay is None:
+                        new_state_feat = updated
+                        update_mask1 = update_mask * ttt3r_mask
+                    else:
+                        new_state_feat, update_mask1 = self._apply_norm_replay(
+                            state_feat, new_state_feat, updated, ttt3r_mask, update_mask, replay)
                 elif update_type == "ddd3r_constant_brake":
                     cross_attn_state = rearrange(torch.cat(cross_attn_state, dim=0), 'l h nstate nimg -> 1 nstate nimg (l h)')
                     state_query_img_key = cross_attn_state.mean(dim=(-1, -2))

@@ -4,6 +4,7 @@ Run from the repository root:
     CUDA_VISIBLE_DEVICES="" PYTHONPATH=src python -m unittest rebuttal/iclr2027/tests/test_update_rules.py
 """
 import copy
+import sys
 import types
 import unittest
 
@@ -49,6 +50,14 @@ def unit(x):
 def split(delta, direction):
     parallel = (delta * direction).sum(dim=-1, keepdim=True) * direction
     return parallel, delta - parallel
+
+
+class Environment(unittest.TestCase):
+    def test_compiled_rope_is_in_use(self):
+        # *.so is git-ignored, so a fresh worktree lacks it and falls back to the
+        # Python RoPE, whose embedding lookup crashes on the pose token's position.
+        pos_embed = next(m for n, m in sys.modules.items() if n.endswith("models.pos_embed"))
+        self.assertEqual(pos_embed.RoPE2D.__name__, "cuRoPE2D")
 
 
 class DefaultRule(unittest.TestCase):
@@ -140,6 +149,53 @@ class GainLog(unittest.TestCase):
         gain = (result - state).norm(dim=-1) / (candidate - state).norm(dim=-1)
         self.assertEqual(len(log), 1)
         self.assertAlmostEqual(log[0], gain.mean().item(), places=9)
+
+
+class NormReplay(unittest.TestCase):
+    def setUp(self):
+        torch.manual_seed(1)
+        self.state = torch.randn(1, 4, 6, dtype=torch.float64)
+        self.raw = self.state + torch.randn_like(self.state)
+        self.updated = self.state + 0.3 * torch.randn_like(self.state)
+        self.gate = torch.rand(1, 4, 1, dtype=torch.float64)
+        self.mask = torch.ones(1, 1, 1, dtype=torch.float64)
+
+    def apply(self, replay):
+        return Model._apply_norm_replay(
+            self.state, self.raw, self.updated, self.gate, self.mask, replay
+        )
+
+    def test_log_mode_records_the_applied_norm_and_keeps_the_update(self):
+        replay = {"log": []}
+        new_state, mask = self.apply(replay)
+        applied = ((self.updated - self.state) * self.gate).norm(dim=-1).view(-1)
+        self.assertTrue(torch.allclose(replay["log"][0], applied))
+        self.assertTrue(torch.equal(new_state, self.updated))
+        self.assertTrue(torch.equal(mask, self.mask * self.gate))
+
+    def test_replay_moves_each_token_by_the_logged_norm(self):
+        target = torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=torch.float64)
+        new_state, mask = self.apply({"norms": target[None], "step": 0})
+        applied = new_state * mask + self.state * (1 - mask) - self.state
+        self.assertTrue(torch.allclose(applied.norm(dim=-1).view(-1), target))
+
+    def test_replay_keeps_the_direction_of_the_raw_delta(self):
+        target = torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=torch.float64)
+        new_state, _ = self.apply({"norms": target[None], "step": 0})
+        cosine = torch.nn.functional.cosine_similarity(
+            new_state - self.state, self.raw - self.state, dim=-1
+        )
+        self.assertTrue(torch.allclose(cosine, torch.ones_like(cosine)))
+
+    def test_replay_advances_one_frame_per_call(self):
+        norms = torch.tensor([[1.0] * 4, [2.0] * 4], dtype=torch.float64)
+        replay = {"norms": norms, "step": 0}
+        self.apply(replay)
+        second, _ = self.apply(replay)
+        self.assertEqual(replay["step"], 2)
+        self.assertTrue(
+            torch.allclose((second - self.state).norm(dim=-1).view(-1), norms[1])
+        )
 
 
 class GateProbe(unittest.TestCase):

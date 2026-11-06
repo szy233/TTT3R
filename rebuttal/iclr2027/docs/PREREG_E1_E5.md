@@ -117,3 +117,46 @@ The 5% allows for the different GPU (the report used an H200).
 About 12.5 GPU-hours at the nominal 10 FPS, including the TTSA3R part of E3 and the checks. The machine is shared and busy, so wall-clock may be longer. If the queue is projected to end after 2026-11-14, stop and report rather than cutting arms silently.
 
 **Every outcome is reported, whichever way it goes.** Scenes are not excluded after the fact. Any deviation goes in a dated section below.
+
+---
+
+## Amendment 1 — 2026-11-06, before any full run
+
+Committed after the short checks below and before any full-length arm. The registered text above is unchanged.
+
+### What the checks showed
+
+Run on one 90-frame TUM sequence (`walking_static`) and on KITTI sequence 04. These are the only ATEs of new arms in existence at this point, and all of them are in `results/relpose/tum__smoke/`.
+
+| Check | Result |
+|---|---|
+| Baselines on this code | `ddd3r` 0.00689, TTT3R 0.01062, TTSA3R 0.00829, all identical to the logged values |
+| Single-sequence ATE of new arms, not used for any verdict | `normmatch` 0.00793, `prevdir` 0.00702, `ttt3r_frozen` 0.01041 |
+| **E1 manipulation check** | **Fails on this sequence.** Mean gain 0.211 for `ddd3r` against 0.367 for `normmatch` |
+| **E5 check** | **Fails.** CUT3R 21.85 against the report's 32.45, brake τ=2 7.05 against 6.66 |
+| Table 5 provenance | Brake τ=2 reproduces the logged 7.05001 exactly. τ=1 gives 5.55621. Table 5's KITTI 04 brake is therefore τ=2 |
+
+### Why the E1 check fails
+
+The rule is closed-loop. Under `ddd3r` the state barely moves along the drift, so the next delta stays aligned with it and the gain keeps shrinking. Under `normmatch` the state moves along the raw delta, so alignment and gain settle elsewhere. The arm therefore does not hold the norm at the directional rule's value, and it cannot answer R2-Q1 as asked.
+
+### E1b — exact norm replay (new arm, primary for "same norm")
+
+**Arm `normreplay`.** A `ddd3r` run on the same sequence logs each token's applied update norm per frame, `‖S_t − S_{t−1}‖`, which includes that run's gate. The replay moves each token by exactly that logged norm along its own raw delta: `S_t = S_{t−1} + ‖S^{ortho}_t − S^{ortho}_{t−1}‖ · δ̂_t`. Per token and per frame the applied norm equals the directional run by construction, so any difference in ATE comes from direction.
+
+**Predictions.** Unchanged in direction, and stated again for this arm.
+
+- **P1'.** On TUM, `ddd3r` is better than `normreplay`.
+- **P2a'.** On ScanNet, `normreplay` is better than `ddd3r`.
+- **P2b'.** On ARKitScenes, `normreplay` is better than `ddd3r`.
+
+The outcome table of E1 applies with `normreplay` in place of `normmatch`, and **the verdict on direction is taken from `normreplay`**. `normmatch` still runs and its P1, P2a and P2b are still reported, as the performance of a closed-loop scalar rule. The first-five ScanNet manipulation run is dropped, because the full `ddd3r` rerun logs the same data.
+
+**Caveat to report with the result.** The replay preserves pace, not trajectory. Its state differs from the directional run's, so "direction" here means the whole closed-loop effect of the decomposition.
+
+### Other changes
+
+- The reference `ddd3r` arm is rerun with logging on TUM, ScanNet and ARKitScenes, since the replay needs those logs. Verdicts for E1b compare against these fresh runs.
+- ScanNet arms run only on the 65 scenes valid in the existing TTT3R log. The other 31 fail on non-finite ground truth under every method, so this exclusion does not depend on any result.
+- Speed measured on this machine is about 5 FPS, not 10, so the estimate rises to about 25 GPU-hours. Three workers should finish in about 10 hours, inside the 2026-11-14 limit.
+- E5's full run is stopped as registered and goes to the author for a decision.

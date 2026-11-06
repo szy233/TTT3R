@@ -22,11 +22,14 @@ OUT="$ROOT/relpose/$GROUP/$ARM"
 LOG="$ROOT/logs/$GROUP.$ARM.log"
 GATES="$ROOT/gates/$GROUP"
 GAINS="$ROOT/gains/$GROUP/$ARM"
+NORMS="$ROOT/norms/$GROUP"
 mkdir -p "$OUT" "$ROOT/logs"
 
 ORTHO="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --gamma 0"
 case "$ARM" in
-    ortho_check|ortho_gain) TYPE=ddd3r;          EXTRA="$ORTHO --gain_log_dir $GAINS" ;;
+    ortho_plain)            TYPE=ddd3r;          EXTRA="$ORTHO" ;;
+    ortho_check)            TYPE=ddd3r;          EXTRA="$ORTHO --gain_log_dir $GAINS --norm_log_dir $NORMS" ;;
+    normreplay)             TYPE=ddd3r;          EXTRA="$ORTHO --norm_replay_dir $NORMS" ;;
     normmatch)              TYPE=ddd3r;          EXTRA="$ORTHO --norm_match --gain_log_dir $GAINS" ;;
     prevdir)                TYPE=ddd3r;          EXTRA="$ORTHO --project_prev" ;;
     ttt3r_log)              TYPE=ttt3r;          EXTRA="--gate_log_dir $GATES/ttt3r" ;;
@@ -51,9 +54,9 @@ echo "$(stamp) START gpu$GPU $GROUP/$ARM"
 SEQ_ARGS=()
 [ ${#SEQS[@]} -gt 0 ] && SEQ_ARGS=(--seq_list "${SEQS[@]}")
 
-CUDA_VISIBLE_DEVICES=$GPU PYTHONPATH=src \
+CUDA_VISIBLE_DEVICES=$GPU PYTHONPATH=${DDD3R_SRC:-src} \
     "${DDD3R_PYTHON:-/home/szy/anaconda3/envs/ttt3r/bin/python}" -m accelerate.commands.launch \
-    --num_processes 1 --main_process_port $((29700 + GPU)) \
+    --num_processes 1 --main_process_port $((29700 + GPU + ${DDD3R_PORT_OFFSET:-0})) \
     eval/relpose/launch.py \
     --weights model/cut3r_512_dpt_4_64.pth --size 512 \
     --output_dir "$OUT" --eval_dataset "$DATASET" \
