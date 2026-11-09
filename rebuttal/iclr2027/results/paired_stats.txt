@@ -29,6 +29,14 @@ walking_xyz          ortho=0.06271 brake=0.07600 const0.33=0.07590
   ttt3r_ortho_an05_ad0.2           mean=0.0558
   ttt3r_ortho_an0.7_ad005          mean=0.0570
   picks: ['ttt3r_ortho_an05_ad0.1', 'ttt3r_ortho_an05_ad0.2', 'ttt3r_ortho_an05_ad005']
+  sitting_halfsphere   pick=ttt3r_ortho_an05_ad0.1           held-out=0.06608
+  sitting_rpy          pick=ttt3r_ortho_an05_ad0.1           held-out=0.05124
+  sitting_static       pick=ttt3r_ortho_an05_ad0.1           held-out=0.01804
+  sitting_xyz          pick=ttt3r_ortho_an05_ad0.1           held-out=0.03964
+  walking_halfsphere   pick=ttt3r_ortho_an05_ad005           held-out=0.08579
+  walking_rpy          pick=ttt3r_ortho_an05_ad005           held-out=0.11043
+  walking_static       pick=ttt3r_ortho_an05_ad0.1           held-out=0.01865
+  walking_xyz          pick=ttt3r_ortho_an05_ad0.2           held-out=0.07145
   held-out mean=0.0577 brake=0.0634 const0.33=0.0659
   vs brake: wins=8/8 CI[-0.0101,-0.0023] p=0.0078
   vs const0.33: wins=8/8 CI[-0.0158,-0.0032] p=0.0078

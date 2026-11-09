@@ -1,0 +1,93 @@
+
+== kitti_odo_full (instrument I2) ==
+R_100:
+  A ortho_check vs normreplay                  n=11 28.98373 vs 36.98546 ( -21.6%) wins=10/11 CI[-13.8189,-2.0223] p=0.0244 -> a
+  B010 dir010 vs const010                      n=11 25.42581 vs 34.57567 ( -26.5%) wins= 8/11 CI[-14.1203,-4.2740] p=0.0137 -> a
+  B020 dir020 vs const020                      n=11 24.73683 vs 38.62650 ( -36.0%) wins= 8/11 CI[-22.3053,-5.9447] p=0.0322 -> a
+  B033 dir033 vs const033                      n=11 25.62385 vs 37.92913 ( -32.4%) wins=11/11 CI[-18.2245,-6.6289] p=0.0010 -> a
+R_50:
+  A ortho_check vs normreplay                  n=11 21.77170 vs 26.61846 ( -18.2%) wins= 9/11 CI[-10.3470,-0.2409] p=0.0537 -> tied
+  B010 dir010 vs const010                      n=11 21.91123 vs 26.31733 ( -16.7%) wins= 7/11 CI[-7.7009,-1.3380] p=0.0830 -> tied
+  B020 dir020 vs const020                      n=11 20.37646 vs 28.29028 ( -28.0%) wins= 7/11 CI[-14.6297,-1.5252] p=0.1016 -> tied
+  B033 dir033 vs const033                      n=11 20.39861 vs 28.30760 ( -27.9%) wins= 9/11 CI[-13.6179,-3.0551] p=0.0098 -> a
+R_200:
+  A ortho_check vs normreplay                  n=11 37.66109 vs 52.33204 ( -28.0%) wins=10/11 CI[-24.5362,-5.0544] p=0.0186 -> a
+  B010 dir010 vs const010                      n=11 29.68788 vs 43.40720 ( -31.6%) wins= 8/11 CI[-21.8287,-5.9471] p=0.0137 -> a
+  B020 dir020 vs const020                      n=11 30.14611 vs 52.29299 ( -42.4%) wins= 9/11 CI[-32.4458,-11.4907] p=0.0098 -> a
+  B033 dir033 vs const033                      n=11 31.55389 vs 54.85400 ( -42.5%) wins=11/11 CI[-30.1429,-16.5035] p=0.0010 -> a
+  Holm-adjusted p at R_100: A=0.0488, B010=0.0410, B020=0.0488, B033=0.0039
+
+== arkit_s1_500 (primary) ==
+R_100:
+  A ortho_check vs normreplay                  n=18 45.81831 vs 47.85841 (  -4.3%) wins=10/18 CI[-6.4764,+1.7066] p=0.6165 -> tied
+  B010 dir010 vs const010                      n=18 67.76048 vs 61.13119 ( +10.8%) wins= 2/18 CI[+2.8276,+10.8829] p=0.0029 -> b
+  B020 dir020 vs const020                      n=18 61.00166 vs 53.12747 ( +14.8%) wins= 4/18 CI[+2.0754,+14.2014] p=0.0123 -> b
+  B033 dir033 vs const033                      n=18 54.02849 vs 47.57712 ( +13.6%) wins= 4/18 CI[+0.8436,+12.3832] p=0.0222 -> b
+R_50:
+  A ortho_check vs normreplay                  n=18 35.65407 vs 37.08814 (  -3.9%) wins= 7/18 CI[-6.7166,+3.2288] p=0.8446 -> tied
+  B010 dir010 vs const010                      n=18 60.22266 vs 53.75434 ( +12.0%) wins= 3/18 CI[+1.8914,+11.8327] p=0.0176 -> b
+  B020 dir020 vs const020                      n=18 50.72422 vs 44.72496 ( +13.4%) wins= 4/18 CI[+0.5562,+11.6341] p=0.0176 -> b
+  B033 dir033 vs const033                      n=18 42.96248 vs 38.80646 ( +10.7%) wins= 4/18 CI[-2.8231,+10.7585] p=0.0854 -> tied
+R_200:
+  A ortho_check vs normreplay                  n=18 61.53715 vs 64.06575 (  -3.9%) wins=12/18 CI[-5.7178,+0.8977] p=0.0582 -> tied
+  B010 dir010 vs const010                      n=18 79.97361 vs 73.23566 (  +9.2%) wins= 2/18 CI[+2.4189,+12.6705] p=0.0018 -> b
+  B020 dir020 vs const020                      n=18 75.52467 vs 67.17328 ( +12.4%) wins= 6/18 CI[+0.4294,+17.8878] p=0.0936 -> tied
+  B033 dir033 vs const033                      n=18 67.45721 vs 63.21221 (  +6.7%) wins= 9/18 CI[-1.5127,+10.7469] p=0.4204 -> tied
+  Holm-adjusted p at R_100: A=0.6165, B010=0.0114, B020=0.0368, B033=0.0445
+
+== tum_s1_1000 (secondary) ==
+R_100:
+  A ortho_check vs normreplay                  n= 8 5.18532 vs 2.62272 ( +97.7%) wins= 5/8 CI[-0.2832,+7.7662] p=0.8438 -> tied
+  B010 dir010 vs const010                      n= 8 16.59670 vs 12.06442 ( +37.6%) wins= 1/8 CI[+0.3032,+10.1879] p=0.0391 -> b
+  B020 dir020 vs const020                      n= 8 12.06024 vs 9.24845 ( +30.4%) wins= 3/8 CI[+0.5394,+5.7473] p=0.1484 -> tied
+  B033 dir033 vs const033                      n= 8 8.00278 vs 4.45373 ( +79.7%) wins= 3/8 CI[+0.2977,+7.6250] p=0.2500 -> tied
+R_50:
+  A ortho_check vs normreplay                  n= 8 4.74559 vs 2.27387 (+108.7%) wins= 5/8 CI[-0.3297,+7.4464] p=0.8438 -> tied
+  B010 dir010 vs const010                      n= 8 15.59016 vs 11.21504 ( +39.0%) wins= 1/8 CI[+0.1707,+10.3967] p=0.0156 -> b
+  B020 dir020 vs const020                      n= 8 11.52076 vs 8.57733 ( +34.3%) wins= 2/8 CI[+0.3931,+6.6517] p=0.1094 -> tied
+  B033 dir033 vs const033                      n= 8 7.63208 vs 4.13227 ( +84.7%) wins= 3/8 CI[+0.3640,+7.3692] p=0.2500 -> tied
+R_200:
+  A ortho_check vs normreplay                  n= 8 4.39900 vs 2.82139 ( +55.9%) wins= 5/8 CI[-0.5325,+5.3624] p=0.8438 -> tied
+  B010 dir010 vs const010                      n= 8 14.07535 vs 10.08775 ( +39.5%) wins= 1/8 CI[+0.1518,+9.1478] p=0.0547 -> tied
+  B020 dir020 vs const020                      n= 8 9.94725 vs 7.47224 ( +33.1%) wins= 2/8 CI[+0.3580,+5.3011] p=0.0781 -> tied
+  B033 dir033 vs const033                      n= 8 6.70298 vs 4.05548 ( +65.3%) wins= 3/8 CI[+0.1770,+5.7372] p=0.2500 -> tied
+  Holm-adjusted p at R_100: A=0.8438, B010=0.1562, B020=0.4453, B033=0.5000
+
+== scannet_s3_1000 (secondary) ==
+R_100:
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/ortho_check/scene0718_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/ortho_check/scene0801_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/normreplay/scene0718_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/normreplay/scene0801_00
+  A ortho_check vs normreplay                  n=65 13.80470 vs 8.34962 ( +65.3%) wins=29/65 CI[+1.9753,+9.8215] p=0.0718 -> tied
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/dir010/scene0718_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/dir010/scene0801_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/const010/scene0718_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/const010/scene0801_00
+  B010 dir010 vs const010                      n=65 35.97165 vs 17.04782 (+111.0%) wins= 8/65 CI[+13.1632,+25.2777] p=0.0000 -> b
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/dir033/scene0718_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/dir033/scene0801_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/const033/scene0718_00
+  too short for a 200-frame gap, left out of R_200: rebuttal/iclr2027/results/relpose/scannet_s3_1000/const033/scene0801_00
+  B033 dir033 vs const033                      n=65 16.96595 vs 7.61861 (+122.7%) wins=17/65 CI[+5.1618,+14.4043] p=0.0000 -> b
+R_50:
+  A ortho_check vs normreplay                  n=65 14.03113 vs 7.89798 ( +77.7%) wins=24/65 CI[+2.6545,+10.3728] p=0.0022 -> b
+  B010 dir010 vs const010                      n=65 33.67662 vs 17.66593 ( +90.6%) wins= 9/65 CI[+11.2150,+21.1244] p=0.0000 -> b
+  B033 dir033 vs const033                      n=65 17.06368 vs 7.50726 (+127.3%) wins=12/65 CI[+5.4939,+14.2892] p=0.0000 -> b
+R_200:
+  A ortho_check vs normreplay                  n=63 12.65368 vs 8.69089 ( +45.6%) wins=38/63 CI[+0.7504,+8.1142] p=0.8213 -> tied
+  B010 dir010 vs const010                      n=63 38.66898 vs 17.79680 (+117.3%) wins=15/63 CI[+14.1255,+28.5287] p=0.0000 -> b
+  B033 dir033 vs const033                      n=63 15.31030 vs 7.32852 (+108.9%) wins=20/63 CI[+4.3952,+12.2126] p=0.0000 -> b
+  Holm-adjusted p at R_100: A=0.0718, B010=0.0000, B033=0.0000
+
+== Rounding noise ==
+  rounding noise R_100 tum_s1_1000: orthop 5.4123 vs ortho 5.1853 (+4.4%)
+  rounding noise R_100 kitti_odo_full: orthop 26.9215 vs ortho 28.9837 (-7.1%)
+
+== I2: R_100 sign on KITTI, where r_rel says direction is lower in all four cells ==
+  A: direction lower, B010: direction lower, B020: direction lower, B033: direction lower
+I2 passes
+
+P8a (ARKit 500 R_100, design A better): fails (tied)
+P8b (ARKit 500 R_100, design B better at >= 2 of 3): fails (b, b, b)
+General four-dataset statement on R_100: not allowed

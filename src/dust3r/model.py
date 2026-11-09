@@ -1667,7 +1667,9 @@ class ARCroco3DStereo(CroCoNet):
         if drift_dir is None:
             ortho_state['drift_dir'] = delta_dir.detach().clone()
             ortho_state['prev_delta'] = delta.detach().clone()
-            return state_feat + alpha_novel * delta
+            # The fixed-scale arm must match constant dampening's norm from the first frame.
+            scale = getattr(config, 'ortho_scale', None)
+            return state_feat + (alpha_novel if scale is None else scale) * delta
 
         # Update drift direction EMA (normalized after update for correct projection)
         prev_drift_dir = drift_dir
@@ -2059,14 +2061,20 @@ class ARCroco3DStereo(CroCoNet):
 
         norm_match = getattr(config, 'ortho_norm_match', False)
         gain_log = getattr(config, 'gain_log', None)
-        if norm_match or gain_log is not None:
+        scale = getattr(config, 'ortho_scale', None)
+        if norm_match or gain_log is not None or scale is not None:
             applied = alpha_novel * novel_comp + effective_alpha_drift * drift_comp
+            if scale is not None:
+                # The decomposed direction at the per-token norm of constant dampening.
+                applied = scale * delta_norm * applied / applied.norm(dim=-1, keepdim=True).clamp(min=1e-8)
             gain = applied.norm(dim=-1, keepdim=True) / delta_norm
             if gain_log is not None:
                 gain_log.append(gain.mean().item())
             if norm_match:
                 # Same per-token norm as the directional rule, direction of the raw delta.
                 return state_feat + gain * delta
+            if scale is not None:
+                return state_feat + applied
 
         return state_feat + alpha_novel * novel_comp + effective_alpha_drift * drift_comp
 

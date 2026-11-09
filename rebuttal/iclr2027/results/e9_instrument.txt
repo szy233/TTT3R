@@ -1,0 +1,14 @@
+tum      rgbd_dataset_freiburg3_sitting_halfsphere    n=200 stored=0.38656 now=0.38656 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_sitting_rpy           n=200 stored=0.45377 now=0.45377 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_sitting_static        n=200 stored=0.37307 now=0.37307 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_sitting_xyz           n=200 stored=0.31304 now=0.31304 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_walking_halfsphere    n=200 stored=0.40335 now=0.40335 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_walking_rpy           n=200 stored=0.44189 now=0.44189 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_walking_static        n=200 stored=0.42100 now=0.42100 diff=+0.00000 ok
+tum      rgbd_dataset_freiburg3_walking_xyz           n=200 stored=0.39325 now=0.39325 diff=+0.00000 ok
+scannet  scene0712_00                                 n=200 stored=0.45989 now=0.45989 diff=+0.00000 ok
+scannet  scene0757_00                                 n=200 stored=0.46159 now=0.46159 diff=+0.00000 ok
+scannet  scene0794_00                                 n=200 stored=0.44582 now=0.44582 diff=+0.00000 ok
+scannet  scene0795_00                                 n=200 stored=0.42064 now=0.42064 diff=+0.00000 ok
+scannet  scene0806_00                                 n=200 stored=0.48757 now=0.48757 diff=+0.00000 ok
+I1 PASS (tolerance 0.005, same side of 0.5)

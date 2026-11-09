@@ -1,0 +1,31 @@
+== ARKitScenes 500f, appendix text on the operating points ==
+arkit const05 vs cut3r                         n=18 0.52754 vs 0.68157 ( -22.6%) wins=16/18 CI[-0.2397,-0.0811] p=0.0016 -> a
+arkit const05 vs ttt3r                         n=18 0.52754 vs 0.55804 (  -5.5%) wins=13/18 CI[-0.0527,-0.0084] p=0.0279 -> a
+arkit const05 vs ddd3r_brake                   n=18 0.52754 vs 0.53907 (  -2.1%) wins= 8/18 CI[-0.0366,+0.0101] p=0.6475 -> tied
+arkit ortho vs const05                         n=18 0.60927 vs 0.52754 ( +15.5%) wins= 4/18 CI[+0.0104,+0.1690] p=0.0279 -> b
+
+== Gate spread across tokens within a frame, from the E3a gate logs ==
+spatial_std: std over tokens in each frame, averaged over frames, then over sequences
+  tum_s1_1000                ttt3r   n= 8 spatial_std=0.0468 frame_mean_std=0.0168
+  tum_s1_1000                ttsa3r  n= 8 spatial_std=0.0927 frame_mean_std=0.0205
+  scannet_s3_1000__first20   ttt3r   n=20 spatial_std=0.0506 frame_mean_std=0.0305
+  scannet_s3_1000__first20   ttsa3r  n=20 spatial_std=0.1124 frame_mean_std=0.0191
+
+== Table 6 gamma rows, ATE from the logged runs ==
+  tum_s1_1000      gamma=0.5 ATE=0.06107
+  tum_s1_1000      gamma=1   ATE=0.05605
+  tum_s1_1000      gamma=2   ATE=0.05569
+  tum_s1_1000      gamma=3   ATE=0.05394
+  tum_s1_1000      gamma=5   ATE=0.05488
+  scannet_s3_1000  gamma=0.5 ATE=0.32689
+  scannet_s3_1000  gamma=1   ATE=0.35831
+  scannet_s3_1000  gamma=2   ATE=0.39426
+  scannet_s3_1000  gamma=3   ATE=0.40700
+  scannet_s3_1000  gamma=5   ATE=0.45607
+
+== ARKitScenes 500f, mean RPE for the appendix RPE table ==
+  cut3r            ATE=0.68157 RPE trans=0.04112 RPE rot=1.92109
+  ttt3r            ATE=0.55804 RPE trans=0.04845 RPE rot=3.33360
+  ddd3r_constant   ATE=0.52754 RPE trans=0.06878 RPE rot=4.61067
+  ddd3r_brake      ATE=0.53907 RPE trans=0.09485 RPE rot=7.62123
+  ddd3r            ATE=0.60927 RPE trans=0.08942 RPE rot=6.43766

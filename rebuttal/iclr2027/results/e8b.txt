@@ -1,0 +1,49 @@
+== I3, gain of the dir arms at 1000f ==
+  I3 dir033: 8 logs, largest gap 0.0000% pass
+  I3 dir010: 8 logs, largest gap 0.0000% pass
+
+== ARKitScenes 1000f, 8 scenes, ATE RMSE ==
+  A ortho_check vs normreplay                  n= 8 1.13701 vs 0.98091 ( +15.9%) wins= 5/8 CI[-0.0266,+0.3955] p=0.9453 -> tied
+  B010 dir010 vs const010                      n= 8 1.18066 vs 1.03950 ( +13.6%) wins= 2/8 CI[+0.0162,+0.3035] p=0.0547 -> tied
+  B033 dir033 vs const033                      n= 8 1.14518 vs 0.92962 ( +23.2%) wins= 3/8 CI[+0.0087,+0.5104] p=0.2500 -> tied
+Against the default ortho, no prediction:
+  normreplay vs ortho_check                    n= 8 0.98091 vs 1.13701 ( -13.7%) wins= 3/8 CI[-0.3955,+0.0266] p=0.9453 -> tied
+  dir033 vs ortho_check                        n= 8 1.14518 vs 1.13701 (  +0.7%) wins= 4/8 CI[-0.0345,+0.0526] p=0.7422 -> tied
+  const033 vs ortho_check                      n= 8 0.92962 vs 1.13701 ( -18.2%) wins= 6/8 CI[-0.4685,-0.0078] p=0.1484 -> tied
+  dir010 vs ortho_check                        n= 8 1.18066 vs 1.13701 (  +3.8%) wins= 1/8 CI[+0.0036,+0.0808] p=0.0781 -> tied
+  const010 vs ortho_check                      n= 8 1.03950 vs 1.13701 (  -8.6%) wins= 3/8 CI[-0.2804,+0.0522] p=1.0000 -> tied
+  ttt3r_plain vs ortho_check                   n= 8 1.02971 vs 1.13701 (  -9.4%) wins= 7/8 CI[-0.2620,+0.0092] p=0.1094 -> tied
+  brake_t1 vs ortho_check                      n= 8 0.93700 vs 1.13701 ( -17.6%) wins= 6/8 CI[-0.4654,+0.0024] p=0.2500 -> tied
+  rounding noise ATE ARKit 1000: orthop 1.13951 vs ortho 1.13701 (+0.2%)
+
+== ARKitScenes 1000f, 8 scenes, RPE at a 1-frame gap ==
+  A RPE trans                                  n= 8 0.08883 vs 0.06396 ( +38.9%) wins= 1/8 CI[+0.0122,+0.0393] p=0.0156 -> b
+  A RPE rot                                    n= 8 8.25335 vs 5.20427 ( +58.6%) wins= 2/8 CI[+1.0308,+5.1594] p=0.0547 -> tied
+  B010 RPE trans                               n= 8 0.16077 vs 0.15424 (  +4.2%) wins= 4/8 CI[-0.0131,+0.0295] p=0.8438 -> tied
+  B010 RPE rot                                 n= 8 17.55900 vs 13.87474 ( +26.6%) wins= 0/8 CI[+2.4024,+5.0638] p=0.0078 -> b
+  B033 RPE trans                               n= 8 0.10929 vs 0.07655 ( +42.8%) wins= 0/8 CI[+0.0175,+0.0504] p=0.0078 -> b
+  B033 RPE rot                                 n= 8 9.71558 vs 9.91484 (  -2.0%) wins= 3/8 CI[-2.4553,+1.8143] p=0.9453 -> tied
+
+== ARKitScenes 1000f, 8 scenes, R_Δ ==
+R_100:
+  A ortho_check vs normreplay                  n= 8 60.17056 vs 56.16634 (  +7.1%) wins= 2/8 CI[+0.7854,+7.6099] p=0.0781 -> tied
+  B010 dir010 vs const010                      n= 8 72.18091 vs 67.46658 (  +7.0%) wins= 3/8 CI[+0.0490,+9.2700] p=0.1484 -> tied
+  B033 dir033 vs const033                      n= 8 61.55460 vs 59.21489 (  +4.0%) wins= 4/8 CI[-0.9201,+6.0395] p=0.5469 -> tied
+R_50:
+  A ortho_check vs normreplay                  n= 8 42.73797 vs 38.75386 ( +10.3%) wins= 3/8 CI[+0.2091,+8.3831] p=0.2500 -> tied
+  B010 dir010 vs const010                      n= 8 60.66629 vs 53.44836 ( +13.5%) wins= 2/8 CI[+2.0556,+13.0791] p=0.0391 -> b
+  B033 dir033 vs const033                      n= 8 44.46621 vs 43.58289 (  +2.0%) wins= 5/8 CI[-3.1048,+5.2250] p=0.9453 -> tied
+R_200:
+  A ortho_check vs normreplay                  n= 8 78.77461 vs 77.72885 (  +1.3%) wins= 2/8 CI[-1.3791,+3.0806] p=0.2500 -> tied
+  B010 dir010 vs const010                      n= 8 87.72140 vs 85.68110 (  +2.4%) wins= 3/8 CI[-3.1071,+6.9078] p=0.4609 -> tied
+  B033 dir033 vs const033                      n= 8 80.82920 vs 79.41702 (  +1.8%) wins= 6/8 CI[-3.1667,+7.8755] p=0.7422 -> tied
+  Holm-adjusted p at R_100: A=0.2344, B010=0.2969, B033=0.5469
+  rounding noise R_100 arkit_s1_1000: orthop 59.5487 vs ortho 60.1706 (-1.0%)
+P8c (ARKit 1000 R_100 better in A, B010 and B033): fails (tied, tied, tied)
+
+== P8d, change of ln(ATE ratio) from 500 to 1000 frames on the 8 scenes ==
+  A: n=8 mean ln ratio 500f +0.1724, 1000f +0.2042, change +0.0318 CI[-0.1378,+0.2290] p=1.0000 -> does not support
+  B010: n=8 mean ln ratio 500f +0.2011, 1000f +0.1614, change -0.0397 CI[-0.0957,+0.0345] p=0.1953 -> does not support
+  B033: n=8 mean ln ratio 500f +0.2351, 1000f +0.2788, change +0.0437 CI[-0.1580,+0.3027] p=1.0000 -> does not support
+P8d: fails (0 of 3 cells)
+Direction better on ARKit 1000 ATE in 0 of 3 cells

@@ -1,0 +1,109 @@
+== Instrument and reference check ==
+TUM ortho_check 0.05454 against registered 0.05454 gap=0.000% pass
+tum_s1_1000      fresh ortho vs logged ddd3r n=8 largest per-sequence gap=0.0000%
+scannet_s3_1000  fresh ortho vs logged ddd3r n=65 largest per-sequence gap=0.0000%
+arkit_s1_500     fresh ortho vs logged ddd3r n=18 largest per-sequence gap=0.0000%
+
+== E1b, normreplay (the verdict on direction). a=ortho, b=normreplay ==
+tum_s1_1000 ortho vs normreplay              n= 8 0.05454 vs 0.07437 ( -26.7%) wins= 8/8 CI[-0.0288,-0.0115] p=0.0078 -> a
+scannet_s3_1000 ortho vs normreplay          n=65 0.48829 vs 0.31858 ( +53.3%) wins=11/65 CI[+0.1154,+0.2375] p=0.0000 -> b
+arkit_s1_500 ortho vs normreplay             n=18 0.60927 vs 0.54458 ( +11.9%) wins= 4/18 CI[-0.0049,+0.1480] p=0.0526 -> tied
+
+== E1, normmatch (closed-loop scalar rule). a=ortho, b=normmatch ==
+tum_s1_1000 ortho vs normmatch               n= 8 0.05454 vs 0.07608 ( -28.3%) wins= 7/8 CI[-0.0351,-0.0099] p=0.0156 -> a
+scannet_s3_1000 ortho vs normmatch           n=65 0.48829 vs 0.28575 ( +70.9%) wins= 9/65 CI[+0.1438,+0.2746] p=0.0000 -> b
+arkit_s1_500 ortho vs normmatch              n=18 0.60927 vs 0.52753 ( +15.5%) wins= 4/18 CI[+0.0156,+0.1628] p=0.0198 -> b
+
+== Manipulation check, mean gain per run (registered: report a gap above 10%) ==
+tum_s1_1000      n= 8 ortho gain=0.3577 normmatch gain=0.4533 gap=26.7%
+scannet_s3_1000  n=65 ortho gain=0.3558 normmatch gain=0.4449 gap=25.0%
+arkit_s1_500     n=18 ortho gain=0.3743 normmatch gain=0.4596 gap=22.8%
+
+== normreplay and normmatch against the scalar baselines, not registered, no prediction ==
+tum_s1_1000 normreplay vs ddd3r_brake        n= 8 0.07437 vs 0.06339 ( +17.3%) wins= 1/8 CI[+0.0050,+0.0171] p=0.0156 -> b
+tum_s1_1000 normreplay vs ddd3r_constant     n= 8 0.07437 vs 0.07859 (  -5.4%) wins= 4/8 CI[-0.0154,+0.0059] p=0.8438 -> tied
+tum_s1_1000 normreplay vs ttt3r              n= 8 0.07437 vs 0.10251 ( -27.5%) wins= 8/8 CI[-0.0535,-0.0072] p=0.0078 -> a
+scannet_s3_1000 normreplay vs ddd3r_brake    n=65 0.31858 vs 0.26147 ( +21.8%) wins= 7/65 CI[+0.0396,+0.0754] p=0.0000 -> b
+scannet_s3_1000 normreplay vs ddd3r_constant n=65 0.31858 vs 0.28274 ( +12.7%) wins=16/65 CI[+0.0078,+0.0640] p=0.0001 -> b
+scannet_s3_1000 normreplay vs ttt3r          n=65 0.31858 vs 0.40576 ( -21.5%) wins=46/65 CI[-0.1563,-0.0276] p=0.0015 -> a
+arkit_s1_500 normreplay vs ddd3r_brake       n=18 0.54458 vs 0.53907 (  +1.0%) wins= 7/18 CI[-0.0273,+0.0419] p=0.8446 -> tied
+arkit_s1_500 normreplay vs ddd3r_constant    n=18 0.54458 vs 0.52754 (  +3.2%) wins= 7/18 CI[-0.0074,+0.0436] p=0.2145 -> tied
+arkit_s1_500 normreplay vs ttt3r             n=18 0.54458 vs 0.55804 (  -2.4%) wins=10/18 CI[-0.0495,+0.0223] p=0.5862 -> tied
+
+== RPE, E1 arms ==
+tum_s1_1000
+  ortho_check              ATE=0.05454 RPE trans=0.01129 RPE rot=0.65189
+  normreplay               ATE=0.07437 RPE trans=0.00990 RPE rot=0.45036
+  normmatch                ATE=0.07608 RPE trans=0.00982 RPE rot=0.44388
+  ttt3r (logged)           ATE=0.10251 RPE trans=0.00893 RPE rot=0.43498
+  ddd3r_constant (logged)  ATE=0.07859 RPE trans=0.00997 RPE rot=0.45059
+  ddd3r_brake (logged)     ATE=0.06339 RPE trans=0.01337 RPE rot=0.88926
+scannet_s3_1000
+  ortho_check              ATE=0.48829 RPE trans=0.07347 RPE rot=4.37922
+  normreplay               ATE=0.31858 RPE trans=0.05399 RPE rot=1.98817
+  normmatch                ATE=0.28575 RPE trans=0.04645 RPE rot=1.82367
+  ttt3r (logged)           ATE=0.40576 RPE trans=0.03854 RPE rot=1.25551
+  ddd3r_constant (logged)  ATE=0.28274 RPE trans=0.04533 RPE rot=1.98377
+  ddd3r_brake (logged)     ATE=0.26147 RPE trans=0.05241 RPE rot=2.68407
+arkit_s1_500
+  ortho_check              ATE=0.60927 RPE trans=0.08942 RPE rot=6.43766
+  normreplay               ATE=0.54457 RPE trans=0.07409 RPE rot=5.63939
+  normmatch                ATE=0.52753 RPE trans=0.07095 RPE rot=6.00613
+  ttt3r (logged)           ATE=0.55804 RPE trans=0.04845 RPE rot=3.33360
+  ddd3r_constant (logged)  ATE=0.52754 RPE trans=0.06878 RPE rot=4.61067
+  ddd3r_brake (logged)     ATE=0.53907 RPE trans=0.09485 RPE rot=7.62123
+
+== E2, projection timing, no prediction. a=ortho (updated d_t), b=prevdir (d_t-1) ==
+tum_s1_1000 ortho vs prevdir                 n= 8 0.05454 vs 0.06156 ( -11.4%) wins= 8/8 CI[-0.0152,-0.0019] p=0.0078 -> a
+  ortho                    ATE=0.05454 RPE trans=0.01129 RPE rot=0.65189
+  prevdir                  ATE=0.06156 RPE trans=0.01218 RPE rot=0.75174
+scannet_s3_1000 ortho vs prevdir             n=65 0.48829 vs 0.47645 (  +2.5%) wins=37/65 CI[-0.0064,+0.0340] p=0.8410 -> tied
+  ortho                    ATE=0.48829 RPE trans=0.07347 RPE rot=4.37922
+  prevdir                  ATE=0.47645 RPE trans=0.06378 RPE rot=3.74111
+
+== E3a, gate variance, averaged over sequences ==
+tum_s1_1000                ttt3r   n= 8 total=0.002570 token= 37.1% frame= 13.2% residual= 49.7% token_temporal_std=0.0375 frame_mean_std=0.0168
+tum_s1_1000                ttsa3r  n= 8 total=0.009148 token=  8.8% frame=  4.7% residual= 86.6% token_temporal_std=0.0852 frame_mean_std=0.0205
+scannet_s3_1000__first20   ttt3r   n=20 total=0.003590 token= 23.6% frame= 27.1% residual= 49.3% token_temporal_std=0.0507 frame_mean_std=0.0305
+scannet_s3_1000__first20   ttsa3r  n=20 total=0.013215 token=  9.0% frame=  2.8% residual= 88.2% token_temporal_std=0.1018 frame_mean_std=0.0191
+
+== E3b, frozen against live. a=frozen, b=live ==
+tum_s1_1000 ttt3r frozen vs live             n= 8 0.11905 vs 0.10251 ( +16.1%) wins= 5/8 CI[-0.0040,+0.0393] p=0.7422 -> tied
+    upper CI +0.0393 against 5% of live 0.0051 -> inconclusive
+tum_s1_1000 ttsa3r frozen vs live            n= 8 0.08840 vs 0.09075 (  -2.6%) wins= 6/8 CI[-0.0058,+0.0008] p=0.1484 -> tied
+    upper CI +0.0008 against 5% of live 0.0045 -> supported
+scannet_s3_1000__first20 ttt3r frozen vs live n=20 0.38923 vs 0.41069 (  -5.2%) wins=15/20 CI[-0.0355,-0.0067] p=0.0064 -> a
+    upper CI -0.0067 against 5% of live 0.0205 -> supported
+scannet_s3_1000__first20 ttsa3r frozen vs live n=20 0.38028 vs 0.38220 (  -0.5%) wins= 8/20 CI[-0.0432,+0.0280] p=0.4553 -> tied
+    upper CI +0.0280 against 5% of live 0.0191 -> inconclusive
+
+== E4, ScanNet. a=const033, b=brake tau=1 (logged) ==
+scannet const033 vs brake                    n=65 0.26237 vs 0.26147 (  +0.3%) wins=33/65 CI[-0.0066,+0.0081] p=0.9505 -> tied
+scannet const033 vs const05                  n=65 0.26237 vs 0.28274 (  -7.2%) wins=39/65 CI[-0.0435,+0.0008] p=0.0881 -> tied
+  const033                 ATE=0.26237 RPE trans=0.05066 RPE rot=2.59524
+  brake (logged)           ATE=0.26147 RPE trans=0.05241 RPE rot=2.68407
+
+== Ortho against the methods named in the reviews, not registered ==
+scannet ortho vs ttt3r                       n=65 0.48829 vs 0.40576 ( +20.3%) wins=29/65 CI[+0.0025,+0.1657] p=0.0473 -> b
+scannet ortho vs ttsa3r                      n=65 0.48829 vs 0.37795 ( +29.2%) wins=27/65 CI[+0.0244,+0.1950] p=0.0035 -> b
+scannet ortho vs brake                       n=65 0.48829 vs 0.26147 ( +86.7%) wins= 4/65 CI[+0.1638,+0.3025] p=0.0000 -> b
+scannet ortho vs const05                     n=65 0.48829 vs 0.28274 ( +72.7%) wins=11/65 CI[+0.1418,+0.2830] p=0.0000 -> b
+arkit ortho vs ttt3r                         n=18 0.60927 vs 0.55804 (  +9.2%) wins= 4/18 CI[-0.0256,+0.1409] p=0.1446 -> tied
+arkit ortho vs ttsa3r                        n=18 0.60927 vs 0.55591 (  +9.6%) wins= 5/18 CI[-0.0200,+0.1381] p=0.1446 -> tied
+arkit ortho vs brake                         n=18 0.60927 vs 0.53907 ( +13.0%) wins= 6/18 CI[-0.0005,+0.1581] p=0.0778 -> tied
+arkit ortho vs const05                       n=18 0.60927 vs 0.52754 ( +15.5%) wins= 4/18 CI[+0.0104,+0.1690] p=0.0279 -> b
+
+== Brake against TTT3R, for the closing claim, not registered ==
+tum_s1_1000 brake vs ttt3r                   n= 8 0.06339 vs 0.10251 ( -38.2%) wins= 8/8 CI[-0.0643,-0.0166] p=0.0078 -> a
+  brake (logged)           ATE=0.06339 RPE trans=0.01337 RPE rot=0.88926
+  ttt3r (logged)           ATE=0.10251 RPE trans=0.00893 RPE rot=0.43498
+scannet_s3_1000 brake vs ttt3r               n=65 0.26147 vs 0.40576 ( -35.6%) wins=54/65 CI[-0.2158,-0.0826] p=0.0000 -> a
+  brake (logged)           ATE=0.26147 RPE trans=0.05241 RPE rot=2.68407
+  ttt3r (logged)           ATE=0.40576 RPE trans=0.03854 RPE rot=1.25551
+arkit_s1_500 brake vs ttt3r                  n=18 0.53907 vs 0.55804 (  -3.4%) wins=10/18 CI[-0.0589,+0.0245] p=0.2860 -> tied
+  brake (logged)           ATE=0.53907 RPE trans=0.09485 RPE rot=7.62123
+  ttt3r (logged)           ATE=0.55804 RPE trans=0.04845 RPE rot=3.33360
+
+== Logged runs against brake on TUM and ScanNet, means only, duplicates not removed ==
+brake TUM=0.06339 ScanNet=0.26147
+runs on both datasets: 59; lower on TUM: 33; lower on ScanNet: 0; lower on both: 0

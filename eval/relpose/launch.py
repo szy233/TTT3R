@@ -111,6 +111,8 @@ def get_args_parser():
                         help="Apply the directional rule's per-token norm along the raw delta")
     parser.add_argument("--project_prev", action="store_true", default=False,
                         help="Project onto the EMA direction from before this frame")
+    parser.add_argument("--ortho_scale", type=float, default=None,
+                        help="Keep the decomposed direction but set each token's norm to scale * ||delta||")
     parser.add_argument("--gate_log_dir", type=str, default=None,
                         help="Save the per-token gate of each sequence here")
     parser.add_argument("--frozen_gate_dir", type=str, default=None,
@@ -590,6 +592,7 @@ if __name__ == "__main__":
     model.config.brake_tau = args.brake_tau
     model.config.ortho_norm_match = args.norm_match
     model.config.ortho_project_prev = args.project_prev
+    model.config.ortho_scale = args.ortho_scale
     model.pose_only_outputs = args.pose_only
     model.config.warmup_t0 = args.warmup_t0
     model.config.warmup_window = args.warmup_window

@@ -193,8 +193,14 @@ def panel_pipeline(ax):
 
     block(ax, 0.15, 2.42, 2.62, 0.80, r"raw $\boldsymbol{\Delta}_t$",
           C_DELTA, fontsize=10)
-    block(ax, 0.15, 0.72, 2.62, 0.80, r"EMA $\mathbf{d}_{t-1}$",
+    # The raw delta updates the EMA first (Eq. 7), and the delta is then
+    # projected onto the updated d_t, as the code does.
+    block(ax, 0.15, 0.72, 2.62, 0.80, r"EMA $\mathbf{d}_t$",
           C_GATE, fontsize=10)
+    carrow(ax, (1.46, 2.38), (1.46, 1.58))
+    ax.text(1.46, 0.06, r"$\mathbf{d}_{t-1}$", fontsize=9.5, color=C_MUTE,
+            ha="center", va="center")
+    carrow(ax, (1.46, 0.26), (1.46, 0.66))
 
     block(ax, 3.60, 1.55, 2.45, 0.88, "project", C_DARK, fontsize=10.5)
     carrow(ax, (2.84, 2.82), (3.54, 2.24))

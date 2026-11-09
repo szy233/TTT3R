@@ -1,0 +1,6 @@
+== I1, R_1 recomputed against the logged per-sequence RPE rotation (tolerance 0.5%) ==
+  arkit_s1_500     dir010       n=18 of 18 logged, largest gap=0.0000%
+  tum_s1_1000      ortho_check  n= 8 of  8 logged, largest gap=0.0017%
+  scannet_s3_1000  ortho_check  n=65 of 65 logged, largest gap=0.0007%
+  kitti_odo_full   ortho_check  n=11 of 11 logged, largest gap=0.0005%
+I1 passes

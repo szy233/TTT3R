@@ -1,0 +1,8 @@
+== Post hoc, not registered: ARKitScenes 1000f, 8 scenes, against ttt3r_plain ==
+  brake_t1 vs ttt3r_plain ATE                  n= 8 0.93700 vs 1.02971 (  -9.0%) wins= 5/8 CI[-0.2190,+0.0136] p=0.3828 -> tied
+  const033 vs ttt3r_plain ATE                  n= 8 0.92962 vs 1.02971 (  -9.7%) wins= 5/8 CI[-0.2243,+0.0049] p=0.3125 -> tied
+  const010 vs ttt3r_plain ATE                  n= 8 1.03950 vs 1.02971 (  +1.0%) wins= 2/8 CI[-0.0805,+0.0879] p=0.5469 -> tied
+  ortho_check vs ttt3r_plain ATE               n= 8 1.13701 vs 1.02971 ( +10.4%) wins= 1/8 CI[-0.0087,+0.2621] p=0.1094 -> tied
+  normreplay vs ttt3r_plain ATE                n= 8 0.98091 vs 1.02971 (  -4.7%) wins= 3/8 CI[-0.1560,+0.0461] p=0.7422 -> tied
+  brake_t1 vs ttt3r_plain RPE rot              n= 8 9.88908 vs 4.97399 ( +98.8%) wins= 0/8 CI[+2.2678,+7.6519] p=0.0078 -> b
+  ortho_check vs ttt3r_plain RPE rot           n= 8 8.25335 vs 4.97399 ( +65.9%) wins= 2/8 CI[+0.9783,+5.6860] p=0.0547 -> tied

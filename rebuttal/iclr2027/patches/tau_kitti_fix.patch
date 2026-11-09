@@ -1,0 +1,158 @@
+diff --git a/sec/appendix_supp.tex b/sec/appendix_supp.tex
+index 0d53a4e..0ee531c 100644
+--- a/sec/appendix_supp.tex
++++ b/sec/appendix_supp.tex
+@@ -48,7 +48,7 @@ We compare two baselines and three operating points along the DDD3R spectrum (\c
+ (i) \textbf{CUT3R}~\cite{cut3r}: full state replacement ($\beta_t \equiv 1$).
+ (ii) \textbf{TTT3R}~\cite{ttt3r}: attention-derived per-token gate.
+ (iii) \dddconst{} ($\alpha_\perp{=}\alpha_\parallel{=}0.5$, $\gamma{=}0$): isotropic dampening, the $\alpha_\perp{=}\alpha_\parallel$ degenerate case of \cref{eq:ddd3r}.
+-(iv) \dddbrake{} ($\tau{=}2$): the temporal-brake scalar relaxation of \cref{eq:ddd3r} (see \cref{app:brake_ortho}).
++(iv) \dddbrake{} ($\tau{=}1$): the temporal-brake scalar relaxation of \cref{eq:ddd3r} (see \cref{app:brake_ortho}).
+ (v) \dddortho{} ($\alpha_\perp{=}0.5$, $\alpha_\parallel{=}0.05$, $\beta_{\text{ema}}{=}0.95$, $\gamma{=}0$): default full directional decomposition.
+ 
+ \paragraph{Datasets and protocols.}
+@@ -88,34 +88,34 @@ A claim made informally in \cref{sec:exp_main} is that all reasonable update str
+ \toprule
+ \textbf{DDD3R config} & \textbf{TUM 1000f} & \textbf{ScanNet 1000f} & \textbf{KITTI 04} & \textbf{KITTI 03} \\
+ \midrule
+-\dddconst{}                                  & 0.079 & \underline{0.283} & \underline{5.10} & 60.68 \\
+-\dddbrake{}                                  & 0.063 & \textbf{0.261} & 7.05 & \underline{25.38} \\
++\dddconst{}                                  & 0.079 & \underline{0.283} & 7.10 & 73.93 \\
++\dddbrake{}                                  & 0.063 & \textbf{0.261} & \underline{5.56} & 57.07 \\
+ \midrule
+ \dddortho{} ($\gamma = 0$)                   & 0.055 & 0.488 & 17.79 & 39.91 \\
+ \dddortho{} ($\gamma = 0.5$)                 & 0.061 & 0.327 & \textbf{4.89} & 46.54 \\
+ \dddortho{} ($\gamma = 1$)                   & 0.056 & 0.358 & 6.92 & 37.89 \\
+ \dddortho{} ($\gamma = 2$)                   & \underline{0.055} & 0.394 & 8.78 & \textbf{24.58} \\
+-\dddortho{} ($\gamma = 3$)                   & \textbf{0.054} & 0.407 & 8.14 & 26.79 \\
++\dddortho{} ($\gamma = 3$)                   & \textbf{0.054} & 0.407 & 8.14 & \underline{26.79} \\
+ \bottomrule
+ \end{tabular}
+ \end{table}
+ 
+-The spectrum reveals a systematic pattern that aligns with the diagnostic findings. \textbf{TUM} ($\bar{e}{\approx}0.40$, moderate drift) favors the directional end: $\gamma \geq 2$ achieves ATE $\leq 0.055$, with $\gamma{=}3$ reaching the overall best (0.054). \textbf{ScanNet} ($\bar{e}{\approx}0.60$, high drift) favors the isotropic end: \dddconst{} (0.283) and \dddbrake{} (0.261) outperform every directional variant. \textbf{KITTI} sequences split: seq04 favors mild decomposition ($\gamma{=}0.5$), while seq03 favors strong drift adaptation ($\gamma{=}2$, with \dddbrake{} a close second). No single $\gamma$ dominates across all datasets.
++The spectrum reveals a systematic pattern that aligns with the diagnostic findings. \textbf{TUM} ($\bar{e}{\approx}0.40$, moderate drift) favors the directional end: $\gamma \geq 2$ achieves ATE $\leq 0.055$, with $\gamma{=}3$ reaching the overall best (0.054). \textbf{ScanNet} ($\bar{e}{\approx}0.60$, high drift) favors the isotropic end: \dddconst{} (0.283) and \dddbrake{} (0.261) outperform every directional variant. \textbf{KITTI} sequences split: seq04 favors mild decomposition ($\gamma{=}0.5$), while seq03 favors strong drift adaptation ($\gamma{=}2$). No single $\gamma$ dominates across all datasets.
+ 
+-The cross-dataset ranking systematically reverses (\cref{tab:ranking}): \dddbrake{} ranks 1st on ScanNet but 4th on KITTI, while \dddortho{} ($\gamma{=}0$) ranks 1st on TUM and KITTI but 4th on ScanNet. We read this as supporting evidence for the central empirical claim that drift energy---a scene-intrinsic property---governs which operating point along the spectrum is appropriate.
++The cross-dataset ranking systematically reverses (\cref{tab:ranking}): \dddbrake{} ranks 1st on ScanNet and 2nd on TUM, while \dddortho{} ($\gamma{=}0$) ranks 1st on TUM but 4th on ScanNet. KITTI does not contribute to this reversal, since the differences among the three operating points there are not significant. We read this as supporting evidence for the central empirical claim that drift energy---a scene-intrinsic property---governs which operating point along the spectrum is appropriate.
+ 
+ \begin{table}[h]
+ \centering
+ \small
+-\caption{\textbf{Cross-dataset method ranking.} No fixed configuration is universally optimal; rankings reverse systematically with drift energy. KITTI ranks aggregate ATE over the 11 KITTI Odometry sequences (\cref{tab:relpose_main}); the per-sequence picture is more nuanced (\cref{tab:spectrum}).}
++\caption{\textbf{Cross-dataset method ranking.} No fixed configuration is universally optimal; rankings reverse systematically with drift energy. KITTI orders mean ATE over the 11 KITTI Odometry sequences (\cref{tab:relpose_main}), and those differences are not significant. The per-sequence picture is more nuanced (\cref{tab:spectrum}).}
+ \label{tab:ranking}
+ \vspace{2pt}
+ \begin{tabular}{lccc l}
+ \toprule
+ \textbf{Method} & \textbf{TUM} & \textbf{ScanNet} & \textbf{KITTI} & \textbf{Drift regime} \\
+ \midrule
+-\dddconst{}                      & 3rd & 2nd & 2nd & Direction-agnostic \\
+-\dddbrake{}                      & 2nd & \textbf{1st} & 4th & High-drift optimal \\
++\dddconst{}                      & 3rd & 2nd & 3rd & Direction-agnostic \\
++\dddbrake{}                      & 2nd & \textbf{1st} & 2nd & High-drift optimal \\
+ \dddortho{} ($\gamma{=}0$)       & \textbf{1st} & 4th & \textbf{1st} & Low-drift optimal \\
+ \dddortho{} ($\gamma\!\in\![0.5,2]$) & 1st & 3rd & per-seq best & Mild adaptation \\
+ \bottomrule
+@@ -256,7 +256,7 @@ g_t^{\text{brake}}(c) = \tfrac{1}{2} \;-\; \tfrac{\tau}{4}\,c \;+\; \mathcal{O}(
+ i.e.\ an \emph{odd} function around $c{=}0$: it dampens only when consecutive deltas are aligned ($c{>}0$) and \emph{passes through or amplifies} when they disagree ($c{<}0$). The two gates therefore agree only on the constant term ($\alpha_\perp{\approx}\tfrac{1}{2}$) and have qualitatively different behaviour for anti-aligned deltas; brake is not, in any strict Taylor sense, a first-order approximation of DDD3R.
+ 
+ \paragraph{Why brake is still a useful surrogate in practice.}
+-Empirically, $c$ is far from zero throughout long sequences: $\bar{c}\in[0.62, 0.77]$ on TUM and ScanNet (\cref{tab:drift}). In this practical regime $c{>}0$, both gates are monotone-decreasing in $c$ and pull the update toward a smaller magnitude. Setting $\tau{=}2$ matches their values at the high-drift end ($g^{\text{DDD3R}}(1){=}\alpha_\parallel{=}0.05$ vs.\ $g^{\text{brake}}(1){=}\mathrm{sigmoid}(-2){\approx}0.12$) and at $c{=}0$ ($\alpha_\perp{=}0.5$ vs.\ $\mathrm{sigmoid}(0){=}0.5$) to within a factor of $\sim$2. So in the actual operating regime brake delivers \emph{the same qualitative drift--novelty trade-off} as DDD3R, with three caveats below.
++Empirically, $c$ is far from zero throughout long sequences: $\bar{c}\in[0.62, 0.77]$ on TUM and ScanNet (\cref{tab:drift}). In this practical regime $c{>}0$, both gates are monotone-decreasing in $c$ and pull the update toward a smaller magnitude. Under the single-frame setup above, $\tau{=}1$ makes the two gates nearly coincide over this range, with $g^{\text{DDD3R}}\in[0.32, 0.39]$ from \cref{eq:effgate} and $g^{\text{brake}}\in[0.32, 0.35]$, a gap of at most 13\%. They also share the value $0.5$ at $c{=}0$ and separate only toward pure drift, where $g^{\text{DDD3R}}(1){=}\alpha_\parallel{=}0.05$ while $g^{\text{brake}}(1){=}\mathrm{sigmoid}(-1){\approx}0.27$. So in the actual operating regime brake applies nearly the same update magnitude as DDD3R, with three caveats below.
+ 
+ \paragraph{Three losses of the relaxation.}
+ \textbf{(L1) Asymmetric handling of anti-aligned deltas.} For $c{<}0$ (rare but possible during scene transitions), DDD3R still suppresses the drift component to $\alpha_\parallel\|\boldsymbol{\delta}_t\||c|$, while brake \emph{boosts} the update via $\mathrm{sigmoid}(+\tau|c|){>}\tfrac{1}{2}$. \textbf{(L2) No directional separation.} Brake produces a single per-token scalar that multiplies the entire $\boldsymbol{\delta}_t$, so it cannot suppress drift while preserving novelty within the same delta; DDD3R applies $\alpha_\parallel{<}\alpha_\perp$ separately along $\boldsymbol{\delta}_t^{\parallel}$ and $\boldsymbol{\delta}_t^{\perp}$. \textbf{(L3) Single-frame history.} Brake compares only consecutive deltas, while DDD3R's drift direction is an EMA over the full history; in scenes where underlying drift varies slowly but per-frame deltas are noisy, EMA cancels the noise and brake does not.
+diff --git a/sec/experiments.tex b/sec/experiments.tex
+index d8019f5..4a17e87 100644
+--- a/sec/experiments.tex
++++ b/sec/experiments.tex
+@@ -44,13 +44,13 @@ We evaluate three operating points of the DDD3R framework, namely \dddconst{} ($
+ \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+ \textbf{Method} & 90f & 1000f & 90f & 1000f & ${\sim}$50f & full \\
+ \midrule
+-CUT3R~\cite{cut3r}  & 0.033 & 0.166 & 0.095 & 0.817 & \textbf{0.209} & 192.84 \\
+-TTT3R~\cite{ttt3r}  & 0.019 & 0.103 & 0.064 & 0.406 & \textbf{0.209} & 161.14 \\
+-TTSA3R~\cite{ttsa3r} & 0.016 & 0.091 & \textbf{0.058} & 0.378 & \textbf{0.209} & --- \\
++CUT3R~\cite{cut3r}  & 0.033 & 0.166 & 0.095 & 0.817 & \textbf{0.209} & 203.94 \\
++TTT3R~\cite{ttt3r}  & 0.019 & 0.103 & 0.064 & 0.406 & \textbf{0.209} & 180.23 \\
++TTSA3R~\cite{ttsa3r} & 0.016 & 0.091 & \textbf{0.058} & 0.378 & \textbf{0.209} & 174.30 \\
+ \midrule
+-\dddconst           & 0.016 & 0.079 & \underline{0.064} & \underline{0.283} & 0.220 & 156.61 \\
+-\dddbrake           & \underline{0.015} & \underline{0.063} & 0.072 & \textbf{0.261} & 0.237 & 166.89 \\
+-\textbf{\dddortho}  & \textbf{0.015} & \textbf{0.055} & 0.087 & 0.488 & 0.236 & \textbf{154.10} \\
++\dddconst           & 0.016 & 0.079 & \underline{0.064} & \underline{0.283} & 0.220 & 178.24 \\
++\dddbrake           & \underline{0.015} & \underline{0.063} & 0.072 & \textbf{0.261} & 0.237 & 172.21 \\
++\textbf{\dddortho}  & \textbf{0.015} & \textbf{0.055} & 0.087 & 0.488 & 0.236 & \textbf{160.98} \\
+ \bottomrule
+ \end{tabular}
+ \end{minipage}\hfill
+@@ -78,7 +78,7 @@ TTSA3R & 0.106 & 0.072 & 0.425 \\
+ \end{minipage}
+ \end{table}
+ 
+-\paragraph{3D reconstruction and cross-dataset trade-off.} On 7Scenes, \dddbrake{} reaches Acc $0.021$ ($-77\%$ vs.\ CUT3R) and \dddortho{} Acc $0.026$, Comp $0.022$ (full table in \cref{app:overhead}). Across all four tasks no single regulated configuration dominates everywhere. \dddbrake{} leads on ScanNet (relpose) and Bonn (vdepth) and \dddortho{} on TUM and KITTI, a ranking reversal that \cref{app:spectrum} traces to a continuous $\gamma$ sweep (\cref{app:gamma}) where drift energy, a scene-intrinsic property, governs the appropriate operating point.
++\paragraph{3D reconstruction and cross-dataset trade-off.} On 7Scenes, \dddbrake{} reaches Acc $0.021$ ($-77\%$ vs.\ CUT3R) and \dddortho{} Acc $0.026$, Comp $0.022$ (full table in \cref{app:overhead}). Across all four tasks no single regulated configuration dominates everywhere. \dddbrake{} leads on ScanNet (relpose) and Bonn (vdepth) and \dddortho{} on TUM, a ranking reversal that \cref{app:spectrum} traces to a continuous $\gamma$ sweep (\cref{app:gamma}) where drift energy, a scene-intrinsic property, governs the appropriate operating point.
+ 
+ 
+ \subsection{Ablation Studies and Practical Recommendations}
+@@ -90,7 +90,7 @@ On TUM, $\alpha_\parallel \in [0.05, 0.20]$ varies ATE by ${<}2\%$ and $\beta_{\
+ \paragraph{Practical recommendations.} The experiments yield a clear deployment guideline.
+ \textbf{(i) \dddbrake{} is the most robust default}, ranking 1st on ScanNet 1000f (relpose), Bonn and Sintel (vdepth), and 7Scenes (recon) without any directional decomposition.
+ \textbf{(ii) \dddortho{} gives an additional 10--15\% on low-drift indoor scenes} (TUM and similar slow-scanning settings), where drift mostly reflects harmful error accumulation.
+-\textbf{(iii) Default \dddortho{} ($\gamma{=}0$) is the best aggregate for outdoor driving.} KITTI Odometry is also our strongest test of domain shift, since the checkpoint is trained on short indoor-heavy pairs while these are outdoor driving sequences of 271--4661 frames. \dddortho{} reduces ATE by $20.1\%$ over CUT3R across the 11 sequences, and on the official segment-based metrics it reduces translation error by $7.6\%$ and rotation error by $58.6\%$, and per-sequence optima drift toward mild $\gamma\!\in\![0.5,2]$ (\cref{tab:spectrum}). Switching between operating points changes only scalar hyperparameters.
++\textbf{(iii) On outdoor driving, ATE does not separate the operating points.} Across the 11 KITTI Odometry sequences (271--4661 frames), \dddortho{} has the lowest ATE, $21.1\%$ below CUT3R, but its lead over TTT3R, \dddconst{} and \dddbrake{} is not significant ($p{\geq}0.17$, Wilcoxon over sequences). On the KITTI segment-based metrics, computed after Sim(3) alignment and averaged over sequences, it reduces translation error by $24.6\%$ and rotation error by $46.6\%$ over CUT3R, and its rotation error is significantly lower than that of CUT3R, TTT3R, \dddconst{} and \dddbrake{} ($p{\leq}0.019$). This gain comes at a frame-level cost, since its translational RPE is $2.8$ times that of CUT3R. Absolute errors stay large for every method, with translation error above $50\%$, so these are relative gains in a setting that none of them handles well. Switching between operating points changes only scalar hyperparameters.
+ 
+ \paragraph{Beyond this backbone.} Two further studies are in the appendix. On \textbf{ARKitScenes} (\cref{app:arkit}), 18 real-world handheld scenes, drift energy measured before any pose evaluation correctly predicted which operating point would fail. On \textbf{Point3R}~\cite{point3r}, a different backbone with an explicit pointer memory (\cref{app:crossbackbone}), the magnitude fix gives $5.4\%$ on ScanNet at the same $\alpha{=}0.5$, while its low drift energy correctly indicates that directional decomposition should not be used there.
+ 
+diff --git a/sec/v2/experiments.tex b/sec/v2/experiments.tex
+index f00e319..28cd0fd 100644
+--- a/sec/v2/experiments.tex
++++ b/sec/v2/experiments.tex
+@@ -7,7 +7,7 @@
+ % The shared appendix still points at sec:method:spectrum, which the advisor
+ % revision moved out of the method section, so the label is kept here.
+ \label{sec:method:spectrum}
+-All methods use the same pretrained checkpoint and differ only in how the state is updated, so no model is retrained. CUT3R~\cite{cut3r} applies the full update and TTT3R~\cite{ttt3r} scales it with its confidence gate $\beta_t$, and we report TTSA3R~\cite{ttsa3r} where its results are available. We compare three variants of DDD3R that correspond to the two problems measured in \cref{sec:analysis}. \dddconst{} sets $\alpha_\perp{=}\alpha_\parallel{=}0.5$ and so damps all directions equally, which isolates the effect of smaller updates. \dddbrake{} replaces the two coefficients with a single per-token factor $g_t = \operatorname{sigmoid}(-\tau\cos(\boldsymbol{\delta}_t,\boldsymbol{\delta}_{t-1}))$ with $\tau{=}2$, which shrinks an update when it repeats the previous one but cannot separate directions within it (\cref{app:brake_ortho}). \dddortho{} is the full rule of \cref{eq:ddd3r} with $\alpha_\perp{=}0.5$ and $\alpha_\parallel{=}0.05$, our default. A variant that adapts $\alpha_\parallel$ to each token's drift energy is reported in \cref{app:gamma,app:spectrum}.
++All methods use the same pretrained checkpoint and differ only in how the state is updated, so no model is retrained. CUT3R~\cite{cut3r} applies the full update and TTT3R~\cite{ttt3r} scales it with its confidence gate $\beta_t$, and we report TTSA3R~\cite{ttsa3r} where its results are available. We compare three variants of DDD3R that correspond to the two problems measured in \cref{sec:analysis}. \dddconst{} sets $\alpha_\perp{=}\alpha_\parallel{=}0.5$ and so damps all directions equally, which isolates the effect of smaller updates. \dddbrake{} replaces the two coefficients with a single per-token factor $g_t = \operatorname{sigmoid}(-\tau\cos(\boldsymbol{\delta}_t,\boldsymbol{\delta}_{t-1}))$ with $\tau{=}1$, which shrinks an update when it repeats the previous one but cannot separate directions within it (\cref{app:brake_ortho}). \dddortho{} is the full rule of \cref{eq:ddd3r} with $\alpha_\perp{=}0.5$ and $\alpha_\parallel{=}0.05$, our default. A variant that adapts $\alpha_\parallel$ to each token's drift energy is reported in \cref{app:gamma,app:spectrum}.
+ 
+ \paragraph{Benchmarks.}
+ We evaluate relative pose on TUM~\cite{tum}, ScanNet~\cite{scannet}, Sintel~\cite{sintel} and KITTI~\cite{kitti}, video depth on KITTI, Bonn~\cite{bonn} and Sintel, and 3D reconstruction on 7-Scenes~\cite{7scenes}. We report ATE RMSE after Sim(3) alignment for pose, scale-and-shift-invariant absolute relative error for depth, and accuracy, completeness and normal consistency for reconstruction, with per-dataset protocols in \cref{app:setup}.
+@@ -52,13 +52,13 @@ We evaluate relative pose on TUM~\cite{tum}, ScanNet~\cite{scannet}, Sintel~\cit
+ \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+ \textbf{Method} & 90f & 1000f & 90f & 1000f & ${\sim}$50f & full \\
+ \midrule
+-CUT3R~\cite{cut3r}  & 0.033 & 0.166 & 0.095 & 0.817 & \textbf{0.209} & 192.84 \\
+-TTT3R~\cite{ttt3r}  & 0.019 & 0.103 & 0.064 & 0.406 & \textbf{0.209} & 161.14 \\
+-TTSA3R~\cite{ttsa3r} & 0.016 & 0.091 & \textbf{0.058} & 0.378 & \textbf{0.209} & --- \\
++CUT3R~\cite{cut3r}  & 0.033 & 0.166 & 0.095 & 0.817 & \textbf{0.209} & 203.94 \\
++TTT3R~\cite{ttt3r}  & 0.019 & 0.103 & 0.064 & 0.406 & \textbf{0.209} & 180.23 \\
++TTSA3R~\cite{ttsa3r} & 0.016 & 0.091 & \textbf{0.058} & 0.378 & \textbf{0.209} & 174.30 \\
+ \midrule
+-\dddconst           & 0.016 & 0.079 & \underline{0.064} & \underline{0.283} & 0.220 & 156.61 \\
+-\dddbrake           & \underline{0.015} & \underline{0.063} & 0.072 & \textbf{0.261} & 0.237 & 166.89 \\
+-\textbf{\dddortho}  & \textbf{0.015} & \textbf{0.055} & 0.087 & 0.488 & 0.236 & \textbf{154.10} \\
++\dddconst           & 0.016 & 0.079 & \underline{0.064} & \underline{0.283} & 0.220 & 178.24 \\
++\dddbrake           & \underline{0.015} & \underline{0.063} & 0.072 & \textbf{0.261} & 0.237 & 172.21 \\
++\textbf{\dddortho}  & \textbf{0.015} & \textbf{0.055} & 0.087 & 0.488 & 0.236 & \textbf{160.98} \\
+ \bottomrule
+ \end{tabular}
+ \end{minipage}\hfill
+@@ -86,7 +86,7 @@ TTSA3R & 0.106 & 0.072 & 0.425 \\
+ \end{minipage}
+ \end{table}
+ 
+-\paragraph{3D reconstruction and cross-dataset trade-off.} On 7Scenes, \dddbrake{} reaches Acc $0.021$ ($-77\%$ vs.\ CUT3R) and \dddortho{} Acc $0.026$, Comp $0.022$ (full table in \cref{app:overhead}). Across all four tasks no single regulated configuration dominates everywhere. \dddbrake{} leads on ScanNet (relpose) and Bonn (vdepth) and \dddortho{} on TUM and KITTI, a ranking reversal that \cref{app:spectrum} traces to a continuous $\gamma$ sweep (\cref{app:gamma}) where drift energy, a scene-intrinsic property, governs the appropriate operating point.
++\paragraph{3D reconstruction and cross-dataset trade-off.} On 7Scenes, \dddbrake{} reaches Acc $0.021$ ($-77\%$ vs.\ CUT3R) and \dddortho{} Acc $0.026$, Comp $0.022$ (full table in \cref{app:overhead}). Across all four tasks no single regulated configuration dominates everywhere. \dddbrake{} leads on ScanNet (relpose) and Bonn (vdepth) and \dddortho{} on TUM, a ranking reversal that \cref{app:spectrum} traces to a continuous $\gamma$ sweep (\cref{app:gamma}) where drift energy, a scene-intrinsic property, governs the appropriate operating point.
+ 
+ 
+ \subsection{Ablation Studies and Practical Recommendations}
+@@ -98,7 +98,7 @@ On TUM, $\alpha_\parallel \in [0.05, 0.20]$ varies ATE by ${<}2\%$ and $\beta_{\
+ \paragraph{Practical recommendations.} The experiments yield a clear deployment guideline.
+ \textbf{(i) \dddbrake{} is the most robust default}, ranking 1st on ScanNet 1000f (relpose), Bonn and Sintel (vdepth), and 7Scenes (recon) without any directional decomposition.
+ \textbf{(ii) \dddortho{} gives an additional 10--15\% on low-drift indoor scenes} (TUM and similar slow-scanning settings), where drift mostly reflects harmful error accumulation.
+-\textbf{(iii) Default \dddortho{} ($\gamma{=}0$) is the best aggregate for outdoor driving.} KITTI Odometry is also our strongest test of domain shift, since the checkpoint is trained on short indoor-heavy pairs while these are outdoor driving sequences of 271--4661 frames. \dddortho{} reduces ATE by $20.1\%$ over CUT3R across the 11 sequences, and on the official segment-based metrics it reduces translation error by $7.6\%$ and rotation error by $58.6\%$, and per-sequence optima drift toward mild $\gamma\!\in\![0.5,2]$ (\cref{tab:spectrum}). Switching between operating points changes only scalar hyperparameters.
++\textbf{(iii) On outdoor driving, ATE does not separate the operating points.} Across the 11 KITTI Odometry sequences (271--4661 frames), \dddortho{} has the lowest ATE, $21.1\%$ below CUT3R, but its lead over TTT3R, \dddconst{} and \dddbrake{} is not significant ($p{\geq}0.17$, Wilcoxon over sequences). On the KITTI segment-based metrics, computed after Sim(3) alignment and averaged over sequences, it reduces translation error by $24.6\%$ and rotation error by $46.6\%$ over CUT3R, and its rotation error is significantly lower than that of CUT3R, TTT3R, \dddconst{} and \dddbrake{} ($p{\leq}0.019$). This gain comes at a frame-level cost, since its translational RPE is $2.8$ times that of CUT3R. Absolute errors stay large for every method, with translation error above $50\%$, so these are relative gains in a setting that none of them handles well. Switching between operating points changes only scalar hyperparameters.
+ 
+ \paragraph{Beyond this backbone.} Two further studies are in the appendix. On \textbf{ARKitScenes} (\cref{app:arkit}), 18 real-world handheld scenes, drift energy measured before any pose evaluation correctly predicted which operating point would fail. On \textbf{Point3R}~\cite{point3r}, a different backbone with an explicit pointer memory (\cref{app:crossbackbone}), the magnitude fix gives $5.4\%$ on ScanNet at the same $\alpha{=}0.5$, while its low drift energy correctly indicates that directional decomposition should not be used there.
+ 

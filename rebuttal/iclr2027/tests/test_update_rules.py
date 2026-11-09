@@ -151,6 +151,58 @@ class GainLog(unittest.TestCase):
         self.assertAlmostEqual(log[0], gain.mean().item(), places=9)
 
 
+class FixedScale(unittest.TestCase):
+    """E7: the direction of the decomposed update, at the norm of constant dampening."""
+
+    SCALE = 0.2
+
+    def outputs(self):
+        state, candidate, tracker = prepared_step(make_config())
+        ortho = Model._delta_ortho_update(state, candidate, copy.deepcopy(tracker), make_config())
+        scaled = Model._delta_ortho_update(
+            state, candidate, copy.deepcopy(tracker), make_config(ortho_scale=self.SCALE)
+        )
+        return state, candidate, ortho, scaled
+
+    def test_per_token_norm_is_the_scale_times_the_raw_norm(self):
+        state, candidate, _, scaled = self.outputs()
+        self.assertTrue(
+            torch.allclose((scaled - state).norm(dim=-1), self.SCALE * (candidate - state).norm(dim=-1))
+        )
+
+    def test_direction_is_that_of_the_decomposed_update(self):
+        state, _, ortho, scaled = self.outputs()
+        cosine = torch.nn.functional.cosine_similarity(scaled - state, ortho - state, dim=-1)
+        self.assertTrue(torch.allclose(cosine, torch.ones_like(cosine)))
+
+    def test_equal_alphas_reduce_to_constant_dampening(self):
+        config = make_config(alpha_perp=0.5, alpha_parallel=0.5, ortho_scale=self.SCALE)
+        state, candidate, tracker = prepared_step(config)
+        result = Model._delta_ortho_update(state, candidate, tracker, config)
+        self.assertTrue(torch.allclose(result, state + self.SCALE * (candidate - state)))
+
+    def test_first_frame_moves_by_the_scale_along_the_raw_delta(self):
+        # The default rule starts with alpha_perp * delta, which would break the norm match.
+        torch.manual_seed(0)
+        state = torch.randn(1, 6, 8, dtype=torch.float64)
+        candidate = state + torch.randn_like(state)
+        result = Model._delta_ortho_update(state, candidate, {}, make_config(ortho_scale=self.SCALE))
+        self.assertTrue(torch.allclose(result, state + self.SCALE * (candidate - state)))
+
+    def test_the_tracker_advances_as_in_the_default_rule(self):
+        state, candidate, tracker = prepared_step(make_config())
+        other = copy.deepcopy(tracker)
+        Model._delta_ortho_update(state, candidate, tracker, make_config())
+        Model._delta_ortho_update(state, candidate, other, make_config(ortho_scale=self.SCALE))
+        self.assertTrue(torch.equal(tracker["drift_dir"], other["drift_dir"]))
+
+    def test_gain_log_records_the_scale(self):
+        log = []
+        state, candidate, tracker = prepared_step(make_config())
+        Model._delta_ortho_update(state, candidate, tracker, make_config(ortho_scale=self.SCALE, gain_log=log))
+        self.assertAlmostEqual(log[0], self.SCALE, places=9)
+
+
 class NormReplay(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(1)

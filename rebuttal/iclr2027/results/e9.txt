@@ -1,0 +1,52 @@
+== I1 == PASS (results/e9_instrument.txt)
+
+== I2, Sintel arms ==
+ortho_plain  finite ATE on 14/14 sequences ok
+brake_t1     finite ATE on 14/14 sequences ok
+ttt3r_plain  finite ATE on 14/14 sequences ok
+ortho_plain  differs from ttt3r_plain on 14/14 sequences ok
+brake_t1     differs from ttt3r_plain on 14/14 sequences ok
+ttt3r_plain mean ATE 0.20783, earlier run 0.20879 over 14 sequences (-0.46%), reported only
+I2 PASS
+
+== Sequence counts, Sintel ==
+all 14 sequences have one pose per image in every arm
+
+== Prefix drift energy and routing ==
+KITTI        n=11 mean e=0.5011 range [0.4629, 0.5456] to ortho 5/11 within 0.005 of 0.5: 2
+   00=0.510  01=0.546  02=0.465*  03=0.510  04=0.484*  05=0.510  06=0.463*  07=0.497*  08=0.486*  09=0.500  10=0.540
+Sintel       n=14 mean e=0.4974 range [0.3708, 0.6997] to ortho 10/14 within 0.005 of 0.5: 0
+   alley_2=0.478*  ambush_4=0.371*  ambush_5=0.474*  ambush_6=0.442*  cave_2=0.433*  cave_4=0.399*  market_2=0.673  market_5=0.376*  market_6=0.444*  shaman_3=0.700  sleeping_1=0.654  sleeping_2=0.626  temple_2=0.448*  temple_3=0.447*
+ARKitScenes  n=18 mean e=0.6198 range [0.5351, 0.6873] to ortho 0/18 within 0.005 of 0.5: 0
+   41069021=0.687  41069025=0.671  41069042=0.535  41069043=0.667  41069046=0.670  41069051=0.572  41125696=0.620  41125700=0.595  41125709=0.594  41125718=0.626  41125722=0.624  41125731=0.625  41125756=0.603  41125760=0.639  41125763=0.622  41142278=0.552  41142280=0.643  41142281=0.611
+(* routed to ortho)
+
+== Cells ==
+KITTI ATE (held-out), n=11, routed to ortho 5
+  ortho vs brake  160.9773 vs 172.2124 (-6.5%) wins=7/11 CI[-44.3765, +27.7810] p=0.2783 -> tied  informative=False
+  rule  vs ortho  162.7988 vs 160.9773 (+1.1%) wins=2/11 CI[-35.0448, +35.6638] p=0.6875 -> tied
+  rule  vs brake  162.7988 vs 172.2124 (-5.5%) wins=3/11 CI[-22.5382, +1.5692] p=0.3125 -> tied
+  rule  vs TTT3R  162.7988 vs 180.2253 (-9.7%) wins=7/11 CI[-40.6995, +8.3686] p=0.2402 -> tied
+KITTI r_rel (held-out), n=11, routed to ortho 5
+  ortho vs brake  11.8806 vs 17.6612 (-32.7%) wins=10/11 CI[-9.4479, -2.7264] p=0.0029 -> a  informative=True
+  rule  vs ortho  15.2376 vs 11.8806 (+28.3%) wins=0/11 CI[+1.2180, +6.0267] p=0.0312 -> b
+  rule  vs brake  15.2376 vs 17.6612 (-13.7%) wins=4/11 CI[-6.2801, +0.0467] p=0.1875 -> tied
+  rule  vs TTT3R  15.2376 vs 20.6033 (-26.0%) wins=8/11 CI[-10.0750, -1.3760] p=0.0186 -> a
+Sintel ATE (held-out), n=14, routed to ortho 10
+  ortho vs brake  0.2361 vs 0.2372 (-0.5%) wins=4/14 CI[-0.0227, +0.0145] p=0.2958 -> tied  informative=False
+  rule  vs ortho  0.2352 vs 0.2361 (-0.4%) wins=3/14 CI[-0.0024, +0.0006] p=0.6250 -> tied
+  rule  vs brake  0.2352 vs 0.2372 (-0.8%) wins=3/14 CI[-0.0235, +0.0137] p=0.4922 -> tied
+  rule  vs TTT3R  0.2352 vs 0.2078 (+13.2%) wins=5/14 CI[+0.0004, +0.0594] p=0.1726 -> tied
+ARKitScenes ATE (partly seen, not counted), n=18, routed to ortho 0
+  ortho vs brake  0.6093 vs 0.5391 (+13.0%) wins=6/18 CI[-0.0005, +0.1581] p=0.0778 -> tied  informative=False
+  rule  vs ortho  0.5391 vs 0.6093 (-11.5%) wins=12/18 CI[-0.1580, +0.0005] p=0.0778 -> tied
+  rule  vs brake  0.5391 vs 0.5391 (+0.0%) wins=0/18 CI[+0.0000, +0.0000] p=1.0000 -> tied
+  rule  vs TTT3R  0.5391 vs 0.5580 (-3.4%) wins=10/18 CI[-0.0589, +0.0245] p=0.2860 -> tied
+
+== Ruling ==
+P9a KITTI r_rel: better branch ortho, rule worse
+P9b KITTI ATE: rule not worse than brake
+P9b Sintel ATE: rule not worse than brake
+informative held-out cells: 1
+P9a FAILS; P9b holds
+E9 FAILS

@@ -1,0 +1,20 @@
+== KITTI t_rel under the Amendment 1 rounding perturbation ==
+t_rel orthop vs ortho_check                    n=11 51.54273 vs 53.77000 (  -4.1%) wins= 9/11 CI[-6.7436,+2.9236] p=0.1016 -> tied
+t_rel const033p vs const033                    n=11 62.58000 vs 62.84818 (  -0.4%) wins= 5/11 CI[-2.2591,+1.5309] p=0.9658 -> tied
+
+== Ortho against const 0.10 beside the primary metrics ==
+KITTI ATE ortho vs const010                    n=11 160.97727 vs 178.78555 ( -10.0%) wins= 6/11 CI[-47.4838,+5.6542] p=0.7646 -> tied
+KITTI t_rel ortho vs const010                  n=11 53.77000 vs 52.52364 (  +2.4%) wins= 7/11 CI[-8.9700,+12.0718] p=0.8984 -> tied
+tum_s1_1000 RPE rot ortho vs const010          n= 8 0.65188 vs 1.75094 ( -62.8%) wins= 8/8 CI[-2.0347,-0.2570] p=0.0078 -> a
+scannet_s3_1000 RPE rot ortho vs const010      n=65 4.37922 vs 6.34776 ( -31.0%) wins=51/65 CI[-3.6563,-0.2860] p=0.0002 -> a
+arkit_s1_500 RPE rot ortho vs const010         n=18 6.43766 vs 14.46252 ( -55.5%) wins=17/18 CI[-10.0775,-5.7971] p=0.0003 -> a
+kitti_odo_full RPE rot ortho vs const010       n=11 5.94118 vs 6.83762 ( -13.1%) wins= 9/11 CI[-3.0443,+1.8200] p=0.1748 -> tied
+
+== Const 0.33 on ARKitScenes ==
+ARKit const033 vs ddd3r_brake                  n=18 0.54051 vs 0.53907 (  +0.3%) wins= 8/18 CI[-0.0119,+0.0153] p=0.7771 -> tied
+ARKit const033 vs ttt3r                        n=18 0.54051 vs 0.55804 (  -3.1%) wins=11/18 CI[-0.0614,+0.0316] p=0.3491 -> tied
+ARKit const033 vs ttsa3r                       n=18 0.54051 vs 0.55591 (  -2.8%) wins=11/18 CI[-0.0584,+0.0319] p=0.3491 -> tied
+ARKit const033 vs ddd3r_constant               n=18 0.54051 vs 0.52754 (  +2.5%) wins= 8/18 CI[-0.0131,+0.0439] p=0.4724 -> tied
+
+== Const 0.10 against const 0.33 on ScanNet ==
+ScanNet const010 vs const033                   n=65 0.38189 vs 0.26237 ( +45.6%) wins=15/65 CI[+0.0803,+0.1623] p=0.0000 -> b

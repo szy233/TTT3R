@@ -1,0 +1,25 @@
+Thank you. We ran exactly this on the same checkpoint. We logged ortho's applied update norm per token and frame, then replayed it along the raw delta, so pace, not trajectory, is identical, and "direction" below means the closed-loop effect of the decomposition.
+
+| ATE (RPE rot) | TTT3R | Same norm | Ortho | Brake |
+|---|---|---|---|---|
+| TUM 1000f | 0.1025 (0.43) | 0.0744 (0.45) | 0.0545 (0.65) | 0.0634 (0.89) |
+| ScanNet 1000f | 0.4058 (1.26) | 0.3186 (1.99) | 0.4883 (4.38) | 0.2615 (2.68) |
+| ARKitScenes 500f | 0.5580 (3.33) | 0.5446 (5.64) | 0.6093 (6.44) | 0.5391 (7.62) |
+
+| Ortho vs same norm | Result | Ortho wins | 95% CI | p |
+|---|---|---|---|---|
+| TUM | ortho better | 8/8 | [-0.0288, -0.0115] | 0.0078 |
+| ScanNet | same norm better | 11/65 | [+0.1154, +0.2375] | <0.001 |
+| ARKitScenes | tied | 4/18 | [-0.0049, +0.1480] | 0.053 |
+
+Tests are paired over sequences (Wilcoxon, bootstrap CI, no multiplicity correction). "Better" needs p<0.05 and a gap above 2.2%, and anything else is tied, which does not show equivalence. A 1e-7 change to one multiplier (one draw) moved means by up to 4.7% (TUM ATE), 6.9% (KITTI ATE) and 13.4% (KITTI segment rotation error), so smaller gaps are within numerical noise (revised PDF, A.12). Brake uses τ=1 (the paper prints τ=2, corrected in the revision).
+
+So yes, it changes part of the conclusion. Less pace alone beats TTT3R on TUM (8/8) and ScanNet (46/65), and ties it on ARKitScenes (p=0.59). At ortho's own norm schedule, direction helps on TUM, at higher mean RPE rotation, and hurts on ScanNet. Same norm also loses to brake on TUM and ScanNet (p=0.016, p<0.001), so the ScanNet loss is not direction alone. We had predicted same norm would win on ARKitScenes and it did not, so we drop the claim that drift energy sets the sign.
+
+On KITTI Odometry, at ortho's norm schedule, direction lowers Sim(3)-aligned segment rotation error (11.88 vs 16.78 deg/100m, 10/11, p=0.019; metric chosen after a scalar comparison), while ATE and segment translation tie and RPE translation worsens (0/11). At α∥=0.15, chosen post hoc, the TUM gain stays (0.0550 vs 0.0725, 7/8, p=0.016) and the ScanNet harm shrinks but remains (0.399 vs 0.300, p<0.001).
+
+At const α's per-token step length, direction lowers KITTI segment rotation error at α=0.10, 0.20 and 0.33 (7.68 vs 12.41, 7.88 vs 16.15, 9.13 vs 17.61, p≤0.014), with worse ATE at 0.10 and RPE translation at 0.10 and 0.20. It ties on TUM (p≥0.31) and raises ATE on ScanNet at 0.10 and 0.33 (wins ≤5/65) and on ARKitScenes at 0.10 and 0.20 (≤3/18, tied at 0.33). Measured over 100-frame gaps, rotation error with direction also drops on KITTI, but rises on ARKitScenes at all three α, on ScanNet at both and on TUM at 0.10 (the others tie). Const 0.10 alone is not worse than ortho in ATE on any of the four datasets, nor in KITTI segment rotation error, and better on ScanNet (0.382 vs 0.488), at higher RPE rotation except on KITTI (p<0.01).
+
+A closed-loop scalar using ortho's gain formula does not hold the norm fixed (its mean gain runs 23-27% above ortho's), so we use the replay (revised PDF, A.14).
+
+What stands: training-free scalar dampening lowers ATE against TTT3R at 1000 frames (brake, set on these benchmarks; 8/8 on TUM, 54/65 on ScanNet, both p<0.01), at higher mean RPE rotation. On ARKitScenes at 500 frames brake ties TTT3R (p=0.29). We keep decomposition as a separately tested control axis, not as a general improvement. The revised PDF adds this ablation (§5.2, Table 5, A.14) and the corrections in blue, with a change list in a separate comment.

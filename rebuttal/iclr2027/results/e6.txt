@@ -1,0 +1,143 @@
+PREREG_E6.md: registered 7dac01fe7b17edbf624d400c241911804c0885499f924910c1e67b4bdc8626bf on 2026-11-07 13:38:20 +0800
+PREREG_E6.md: file now   7dac01fe7b17edbf624d400c241911804c0885499f924910c1e67b4bdc8626bf
+PREREG_E6D.md: registered d768f01c0d98a8b562890343893fa7f9add9a9711a046ba61a8ccfeeb54d006b on 2026-11-07 17:09:12 +0800
+PREREG_E6D.md: file now   d768f01c0d98a8b562890343893fa7f9add9a9711a046ba61a8ccfeeb54d006b
+
+== E6a, KITTI same norm ==
+check: ortho_check vs ortho_plain n=11 largest gap=0.0000% (pass)
+Primary, r_rel:
+r_rel ortho vs normreplay                      n=11 11.88064 vs 16.77973 ( -29.2%) wins=10/11 CI[-8.3607,-1.7473] p=0.0186 -> a
+Beside it, no prediction:
+t_rel ortho vs normreplay                      n=11 53.77000 vs 60.12818 ( -10.6%) wins= 7/11 CI[-13.7755,+0.5373] p=0.1748 -> tied
+ATE RMSE ortho vs normreplay                   n=11 160.97727 vs 180.50786 ( -10.8%) wins= 6/11 CI[-51.7497,+14.3061] p=0.3203 -> tied
+RPE trans ortho vs normreplay                  n=11 8.04161 vs 4.64861 ( +73.0%) wins= 0/11 CI[+2.0667,+4.7907] p=0.0010 -> b
+RPE rot ortho vs normreplay                    n=11 5.94118 vs 4.86497 ( +22.1%) wins= 5/11 CI[-1.9655,+4.4538] p=0.5195 -> tied
+r_rel per sequence, and with that sequence left out, not registered:
+  00  14.903 vs  20.780  without it                                     n=10 11.57840 vs 16.37970 ( -29.3%) wins= 9/10 CI[-8.6557,-1.2976] p=0.0371 -> a
+  01   3.033 vs   6.506  without it                                     n=10 12.76540 vs 17.80710 ( -28.3%) wins= 9/10 CI[-8.8246,-1.5047] p=0.0273 -> a
+  02  15.039 vs  15.231  without it                                     n=10 11.56480 vs 16.93460 ( -31.7%) wins= 9/10 CI[-9.0692,-1.9443] p=0.0273 -> a
+  03  17.185 vs  21.568  without it                                     n=10 11.35020 vs 16.30090 ( -30.4%) wins= 9/10 CI[-8.7576,-1.4259] p=0.0273 -> a
+  04   1.838 vs   4.187  without it                                     n=10 12.88490 vs 18.03900 ( -28.6%) wins= 9/10 CI[-8.9276,-1.6293] p=0.0273 -> a
+  05   8.168 vs  12.157  without it                                     n=10 12.25190 vs 17.24200 ( -28.9%) wins= 9/10 CI[-8.8025,-1.4522] p=0.0273 -> a
+  06   8.696 vs  14.177  without it                                     n=10 12.19910 vs 17.04000 ( -28.4%) wins= 9/10 CI[-8.6803,-1.3343] p=0.0371 -> a
+  07  14.150 vs  32.120  without it                                     n=10 11.65370 vs 15.24570 ( -23.6%) wins= 9/10 CI[-6.0295,-0.9653] p=0.0371 -> a
+  08  24.922 vs  19.460  without it                                     n=10 10.57650 vs 16.51170 ( -35.9%) wins=10/10 CI[-9.2502,-3.3333] p=0.0020 -> a
+  09   8.778 vs  20.134  without it                                     n=10 12.19090 vs 16.44430 ( -25.9%) wins= 9/10 CI[-7.9759,-1.0509] p=0.0371 -> a
+  10  13.975 vs  18.257  without it                                     n=10 11.67120 vs 16.63200 ( -29.8%) wins= 9/10 CI[-8.7681,-1.4795] p=0.0273 -> a
+Same norm against the scalars, not registered:
+r_rel normreplay vs brake_t1                   n=11 16.77973 vs 17.66118 (  -5.0%) wins= 7/11 CI[-1.8962,+0.1555] p=0.1748 -> tied
+ATE RMSE normreplay vs brake_t1                n=11 180.50786 vs 172.21237 (  +4.8%) wins= 3/11 CI[-0.4002,+17.4948] p=0.1230 -> tied
+r_rel normreplay vs const05                    n=11 16.77973 vs 17.81691 (  -5.8%) wins= 8/11 CI[-2.2270,+0.1869] p=0.1475 -> tied
+ATE RMSE normreplay vs const05                 n=11 180.50786 vs 178.23516 (  +1.3%) wins= 3/11 CI[-6.8567,+8.8348] p=0.1748 -> tied
+r_rel normreplay vs ttt3r_plain                n=11 16.77973 vs 20.60327 ( -18.6%) wins=10/11 CI[-5.9580,-1.7839] p=0.0068 -> a
+ATE RMSE normreplay vs ttt3r_plain             n=11 180.50786 vs 180.22528 (  +0.2%) wins= 4/11 CI[-21.3232,+22.0420] p=0.8311 -> tied
+  ortho_check              ATE=160.97727 RPE trans=8.04161 RPE rot=5.94118
+  normreplay               ATE=180.50786 RPE trans=4.64861 RPE rot=4.86497
+  ttt3r_plain              ATE=180.22528 RPE trans=3.51596 RPE rot=4.16491
+  const05                  ATE=178.23516 RPE trans=4.01485 RPE rot=6.23770
+  brake_t1                 ATE=172.21237 RPE trans=5.24503 RPE rot=6.48364
+check: r_rel ortho_check vs ortho_plain largest gap=0.0000%
+
+== E6b, flat multipliers on TUM. a=ortho_check ==
+ortho vs const010                              n= 8 0.05454 vs 0.08618 ( -36.7%) wins= 6/8 CI[-0.0771,+0.0000] p=0.1953 -> tied
+ortho vs const015                              n= 8 0.05454 vs 0.08041 ( -32.2%) wins= 7/8 CI[-0.0709,+0.0011] p=0.1094 -> tied
+ortho vs const020                              n= 8 0.05454 vs 0.07305 ( -25.3%) wins= 6/8 CI[-0.0535,+0.0009] p=0.2500 -> tied
+ortho vs const025                              n= 8 0.05454 vs 0.06547 ( -16.7%) wins= 6/8 CI[-0.0288,-0.0006] p=0.1484 -> tied
+ortho vs const033                              n= 8 0.05454 vs 0.06483 ( -15.9%) wins= 8/8 CI[-0.0162,-0.0055] p=0.0078 -> a
+ortho vs const05 (logged, not new)             n= 8 0.05454 vs 0.07859 ( -30.6%) wins= 8/8 CI[-0.0379,-0.0116] p=0.0078 -> a
+ortho vs brake (logged, not new)               n= 8 0.05454 vs 0.06339 ( -14.0%) wins= 8/8 CI[-0.0132,-0.0049] p=0.0078 -> a
+Holm over the new tests: const010=0.4453 const015=0.4375 const020=0.4453 const025=0.4453 const033=0.0391
+Means:
+  const010                 ATE=0.08618 RPE trans=0.01949 RPE rot=1.75095
+  const015                 ATE=0.08041 RPE trans=0.01659 RPE rot=1.21834
+  const020                 ATE=0.07305 RPE trans=0.01758 RPE rot=1.09770
+  const025                 ATE=0.06547 RPE trans=0.01574 RPE rot=0.97536
+  const033                 ATE=0.06483 RPE trans=0.01138 RPE rot=0.68040
+  ortho_check              ATE=0.05454 RPE trans=0.01129 RPE rot=0.65189
+lowest flat mean: const033
+const033 fresh vs older-code run               n= 8 0.06483 vs 0.06591 (  -1.6%) wins= 3/8 CI[-0.0085,+0.0056] p=0.9453 -> tied
+Not registered:
+const033 vs brake (logged)                     n= 8 0.06483 vs 0.06339 (  +2.3%) wins= 2/8 CI[+0.0003,+0.0033] p=0.0391 -> b
+normreplay vs const033                         n= 8 0.07437 vs 0.06483 ( +14.7%) wins= 1/8 CI[+0.0045,+0.0146] p=0.0156 -> b
+brake_t1 fresh vs brake (logged)               n= 8 0.06339 vs 0.06339 (  +0.0%) wins= 0/8 CI[+0.0000,+0.0000] p=1.0000 -> tied
+const033 vs brake_t1, both fresh               n= 8 0.06483 vs 0.06339 (  +2.3%) wins= 2/8 CI[+0.0003,+0.0033] p=0.0391 -> b
+Without rgbd_dataset_freiburg3_sitting_halfsphere, not registered:
+ortho vs const010                              n= 7 0.05347 vs 0.06473 ( -17.4%) wins= 5/7 CI[-0.0282,+0.0043] p=0.3750 -> tied
+ortho vs const015                              n= 7 0.05347 vs 0.05797 (  -7.8%) wins= 6/7 CI[-0.0142,+0.0032] p=0.2188 -> tied
+ortho vs const020                              n= 7 0.05347 vs 0.05498 (  -2.7%) wins= 5/7 CI[-0.0047,+0.0019] p=0.4688 -> tied
+ortho vs const025                              n= 7 0.05347 vs 0.05581 (  -4.2%) wins= 5/7 CI[-0.0050,+0.0000] p=0.2969 -> tied
+ortho vs const033                              n= 7 0.05347 vs 0.06315 ( -15.3%) wins= 7/7 CI[-0.0162,-0.0047] p=0.0156 -> a
+
+== E6c, alpha_parallel=0.15 ==
+Instrument: ortho_a015 against the logged ddd3r_a15 folders, tolerance 2.2%
+  tum_s1_1000 0.05504 logged 0.05504 gap=0.000% pass
+  scannet_s3_1000 0.39886 logged 0.39886 gap=0.000% pass
+
+P6c1, TUM
+TUM ortho_a015 vs normreplay_a015              n= 8 0.05504 vs 0.07253 ( -24.1%) wins= 7/8 CI[-0.0293,-0.0071] p=0.0156 -> a
+  ortho_a015               ATE=0.05504 RPE trans=0.01080 RPE rot=0.56658
+  normreplay_a015          ATE=0.07253 RPE trans=0.00986 RPE rot=0.43204
+
+P6c2, ScanNet
+ScanNet ortho_a015 vs normreplay_a015          n=65 0.39886 vs 0.29964 ( +33.1%) wins=13/65 CI[+0.0679,+0.1364] p=0.0000 -> b
+harm at 0.05 minus harm at 0.15: mean=+0.0705 CI[+0.0312,+0.1163] -> smaller
+ScanNet normreplay_a015 vs brake (logged)      n=65 0.29964 vs 0.26147 ( +14.6%) wins=14/65 CI[+0.0229,+0.0553] p=0.0000 -> b
+  ortho_a015               ATE=0.39886 RPE trans=0.05510 RPE rot=2.55066
+  normreplay_a015          ATE=0.29964 RPE trans=0.05302 RPE rot=2.48382
+
+P6c3, ARKitScenes, out of sample
+ARKit ortho_a015 vs ortho_check                n=18 0.56678 vs 0.60927 (  -7.0%) wins=13/18 CI[-0.0690,-0.0168] p=0.0123 -> a
+ARKit ortho_a015 vs ttt3r                      n=18 0.56678 vs 0.55804 (  +1.6%) wins= 8/18 CI[-0.0614,+0.0912] p=0.9133 -> tied
+ARKit ortho_a015 vs ttsa3r                     n=18 0.56678 vs 0.55591 (  +2.0%) wins= 7/18 CI[-0.0573,+0.0915] p=0.8107 -> tied
+ARKit ortho_a015 vs brake, not registered      n=18 0.56678 vs 0.53907 (  +5.1%) wins= 7/18 CI[-0.0344,+0.1094] p=0.8107 -> tied
+ARKit ortho_a015 vs normreplay_a015, not registered n=18 0.56678 vs 0.54193 (  +4.6%) wins= 6/18 CI[-0.0345,+0.1023] p=0.5566 -> tied
+  ortho_a015               ATE=0.56678 RPE trans=0.07803 RPE rot=5.91796
+  normreplay_a015          ATE=0.54193 RPE trans=0.07419 RPE rot=5.86142
+
+P6c4, KITTI, out of sample
+r_rel ortho_a015 vs brake_t1                   n=11 15.43545 vs 17.66118 ( -12.6%) wins=10/11 CI[-3.6930,-0.8708] p=0.0098 -> a
+r_rel ortho_a015 vs ortho_plain, not registered n=11 15.43545 vs 11.88064 ( +29.9%) wins= 1/11 CI[+0.7736,+6.7505] p=0.0244 -> b
+ATE RMSE ortho_a015 vs brake_t1                n=11 172.78332 vs 172.21237 (  +0.3%) wins= 5/11 CI[-21.4652,+27.7166] p=0.7646 -> tied
+ATE RMSE ortho_a015 vs ortho_plain             n=11 172.78332 vs 160.97727 (  +7.3%) wins= 5/11 CI[-5.5621,+30.8959] p=0.4131 -> tied
+  ortho_a015               ATE=172.78332 RPE trans=6.02777 RPE rot=4.22524
+
+== E6d, flat multipliers on KITTI. a=ortho_check ==
+check: const033 seq03 60.68427 logged 60.68427 gap=0.000% pass
+check: const033 seq04 5.09581 logged 5.09581 gap=0.000% pass
+Primary, r_rel:
+r_rel ortho vs const010                        n=11 11.88064 vs 12.41155 (  -4.3%) wins= 5/11 CI[-5.0932,+4.0690] p=0.9658 -> tied
+r_rel ortho vs const015                        n=11 11.88064 vs 13.92218 ( -14.7%) wins= 7/11 CI[-6.0471,+1.5438] p=0.5195 -> tied
+r_rel ortho vs const020                        n=11 11.88064 vs 16.14791 ( -26.4%) wins= 8/11 CI[-7.7373,-1.0967] p=0.0537 -> tied
+r_rel ortho vs const025                        n=11 11.88064 vs 17.18045 ( -30.8%) wins=10/11 CI[-8.8556,-2.2673] p=0.0068 -> a
+r_rel ortho vs const033                        n=11 11.88064 vs 17.60509 ( -32.5%) wins=10/11 CI[-9.2405,-2.9521] p=0.0020 -> a
+r_rel ortho vs const05 (E5b, not new)          n=11 11.88064 vs 17.81691 ( -33.3%) wins=10/11 CI[-10.0945,-2.2982] p=0.0186 -> a
+Holm over the new tests: const010=1.0000 const015=1.0000 const020=0.1611 const025=0.0273 const033=0.0098
+lowest flat r_rel: const010
+Beside it, no prediction:
+t_rel ortho vs const010                        n=11 53.77000 vs 52.52364 (  +2.4%) wins= 7/11 CI[-8.9700,+12.0718] p=0.8984 -> tied
+ATE RMSE ortho vs const010                     n=11 160.97727 vs 178.78555 ( -10.0%) wins= 6/11 CI[-47.4838,+5.6542] p=0.7646 -> tied
+RPE trans ortho vs const010                    n=11 8.04161 vs 11.70165 ( -31.3%) wins=10/11 CI[-8.0394,+0.9668] p=0.0322 -> a
+RPE rot ortho vs const010                      n=11 5.94118 vs 6.83762 ( -13.1%) wins= 9/11 CI[-3.0443,+1.8200] p=0.1748 -> tied
+t_rel ortho vs const015                        n=11 53.77000 vs 52.80182 (  +1.8%) wins= 6/11 CI[-8.7591,+10.8873] p=1.0000 -> tied
+ATE RMSE ortho vs const015                     n=11 160.97727 vs 187.87543 ( -14.3%) wins= 7/11 CI[-57.0905,-1.2772] p=0.3203 -> tied
+RPE trans ortho vs const015                    n=11 8.04161 vs 5.86358 ( +37.1%) wins= 2/11 CI[-0.0008,+5.5164] p=0.1230 -> tied
+RPE rot ortho vs const015                      n=11 5.94118 vs 7.16160 ( -17.0%) wins= 8/11 CI[-4.6322,+2.3975] p=0.2402 -> tied
+t_rel ortho vs const020                        n=11 53.77000 vs 56.40182 (  -4.7%) wins= 7/11 CI[-11.9073,+6.0555] p=0.5771 -> tied
+ATE RMSE ortho vs const020                     n=11 160.97727 vs 189.08297 ( -14.9%) wins= 6/11 CI[-56.8779,-3.5791] p=0.2402 -> tied
+RPE trans ortho vs const020                    n=11 8.04161 vs 5.00546 ( +60.7%) wins= 1/11 CI[+1.4574,+5.1019] p=0.0020 -> b
+RPE rot ortho vs const020                      n=11 5.94118 vs 7.07523 ( -16.0%) wins= 7/11 CI[-4.9766,+2.7419] p=0.3203 -> tied
+t_rel ortho vs const025                        n=11 53.77000 vs 58.04091 (  -7.4%) wins= 7/11 CI[-13.6664,+4.4645] p=0.4648 -> tied
+ATE RMSE ortho vs const025                     n=11 160.97727 vs 189.74341 ( -15.2%) wins= 7/11 CI[-56.0096,-5.4813] p=0.1230 -> tied
+RPE trans ortho vs const025                    n=11 8.04161 vs 4.51989 ( +77.9%) wins= 0/11 CI[+1.8305,+5.8195] p=0.0010 -> b
+RPE rot ortho vs const025                      n=11 5.94118 vs 5.82743 (  +2.0%) wins= 7/11 CI[-3.4816,+3.8172] p=0.8984 -> tied
+t_rel ortho vs const033                        n=11 53.77000 vs 62.84818 ( -14.4%) wins= 8/11 CI[-17.2182,-2.0109] p=0.0537 -> tied
+ATE RMSE ortho vs const033                     n=11 160.97727 vs 175.86661 (  -8.5%) wins= 7/11 CI[-43.1539,+14.0804] p=0.2402 -> tied
+RPE trans ortho vs const033                    n=11 8.04161 vs 5.14318 ( +56.4%) wins= 0/11 CI[+1.7005,+4.2201] p=0.0010 -> b
+RPE rot ortho vs const033                      n=11 5.94118 vs 6.54265 (  -9.2%) wins= 6/11 CI[-3.8379,+3.0946] p=0.7002 -> tied
+Means:
+  const010                 ATE=178.78555 RPE trans=11.70165 RPE rot=6.83762
+  const015                 ATE=187.87543 RPE trans=5.86358 RPE rot=7.16160
+  const020                 ATE=189.08297 RPE trans=5.00546 RPE rot=7.07523
+  const025                 ATE=189.74341 RPE trans=4.51989 RPE rot=5.82743
+  const033                 ATE=175.86661 RPE trans=5.14318 RPE rot=6.54265
+  ortho_check              ATE=160.97727 RPE trans=8.04161 RPE rot=5.94118

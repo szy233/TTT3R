@@ -1,0 +1,43 @@
+Thank you, we agree. All runs share one checkpoint. Tests are paired by sequence (Wilcoxon, bootstrap 95% CI, no multiplicity correction). "Better" or "worse" needs p<0.05 and a gap above 2.2%, and anything else is "tied", which does not show equivalence. A 1e-7 change to one multiplier (one draw) moved means by up to 4.7% (TUM ATE), 6.9% (KITTI ATE) and 13.4% (KITTI segment rotation error), so smaller gaps are within numerical noise (revised PDF, A.12). Brake uses τ=1 (the paper prints τ=2, corrected in the revision).
+
+**W1, selecting a configuration.** We have no validated rule for unseen scenes. We recommend one fixed scalar (brake τ=1 or const 0.33, both set on these benchmarks).
+
+**W2, ortho is inconsistent.** Confirmed on ScanNet. On ARKitScenes it ties TTT3R.
+
+| Ortho against | ScanNet-1000 (ortho 0.488) | ARKitScenes (ortho 0.609) |
+|---|---|---|
+| TTT3R | 0.406, worse, wins 29/65, p=0.047 | 0.558, tied, CI [-0.026, +0.141], p=0.14 |
+| TTSA3R | 0.378, worse, wins 27/65, p=0.0035 | 0.556, tied, CI [-0.020, +0.138], p=0.14 |
+| Const 0.5 | 0.283, worse, wins 11/65, p<0.001 | 0.528, worse, wins 4/18, p=0.028 |
+| Brake | 0.261, worse, wins 4/65, p<0.001 | 0.539, tied, CI [-0.001, +0.158], p=0.078 |
+
+**W3, value of direction.** We isolated it by replaying ortho's applied update norm, per token and frame, along the raw delta, so the norm, not the trajectory, is identical.
+
+| ATE (RPE rot) | TTT3R | Same norm | Ortho | Brake |
+|---|---|---|---|---|
+| TUM 1000f | 0.1025 (0.43) | 0.0744 (0.45) | 0.0545 (0.65) | 0.0634 (0.89) |
+| ScanNet 1000f | 0.4058 (1.26) | 0.3186 (1.99) | 0.4883 (4.38) | 0.2615 (2.68) |
+| ARKitScenes 500f | 0.5580 (3.33) | 0.5446 (5.64) | 0.6093 (6.44) | 0.5391 (7.62) |
+
+Ortho is better than same norm on TUM (8/8, p=0.0078), worse on ScanNet (wins 11/65, p<0.001) and tied on ARKitScenes (wins 4/18, p=0.053). So at ortho's own norm schedule direction helps on TUM and hurts on ScanNet, where same norm also loses to brake (p<0.001). We drop the claim that drift energy sets the sign.
+
+KITTI Odometry, not used for tuning: at ortho's norm schedule, direction lowers Sim(3)-aligned segment rotation error (11.88 vs 16.78 deg/100m, 10/11, p=0.019; metric chosen after a scalar comparison). ATE and segment translation tie, RPE translation is worse (0/11). We withdraw "best aggregate for outdoor driving", since on ATE ortho beats only CUT3R.
+
+At const α's per-token step length, direction lowers KITTI segment rotation error at α=0.10, 0.20 and 0.33 (7.68 vs 12.41, 7.88 vs 16.15, 9.13 vs 17.61, p≤0.014), with worse ATE at 0.10 and RPE translation at 0.10 and 0.20. It ties on TUM (p≥0.31) and raises ATE on ScanNet at 0.10 and 0.33 (wins ≤5/65) and on ARKitScenes at 0.10 and 0.20 (≤3/18, tied at 0.33). Const 0.10 alone is not worse than ortho in ATE on any of the four datasets, nor in KITTI segment rotation error, and better on ScanNet (0.382 vs 0.488), at higher RPE rotation except on KITTI (p<0.01).
+
+Const 0.33 ties brake on ScanNet (p=0.95) and ARKitScenes (p=0.78), and on TUM is 2.3% worse (0.0648 vs 0.0634, p=0.039), within numerical noise. Brake beats const 0.5 on TUM (p=0.016) but not on ScanNet (p=0.31), and const 0.33 closes about 90% of that TUM gap, so we credit most of it to scale, not temporal adaptivity.
+
+**W4, gate collapse.** Agreed, our statistic was frame-averaged. Per-token temporal std is 0.038-0.102, against 0.017-0.031 for the frame average (TTSA3R: fused gate, not TAUM alone). Freezing each token's gate at its oracle time mean:
+
+| Gate, data | Live | Frozen | 95% CI, frozen - live | p | Reading |
+|---|---|---|---|---|---|
+| TTT3R, TUM | 0.1025 | 0.1191 | [-0.0040, +0.0393] | 0.74 | inconclusive |
+| TTT3R, ScanNet first 20 | 0.4107 | 0.3892 | [-0.0355, -0.0067] | 0.006 | no loss |
+| TTSA3R, TUM | 0.0908 | 0.0884 | [-0.0058, +0.0008] | 0.15 | no loss |
+| TTSA3R, ScanNet first 20 | 0.3822 | 0.3803 | [-0.0432, +0.0280] | 0.46 | inconclusive |
+
+"No loss" means the upper CI bound is within 5% of live. We withdraw "no meaningful temporal adaptivity" and "rules out a useful timing role", and the revision restricts the finding to frame averages (§3.2, A.15).
+
+**W5, formulas.** Both confirmed and fixed in the revision. The code and Eq. 7 update the EMA before projecting, so Figure 2(c) and its caption were wrong. Increasing γ moves toward ortho, as Eq. 12 says, so A.4 and the Table 5 caption (now Table 6) were wrong. Eq. 12 also omits the per-token EMA of e_t that the code uses, and γ=0 is an off switch that runs ortho. All numbers come from the code.
+
+What stands: training-free scalar dampening lowers ATE against TTT3R at 1000 frames (brake; 8/8 on TUM, 54/65 on ScanNet, both p<0.01), at higher mean RPE rotation. On ARKitScenes at 500 frames brake ties TTT3R (p=0.29). We keep decomposition as a separately tested control axis, not as a general improvement. The revised PDF makes these corrections in blue, with a change list in a separate comment.

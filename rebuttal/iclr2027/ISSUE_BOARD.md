@@ -62,17 +62,22 @@
 
 | ID | 问题 | 证据 | 严重度 |
 |---|---|---|---|
-| S1 | brake 的 τ 写错 | 论文写 τ=2。TUM/ScanNet relpose 与 `inv_t1` 逐位相同，其余任务由脚本参数确认是 τ=1；**KITTI 汇总是 τ=2**（zjc 报告，`--brake_tau 2.0`），表 5 的 KITTI 04 也是 τ=2（复现出 7.05001，τ=1 是 5.556）。真 τ=2 时 brake 输给 const：TUM 0.0822 对 0.0786，ScanNet 0.3107 对 0.2827。**补丁在 `patches/tau_fix.patch`，尚未应用到论文** | critical |
-| S2 | KITTI 列的指标标错 | 表 2 的 192.84/161.14/156.61/166.89/154.10 是 **ATE Mean**，论文写的是 ATE RMSE。RMSE 应为 212.59/183.16/179.33/185.68/170.03，排名不变 | major |
-| S3 | **表 2 的 KITTI 列很可能跑在另一条 RoPE 路径上** | 数据相同：在本机重建 `kitti_odo_full` 后，结果与 `kitti_odom` 逐位相同。seq 04 RMSE（报告 / 编译版 / 回退加 clamp）：CUT3R 32.45 / 21.85 / 31.31，brake τ=2 6.66 / 7.05 / 6.90，ortho 10.28 / 17.79 / 12.28。zjc 的提交 `cd57a18` 给回退 RoPE 加了 clamp，把 pose token 的位置 −1 改成 0，相当于改变了模型行为。**证据很强但未最终确认，需要问 zjc。** 受影响：表 2 KITTI 列、排名表、建议 (iii)、KITTI 上的 20.1% / 7.6% / 58.6% | critical |
+| S1 | brake 的 τ 写错 | 论文写 τ=2。TUM/ScanNet relpose 与 `inv_t1` 逐位相同，其余任务由脚本参数确认是 τ=1；**KITTI 汇总是 τ=2**（zjc 报告，`--brake_tau 2.0`），表 5 的 KITTI 04 也是 τ=2（复现出 7.05001，τ=1 是 5.556）。真 τ=2 时 brake 输给 const：TUM 0.0822 对 0.0786，ScanNet 0.3107 对 0.2827。**2026-11-07：KITTI 已有 τ=1 结果（E5b），全文可统一为 τ=1。补丁在 `patches/tau_kitti_fix.patch`，尚未应用到论文** | critical |
+| S2 | KITTI 列的指标标错 | 表 3 的 192.84/161.14/156.61/166.89/154.10 是 **ATE Mean**，论文写的是 ATE RMSE。**2026-11-07：改用 E5b 的 ATE RMSE，203.94/180.23/178.24/172.21/160.98，TTSA3R 174.30** | major |
+| S3 | **表 3 的 KITTI 列很可能跑在另一条 RoPE 路径上** | 数据相同：在本机重建 `kitti_odo_full` 后，结果与 `kitti_odom` 逐位相同。seq 04 RMSE（报告 / 编译版 / 回退加 clamp）：CUT3R 32.45 / 21.85 / 31.31，brake τ=2 6.66 / 7.05 / 6.90，ortho 10.28 / 17.79 / 12.28。zjc 的提交 `cd57a18` 给回退 RoPE 加了 clamp，把 pose token 的位置 −1 改成 0，相当于改变了模型行为。**证据很强但未最终确认，需要问 zjc。** 受影响：表 2 KITTI 列、排名表、建议 (iii)、KITTI 上的 20.1% / 7.6% / 58.6% | critical |
 | S4 | 论文完全没有报告 RPE | 相对 CUT3R 的 RPE rot：TUM const −13%、brake +71%、ortho +25%；ScanNet const +91%、brake +158%、ortho +321%。论文却引用了 KITTI 上旋转误差 −58.6% | major |
 | S5 | brake “最优”缺乏统计支持 | ScanNet brake 对 const(0.5)：−7.5%，36/65，CI 跨 0，p=0.31。TUM brake 对 const(0.33)：−3.8%，4/8，p=0.55。ScanNet 没跑过 const(0.33) | major |
-| S6 | “漂移能量”有三种算法 | 表 3 是逐帧先平均 cos 再平方（对 δ_{t-1}）；方程 12 是对 EMA d_t，代码还再做一次 EMA；Point3R 是逐事件 cos² 的均值。而 A4c 显示 EMA 版方向相反（TUM 0.786 > ScanNet 0.660，90f） | major |
+| S6 | “漂移能量”有三种算法 | 表 2 是逐帧先平均 cos 再平方（对 δ_{t-1}）；方程 12 是对 EMA d_t，代码还再做一次 EMA；Point3R 是逐事件 cos² 的均值。而 A4c 显示 EMA 版方向相反（TUM 0.786 > ScanNet 0.660，90f） | major |
 | S7 | FPS 数据矛盾 | 表 `tab:overhead` 称 ortho 比 CUT3R 快 18%（9.95 对 8.44），早先的 S2 实验是 CUT3R 最快（10.75），S2 没合入最新分支。配置按顺序跑，可能是顺序效应，未证实 | minor |
 | S8 | “zero added memory” 不准确 | 峰值显存 6.1401 → 6.1428 GB，约多 2.7 MB。附录也写了要存 d_t | minor |
-| S9 | 可复现性声明不实 | "All reported numbers come from a single evaluation script"，但 KITTI 来自另一分支的另一批运行 | major |
+| S9 | 可复现性声明不实（提交版也有；同一段还承诺 “We will release the code”） | "All reported numbers come from a single evaluation script"，但 KITTI 来自另一分支的另一批运行。**2026-11-07：E5b 用同一脚本重跑，应用补丁后 KITTI 这一处不再成立；其余任务未逐项核实** | major |
 | S10 | TTSA3R “improving on it in every setting” | Sintel 上 0.20908 对 0.20879，略差；ARKitScenes 9/18，不显著 | minor |
 | S11 | 表 5 取整 | TUM γ=2 原始值 0.05569，印成 0.055 | minor |
+| S12 | **表 5 的 const 行混用了两个 α** | TUM、ScanNet 是 α=0.5，KITTI 两列的 5.10、60.68 却是 α=0.33：用 α=0.33 重跑，ATE 和两项 RPE 逐位相同。α=0.5 实为 7.10、73.93。第二名的下划线也要跟着改。已写入补丁 | major |
+| S13 | KITTI 门控统计的来源未查 | `sec/analyse.tex:45` 说 “the out-of-domain KITTI” 上门控 μ∈[0.31,0.35]、σ≤0.03。不确定这是视频深度的 KITTI 还是里程计，也不确定跑在哪条 RoPE 路径上。E5b 没有记录 TTT3R 的门控 | minor，待查 |
+
+| S14 | 方程 7 少写了归一化 | 代码每步都把 d_t 归一化（`model.py` 的 `_delta_ortho_update`），方程 7 和算法 1 都没写。第一帧的处理也不同：代码用 δ̂_1 初始化并只乘 α⊥，算法 1 写的是初始化为 0。对 EMA 的数值有影响，应在修订版写明 | minor |
+| S15 | **AI 使用声明前后矛盾** | 提交版 PDF 的声明没有列 “implement methods” 和数学命题，却写了 “beyond the single claim named above”、“All AI-written code” 和 “The proof of eq. (5)”。论文源码（ce69b27）的版本已补全，但开头注释写着 DRAFT，还有三项等作者决定。声明也没覆盖回应期的实验和回应起草。“every reported number was regenerated from raw evaluation output rather than transcribed” 与 S2、S12 不符，必须改。OpenReview 的 AI Assistance 勾选要一致。程序主席通知：录用论文必须有声明，鼓励在讨论期更新 | major |
 
 **已排除：** 视频深度上 “every variant strictly improves”，KITTI 上 const 0.10649 确实小于 TTT3R 0.10741，印出来都是 0.107 只是取整。这项不是问题。
 
@@ -84,7 +89,17 @@
 
 | 状态 | 数量 | 问题 |
 |---|---|---|
-| 现在就能答或承认 | 10 | R1-C1、R1-C2、R1-C5a、R1-C5b、R3-C1b、R3-C2、R3-C3、R3-Q1、R3-Q2b、R3-Q3 |
-| 需要新实验 | 6 | R1-C3、R1-C4、R2-C1、R2-Q1、R3-C1、R3-Q2a |
+| 现在就能答或承认 | 16 | 全部。E1–E4 的结果已经补上原来缺实验的 6 项 |
+| 需要新实验 | 0 | — |
 
 其中公式类问题除了回应，还要在修订版里改正。
+
+**2026-11-07 更新：** E1–E4 已裁定，见 `docs/PREREG_E1_E5.md` 末尾。R1-C3、R2-C1、R2-Q1、R3-C1 由 E1b 回答，R1-C4 由 E3 回答，R3-Q2a 由 E2 回答。上面各表的“需要 E1”等旧状态已被这一节取代。回应草稿见 `REBUTTAL_DRAFT_rich.md`，每一项在草稿中的位置见其覆盖表。
+
+**2026-11-07 再次更新：** E6、E6d 已裁定，见 `docs/PREREG_E6.md`、`docs/PREREG_E6D.md` 的日期节。R1-C3、R2-C1、R3-C1 的回答增加了 KITTI 同范数结果，并写明平标量可能进入噪声范围。S5 中 “TUM brake 对 const(0.33) p=0.55” 用的是旧代码的 const 0.33，同代码结果是 brake 略好（p=0.039）。
+
+**2026-11-08 更新：** E7 已裁定，见 `docs/PREREG_E7.md` 的日期节。R1-C3、R2-C1、R2-Q1、R3-C1、R3-Q3 的回答要加入固定步长下的方向结果（KITTI 旋转误差三个尺度都更好，TUM 打平，ScanNet、ARKitScenes 更差）和 “const 0.10 在四个数据集上都不比 ortho 差”。R1-C1 的回答删掉 “const 0.33 not yet run on ARKitScenes”。三条的检验说明改写为测得的舍入差距。这些改动已于 2026-11-08 写入。
+
+**2026-11-08 E8：** 已裁定，见 `docs/PREREG_E8.md`。方向降低旋转漂移只在 KITTI Odometry 上出现：在 ARKitScenes 500 帧、ScanNet、TUM 0.10 上，平范数下方向让跨 100 帧的旋转误差变大；ARKitScenes 1000 帧上全部打平（n=8），也看不到长度依赖。现有回复没有违反裁定的句子。噪声说明里的 “not run on ScanNet or ARKitScenes” 已改成 “ARKitScenes 500f”，PSN7 加了一句逐格报告，均于 2026-11-08 写入（作者同意）。
+
+**2026-11-08 修订版：** 作者要求直接开始修订 PDF。R1-C4、R1-C5a/b、R2-C1/Q1、R3-C1/C2/C3/Q1/Q2a/Q2b/Q3，以及 S1–S12、S14 的 τ、S15 的事实部分，都已在本 worktree 的 `paper/` 克隆里改完，逐处记录见 `REVISION_LOG.md`。S13（KITTI 门控统计的来源）没有处理。S15 已于 2026-11-09 定稿（作者确认三项，讨论期那句补上 “design”），只剩 OpenReview 的勾选。

@@ -7,12 +7,12 @@ hyperparameter grid, and the RPE averages the paper does not report.
 
 Usage: python3 paired_stats.py [eval_results/relpose root] [ttsa results/relpose root]
 """
-import itertools
-import math
 import os
-import random
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from stats_rule import bootstrap, wilcoxon  # noqa: E402
 
 ROOT = sys.argv[1] if len(sys.argv) > 1 else "/home/szy/research/TTT3R/eval_results/relpose"
 TTSA = sys.argv[2] if len(sys.argv) > 2 else (
@@ -44,42 +44,6 @@ def average(base, ds, cfg):
         if m:
             last = tuple(float(x) for x in m.groups())
     return last
-
-
-def wilcoxon(diffs):
-    d = [x for x in diffs if x != 0]
-    n = len(d)
-    if n == 0:
-        return 1.0
-    ordered = sorted(abs(x) for x in d)
-    rank = {}
-    i = 0
-    while i < n:
-        j = i
-        while j < n and ordered[j] == ordered[i]:
-            j += 1
-        rank[ordered[i]] = (i + j + 1) / 2
-        i = j
-    r = [rank[abs(x)] for x in d]
-    w = sum(ri for ri, x in zip(r, d) if x > 0)
-    if n <= 16:
-        total = sum(r)
-        low = min(w, total - w)
-        hits = sum(
-            sum(ri for ri, b in zip(r, signs) if b) <= low + 1e-9
-            for signs in itertools.product((0, 1), repeat=n)
-        )
-        return min(1.0, 2 * hits / 2 ** n)
-    mu = n * (n + 1) / 4
-    sd = math.sqrt(sum(x * x for x in r) / 4)
-    return math.erfc(abs((w - mu) / sd) / math.sqrt(2))
-
-
-def bootstrap(diffs, resamples=20000, seed=0):
-    rng = random.Random(seed)
-    n = len(diffs)
-    means = sorted(sum(rng.choice(diffs) for _ in range(n)) / n for _ in range(resamples))
-    return means[int(0.025 * resamples)], means[int(0.975 * resamples)]
 
 
 def compare(ds, a, b, base_a=ROOT, base_b=ROOT):
@@ -147,6 +111,8 @@ for s in seqs:
     vs_brake.append(runs[best][s] - brake[s])
     vs_c33.append(runs[best][s] - c33[s])
 print(f"  picks: {sorted(set(picks))}")
+for s, pick, value in zip(seqs, picks, held):
+    print(f"  {s.split('freiburg3_')[-1]:20s} pick={pick:32s} held-out={value:.5f}")
 print(f"  held-out mean={sum(held) / 8:.4f} brake={sum(brake.values()) / 8:.4f} const0.33={sum(c33.values()) / 8:.4f}")
 for name, d in (("brake", vs_brake), ("const0.33", vs_c33)):
     lo, hi = bootstrap(d)

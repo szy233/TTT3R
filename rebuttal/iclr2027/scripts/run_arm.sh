@@ -23,27 +23,49 @@ LOG="$ROOT/logs/$GROUP.$ARM.log"
 GATES="$ROOT/gates/$GROUP"
 GAINS="$ROOT/gains/$GROUP/$ARM"
 NORMS="$ROOT/norms/$GROUP"
-mkdir -p "$OUT" "$ROOT/logs"
 
 ORTHO="--alpha_perp 0.5 --alpha_parallel 0.05 --beta_ema 0.95 --gamma 0"
+ORTHO015="--alpha_perp 0.5 --alpha_parallel 0.15 --beta_ema 0.95 --gamma 0"
+NORMS015="${NORMS}__a015"
 case "$ARM" in
     ortho_plain)            TYPE=ddd3r;          EXTRA="$ORTHO" ;;
     ortho_check)            TYPE=ddd3r;          EXTRA="$ORTHO --gain_log_dir $GAINS --norm_log_dir $NORMS" ;;
     normreplay)             TYPE=ddd3r;          EXTRA="$ORTHO --norm_replay_dir $NORMS" ;;
     normmatch)              TYPE=ddd3r;          EXTRA="$ORTHO --norm_match --gain_log_dir $GAINS" ;;
     prevdir)                TYPE=ddd3r;          EXTRA="$ORTHO --project_prev" ;;
+    ortho_g*)               TYPE=ddd3r;          EXTRA="${ORTHO% 0} ${ARM#ortho_g}" ;;
     ttt3r_log)              TYPE=ttt3r;          EXTRA="--gate_log_dir $GATES/ttt3r" ;;
     ttt3r_frozen)           TYPE=ttt3r;          EXTRA="--frozen_gate_dir $GATES/ttt3r" ;;
     ttsa3r_log)             TYPE=ttsa3r;         EXTRA="--gate_log_dir $GATES/ttsa3r" ;;
     ttsa3r_frozen)          TYPE=ttsa3r;         EXTRA="--frozen_gate_dir $GATES/ttsa3r" ;;
+    ortho_a015)             TYPE=ddd3r;          EXTRA="$ORTHO015 --gain_log_dir $GAINS --norm_log_dir $NORMS015" ;;
+    normreplay_a015)        TYPE=ddd3r;          EXTRA="$ORTHO015 --norm_replay_dir $NORMS015" ;;
+    const010)               TYPE=ddd3r_constant; EXTRA="--alpha 0.10" ;;
+    const015)               TYPE=ddd3r_constant; EXTRA="--alpha 0.15" ;;
+    const020)               TYPE=ddd3r_constant; EXTRA="--alpha 0.20" ;;
+    const025)               TYPE=ddd3r_constant; EXTRA="--alpha 0.25" ;;
     const033)               TYPE=ddd3r_constant; EXTRA="--alpha 0.33" ;;
     const05)                TYPE=ddd3r_constant; EXTRA="--alpha 0.5" ;;
     ttt3r_plain)            TYPE=ttt3r;          EXTRA="" ;;
     brake_t1)               TYPE=ddd3r_brake;    EXTRA="--brake_tau 1.0" ;;
     brake_t2)               TYPE=ddd3r_brake;    EXTRA="--brake_tau 2.0" ;;
     cut3r)                  TYPE=cut3r;          EXTRA="" ;;
+    dir010)                 TYPE=ddd3r;          EXTRA="$ORTHO --ortho_scale 0.10 --gain_log_dir $GAINS" ;;
+    dir020)                 TYPE=ddd3r;          EXTRA="$ORTHO --ortho_scale 0.20 --gain_log_dir $GAINS" ;;
+    dir033)                 TYPE=ddd3r;          EXTRA="$ORTHO --ortho_scale 0.33 --gain_log_dir $GAINS" ;;
+    iso033)                 TYPE=ddd3r;          EXTRA="--alpha_perp 0.5 --alpha_parallel 0.5 --beta_ema 0.95 --gamma 0 --ortho_scale 0.33" ;;
+    const033p)              TYPE=ddd3r_constant; EXTRA="--alpha 0.3300001" ;;
+    orthop)                 TYPE=ddd3r;          EXTRA="--alpha_perp 0.5000001 --alpha_parallel 0.05 --beta_ema 0.95 --gamma 0" ;;
     *) echo "Unknown arm: $ARM"; exit 2 ;;
 esac
+
+# DDD3R_DRY_RUN=1 prints the parameters and touches nothing, for tests/test_run_arm.py.
+if [ -n "${DDD3R_DRY_RUN:-}" ]; then
+    echo "TYPE=$TYPE EXTRA=$EXTRA"
+    exit 0
+fi
+
+mkdir -p "$OUT" "$ROOT/logs"
 
 stamp() { date '+%Y-%m-%d %H:%M:%S'; }
 

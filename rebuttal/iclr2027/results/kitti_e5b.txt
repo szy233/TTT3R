@@ -1,0 +1,154 @@
+== Protocol check, registered references ==
+cut3r        seq04 registered=  21.84807 rerun=  21.84807 gap=  0.000% ok
+cut3r        seq03 registered= 150.29048 rerun= 150.29048 gap=  0.000% ok
+ttt3r_plain  seq04 registered=  11.06465 rerun=  11.06465 gap=  0.000% ok
+ttt3r_plain  seq03 registered= 103.25776 rerun= 103.25775 gap=  0.000% ok
+const05      seq04 registered=   5.09581 rerun=   7.09814 gap= 39.294% MISS
+const05      seq03 registered=  60.68427 rerun=  73.93217 gap= 21.831% MISS
+brake_t1     seq04 registered=   5.55621 rerun=   5.55621 gap=  0.000% ok
+ortho_plain  seq04 registered=  17.78537 rerun=  17.78537 gap=  0.000% ok
+ortho_plain  seq03 registered=  39.90691 rerun=  39.90691 gap=  0.000% ok
+misses: ['const05/04', 'const05/03']
+
+== Diagnostic, alpha=0.33 against the same references ==
+const033 seq03 reference=  60.68427 run=  60.68427 gap=  0.000%
+const033 seq04 reference=   5.09581 run=   5.09581 gap=  0.000%
+
+== TTSA3R, sequence 04 rerun against the earlier run ==
+earlier=7.759798 rerun=7.75980 gap=0.0000%
+11-sequence ATE RMSE 174.301, ATE mean 152.227
+per sequence: 00=159.51 01=526.54 02=248.68 03=83.78 04=7.76 05=125.50 06=122.90 07=67.36 08=218.99 09=178.42 10=177.88
+ttsa3r vs cut3r        n=11   174.30 vs   203.94 ( -14.5%) wins=10 CI[  -49.75,  -13.06] p=0.0020 -> a
+ttsa3r vs ttt3r_plain  n=11   174.30 vs   180.23 (  -3.3%) wins=10 CI[  -15.30,   +8.03] p=0.0537 -> tied
+ttsa3r vs const05      n=11   174.30 vs   178.24 (  -2.2%) wins= 6 CI[  -15.61,   +7.59] p=0.6377 -> tied
+ttsa3r vs brake_t1     n=11   174.30 vs   172.21 (  +1.2%) wins= 6 CI[   -9.54,  +15.09] p=1.0000 -> tied
+ttsa3r vs ortho_plain  n=11   174.30 vs   160.98 (  +8.3%) wins= 4 CI[  -16.21,  +40.18] p=0.2783 -> tied
+
+== Table 5 gamma rows, rerun against the logged runs ==
+gamma=0.5 seq04: logged=4.89167 rerun=4.89167 seq03: logged=46.54079 rerun=46.54079
+gamma=1   seq04: logged=6.92074 rerun=6.92074 seq03: logged=37.89356 rerun=37.89356
+gamma=2   seq04: logged=8.78086 rerun=8.78086 seq03: logged=24.58150 rerun=24.58150
+gamma=3   seq04: logged=8.13562 rerun=8.13562 seq03: logged=26.79325 rerun=26.79325
+
+== RPE averages over the 11 sequences ==
+cut3r        RPE trans=2.877 (1.00x) RPE rot=3.367 (1.00x)
+ttt3r_plain  RPE trans=3.516 (1.22x) RPE rot=4.165 (1.24x)
+const05      RPE trans=4.015 (1.40x) RPE rot=6.238 (1.85x)
+brake_t1     RPE trans=5.245 (1.82x) RPE rot=6.484 (1.93x)
+ortho_plain  RPE trans=8.042 (2.79x) RPE rot=5.941 (1.76x)
+
+== ATE RMSE, the registered metric ==
+seq         cut3r  ttt3r_plain      const05     brake_t1  ortho_plain
+00         191.85       164.28       175.51       178.76       176.16
+01         631.19       545.03       508.88       479.88       620.41
+02         303.69       257.98       282.22       270.80       244.33
+03         150.29       103.26        73.93        57.07        39.91
+04          21.85        11.06         7.10         5.56        17.79
+05         139.09       146.04        93.73       109.80       113.22
+06         133.19       133.52       123.21       108.33        73.22
+07          73.66        68.65        71.26        71.64        76.67
+08         237.27       240.05       257.60       234.64       175.40
+09         174.00       191.10       177.55       179.53       159.75
+10         187.29       121.50       189.59       198.35        73.90
+avg        203.94       180.23       178.24       172.21       160.98
+vs0         +0.0%       -11.6%       -12.6%       -15.6%       -21.1%
+rank: ortho_plain < brake_t1 < const05 < ttt3r_plain < cut3r
+
+== ATE mean, the metric the report's aggregate printed ==
+seq         cut3r  ttt3r_plain      const05     brake_t1  ortho_plain
+00         173.23       151.88       162.09       163.12       160.05
+01         567.42       441.39       431.74       424.11       535.39
+02         279.17       239.99       266.76       247.33       220.18
+03         129.27        89.43        64.44        50.13        34.69
+04          17.96         9.05         5.94         5.06        15.45
+05         124.36       126.15        85.91        95.86       104.08
+06         111.41       112.10       110.78       100.18        60.94
+07          66.37        63.22        65.64        65.61        73.61
+08         213.81       219.17       234.43       205.85       157.53
+09         157.43       176.90       157.99       168.70       147.61
+10         172.24       108.26       160.71       170.19        66.77
+avg        182.97       157.96       158.77       154.19       143.30
+vs0         +0.0%       -13.7%       -13.2%       -15.7%       -21.7%
+rank: ortho_plain < brake_t1 < ttt3r_plain < const05 < cut3r
+
+== Official t_rel (%), mean over sequences ==
+seq         cut3r  ttt3r_plain      const05     brake_t1  ortho_plain
+00          58.67        55.58        54.36        54.87        54.26
+01         141.12       147.31       141.53       134.63       120.03
+02          72.08        70.98        60.39        63.86        59.07
+03          89.65        86.94        74.66        58.78        64.48
+04          21.62        11.13         8.58         8.25        15.64
+05          57.84        48.33        43.71        49.82        45.61
+06          49.33        49.11        46.78        44.34        32.92
+07          51.76        55.80        55.43        53.71        40.86
+08          75.51        68.28        54.52        64.47        66.44
+09          76.69        71.06        67.82        69.33        48.42
+10          89.92        86.83        84.88        80.66        43.74
+avg         71.29        68.30        62.97        62.07        53.77
+vs0         +0.0%        -4.2%       -11.7%       -12.9%       -24.6%
+rank: ortho_plain < brake_t1 < const05 < ttt3r_plain < cut3r
+
+== Official r_rel (deg/100m), mean over sequences ==
+seq         cut3r  ttt3r_plain      const05     brake_t1  ortho_plain
+00         22.593       18.181       17.504       19.317       14.903
+01         10.115       10.219        8.620        6.917        3.033
+02         22.202       20.445       16.778       17.553       15.039
+03         20.768       23.012       21.854       20.025       17.185
+04         18.447        7.279        3.988        3.146        1.838
+05         23.312       17.470       15.345       14.625        8.168
+06         25.461       25.893       14.519       13.592        8.696
+07         35.058       36.605       36.553       33.913       14.150
+08         25.016       22.055       19.072       23.100       24.922
+09         16.667       20.319       20.200       22.831        8.778
+10         25.170       25.158       21.553       19.254       13.975
+avg        22.255       20.603       17.817       17.661       11.881
+vs0         +0.0%        -7.4%       -19.9%       -20.6%       -46.6%
+rank: ortho_plain < brake_t1 < const05 < ttt3r_plain < cut3r
+
+== Paired ATE RMSE, common rule ==
+cut3r        vs ttt3r_plain  n=11   203.943 vs   180.225 ( +13.2%) wins= 4/11 CI[   +5.973,  +43.362] p=0.0830 -> tied
+cut3r        vs const05      n=11   203.943 vs   178.235 ( +14.4%) wins= 3/11 CI[   +5.243,  +51.071] p=0.0537 -> tied
+cut3r        vs brake_t1     n=11   203.943 vs   172.212 ( +18.4%) wins= 2/11 CI[   +8.393,  +62.041] p=0.0186 -> b
+cut3r        vs ortho_plain  n=11   203.943 vs   160.977 ( +26.7%) wins= 1/11 CI[  +21.028,  +66.930] p=0.0020 -> b
+ttt3r_plain  vs const05      n=11   180.225 vs   178.235 (  +1.1%) wins= 5/11 CI[  -17.154,  +19.785] p=0.7646 -> tied
+ttt3r_plain  vs brake_t1     n=11   180.225 vs   172.212 (  +4.7%) wins= 4/11 CI[  -14.172,  +28.156] p=0.4131 -> tied
+ttt3r_plain  vs ortho_plain  n=11   180.225 vs   160.977 ( +12.0%) wins= 4/11 CI[   -6.558,  +41.491] p=0.1748 -> tied
+const05      vs brake_t1     n=11   178.235 vs   172.212 (  +3.5%) wins= 5/11 CI[   -1.862,  +13.990] p=0.3203 -> tied
+const05      vs ortho_plain  n=11   178.235 vs   160.977 ( +10.7%) wins= 5/11 CI[  -17.824,  +49.090] p=0.3203 -> tied
+brake_t1     vs ortho_plain  n=11   172.212 vs   160.977 (  +7.0%) wins= 4/11 CI[  -27.759,  +44.378] p=0.2783 -> tied
+
+== Paired ATE mean, common rule ==
+cut3r        vs ttt3r_plain  n=11   182.970 vs   157.958 ( +15.8%) wins= 4/11 CI[   +4.448,  +50.705] p=0.0830 -> tied
+cut3r        vs const05      n=11   182.970 vs   158.766 ( +15.2%) wins= 2/11 CI[   +3.925,  +51.393] p=0.0322 -> b
+cut3r        vs brake_t1     n=11   182.970 vs   154.194 ( +18.7%) wins= 1/11 CI[   +7.596,  +57.055] p=0.0137 -> b
+cut3r        vs ortho_plain  n=11   182.970 vs   143.302 ( +27.7%) wins= 1/11 CI[  +19.766,  +61.280] p=0.0029 -> b
+ttt3r_plain  vs const05      n=11   157.958 vs   158.766 (  -0.5%) wins= 5/11 CI[  -15.456,  +13.172] p=1.0000 -> tied
+ttt3r_plain  vs brake_t1     n=11   157.958 vs   154.194 (  +2.4%) wins= 4/11 CI[  -12.468,  +17.315] p=0.2783 -> tied
+ttt3r_plain  vs ortho_plain  n=11   157.958 vs   143.302 ( +10.2%) wins= 4/11 CI[  -13.117,  +36.834] p=0.1748 -> tied
+const05      vs brake_t1     n=11   158.766 vs   154.194 (  +3.0%) wins= 4/11 CI[   -2.396,  +12.041] p=0.3652 -> tied
+const05      vs ortho_plain  n=11   158.766 vs   143.302 ( +10.8%) wins= 4/11 CI[  -16.866,  +44.032] p=0.3203 -> tied
+brake_t1     vs ortho_plain  n=11   154.194 vs   143.302 (  +7.6%) wins= 4/11 CI[  -20.856,  +38.272] p=0.2783 -> tied
+
+== Paired t_rel, common rule ==
+cut3r        vs ttt3r_plain  n=11    71.290 vs    68.305 (  +4.4%) wins= 2/11 CI[   -0.000,   +5.832] p=0.0957 -> tied
+cut3r        vs const05      n=11    71.290 vs    62.969 ( +13.2%) wins= 2/11 CI[   +4.146,  +12.500] p=0.0068 -> b
+cut3r        vs brake_t1     n=11    71.290 vs    62.065 ( +14.9%) wins= 1/11 CI[   +5.258,  +14.534] p=0.0020 -> b
+cut3r        vs ortho_plain  n=11    71.290 vs    53.770 ( +32.6%) wins= 0/11 CI[  +11.382,  +24.892] p=0.0010 -> b
+ttt3r_plain  vs const05      n=11    68.305 vs    62.969 (  +8.5%) wins= 0/11 CI[   +2.878,   +8.145] p=0.0010 -> b
+ttt3r_plain  vs brake_t1     n=11    68.305 vs    62.065 ( +10.1%) wins= 1/11 CI[   +2.423,  +11.502] p=0.0029 -> b
+ttt3r_plain  vs ortho_plain  n=11    68.305 vs    53.770 ( +27.0%) wins= 1/11 CI[   +7.025,  +22.601] p=0.0068 -> b
+const05      vs brake_t1     n=11    62.969 vs    62.065 (  +1.5%) wins= 5/11 CI[   -2.755,   +4.955] p=0.7646 -> tied
+const05      vs ortho_plain  n=11    62.969 vs    53.770 ( +17.1%) wins= 3/11 CI[   +1.115,  +18.039] p=0.0830 -> tied
+brake_t1     vs ortho_plain  n=11    62.065 vs    53.770 ( +15.4%) wins= 3/11 CI[   +1.495,  +15.981] p=0.0830 -> tied
+
+== Paired r_rel, common rule ==
+cut3r        vs ttt3r_plain  n=11    22.255 vs    20.603 (  +8.0%) wins= 5/11 CI[   -0.558,   +4.204] p=0.4131 -> tied
+cut3r        vs const05      n=11    22.255 vs    17.817 ( +24.9%) wins= 3/11 CI[   +1.450,   +7.588] p=0.0186 -> b
+cut3r        vs brake_t1     n=11    22.255 vs    17.661 ( +26.0%) wins= 1/11 CI[   +1.366,   +7.929] p=0.0244 -> b
+cut3r        vs ortho_plain  n=11    22.255 vs    11.881 ( +87.3%) wins= 0/11 CI[   +6.915,  +13.949] p=0.0010 -> b
+ttt3r_plain  vs const05      n=11    20.603 vs    17.817 ( +15.6%) wins= 0/11 CI[   +1.343,   +4.796] p=0.0010 -> b
+ttt3r_plain  vs brake_t1     n=11    20.603 vs    17.661 ( +16.7%) wins= 3/11 CI[   +0.874,   +5.339] p=0.0137 -> b
+ttt3r_plain  vs ortho_plain  n=11    20.603 vs    11.881 ( +73.4%) wins= 1/11 CI[   +5.031,  +12.691] p=0.0020 -> b
+const05      vs brake_t1     n=11    17.817 vs    17.661 (  +0.9%) wins= 4/11 CI[   -1.095,   +1.296] p=0.7002 -> tied
+const05      vs ortho_plain  n=11    17.817 vs    11.881 ( +50.0%) wins= 1/11 CI[   +2.301,  +10.095] p=0.0186 -> b
+brake_t1     vs ortho_plain  n=11    17.661 vs    11.881 ( +48.7%) wins= 1/11 CI[   +2.726,   +9.448] p=0.0029 -> b

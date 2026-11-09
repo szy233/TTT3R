@@ -1,0 +1,26 @@
+seq   frozen_rotation_r_rel  gt_rot_per10f
+00   t_rel=   72.78  r_rel= 27.247   gt_rot/10f=6.614
+01   t_rel=  160.18  r_rel=  8.889   gt_rot/10f=3.981
+02   t_rel=   77.61  r_rel= 24.206   gt_rot/10f=5.826
+03   t_rel=   76.18  r_rel= 13.873   gt_rot/10f=3.582
+04   t_rel=    0.45  r_rel=  0.467   gt_rot/10f=0.546
+05   t_rel=   70.87  r_rel= 27.988   gt_rot/10f=4.601
+06   t_rel=   48.55  r_rel= 28.778   gt_rot/10f=4.123
+07   t_rel=   61.29  r_rel= 39.322   gt_rot/10f=6.282
+08   t_rel=   69.66  r_rel= 25.840   gt_rot/10f=5.591
+09   t_rel=   81.51  r_rel= 23.752   gt_rot/10f=6.520
+10   t_rel=  105.30  r_rel= 20.207   gt_rot/10f=4.874
+MEAN frozen-orientation with GT positions: t_rel=74.94 r_rel=21.870
+
+arm            r_rel    rot/10f, ratio to GT
+ttt3r_plain    20.60              1.592
+const05        17.82              1.615
+brake_t1       17.66              1.637
+const033       17.61              1.686
+const020       16.15              1.741
+const010       12.41              1.801
+normreplay     16.78              1.644
+ortho_check    11.88              1.549
+orthop         10.29              1.521
+dir033          9.13              1.583
+dir020          7.88              1.765

@@ -1,0 +1,346 @@
+[
+ {
+  "dataset": "KITTI",
+  "seq": "00",
+  "n": 200,
+  "total_frames": 4541,
+  "drift_energy": 0.5102526326165406,
+  "cos_mean": 0.7107362217789319
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "01",
+  "n": 200,
+  "total_frames": 1101,
+  "drift_energy": 0.5456068967315852,
+  "cos_mean": 0.7346109584647806
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "02",
+  "n": 200,
+  "total_frames": 4661,
+  "drift_energy": 0.4648752124182254,
+  "cos_mean": 0.6772383287099738
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "03",
+  "n": 200,
+  "total_frames": 801,
+  "drift_energy": 0.510012662258465,
+  "cos_mean": 0.7107924814874204
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "04",
+  "n": 200,
+  "total_frames": 271,
+  "drift_energy": 0.48449168789751845,
+  "cos_mean": 0.692603535613223
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "05",
+  "n": 200,
+  "total_frames": 2761,
+  "drift_energy": 0.5102655053206309,
+  "cos_mean": 0.7076129057449312
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "06",
+  "n": 200,
+  "total_frames": 1101,
+  "drift_energy": 0.4629384478075436,
+  "cos_mean": 0.6755962882509183
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "07",
+  "n": 200,
+  "total_frames": 1101,
+  "drift_energy": 0.4969169680243445,
+  "cos_mean": 0.700240114900335
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "08",
+  "n": 200,
+  "total_frames": 4071,
+  "drift_energy": 0.4860725662655169,
+  "cos_mean": 0.6930202165590459
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "09",
+  "n": 200,
+  "total_frames": 1591,
+  "drift_energy": 0.5001899549260966,
+  "cos_mean": 0.7030886155950963
+ },
+ {
+  "dataset": "KITTI",
+  "seq": "10",
+  "n": 200,
+  "total_frames": 1201,
+  "drift_energy": 0.5404047509380043,
+  "cos_mean": 0.7312564351900139
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "alley_2",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.47763009296275794,
+  "cos_mean": 0.6765232469354358
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "ambush_4",
+  "n": 33,
+  "total_frames": 33,
+  "drift_energy": 0.3708001690949433,
+  "cos_mean": 0.5846084067597985
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "ambush_5",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.47357494553579305,
+  "cos_mean": 0.6667749262890037
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "ambush_6",
+  "n": 20,
+  "total_frames": 20,
+  "drift_energy": 0.4417549716483975,
+  "cos_mean": 0.6336441032196346
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "cave_2",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.4325089195906029,
+  "cos_mean": 0.6426064615346947
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "cave_4",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.3990977893635647,
+  "cos_mean": 0.6194131182772773
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "market_2",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.6731313776221587,
+  "cos_mean": 0.8068935375432579
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "market_5",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.375940523323661,
+  "cos_mean": 0.5975441172414896
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "market_6",
+  "n": 40,
+  "total_frames": 40,
+  "drift_energy": 0.44415343931166273,
+  "cos_mean": 0.6525626667799094
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "shaman_3",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.69973682870121,
+  "cos_mean": 0.824145010843569
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "sleeping_1",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.6541580623084465,
+  "cos_mean": 0.7967050966559625
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "sleeping_2",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.625683497475289,
+  "cos_mean": 0.7792857654240667
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "temple_2",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.44841965060641636,
+  "cos_mean": 0.6555909757711449
+ },
+ {
+  "dataset": "Sintel",
+  "seq": "temple_3",
+  "n": 50,
+  "total_frames": 50,
+  "drift_energy": 0.44726230569412695,
+  "cos_mean": 0.6473372970916786
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41069021",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6873241397902656,
+  "cos_mean": 0.8247874050433911
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41069025",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6706585450731203,
+  "cos_mean": 0.8138721751507803
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41069042",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.5350897480027663,
+  "cos_mean": 0.7230591353908855
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41069043",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6671705516872422,
+  "cos_mean": 0.8113564624259221
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41069046",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6698433161267553,
+  "cos_mean": 0.8129322288473647
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41069051",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.5718520189501453,
+  "cos_mean": 0.7489871979508568
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125696",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6202202039119845,
+  "cos_mean": 0.7796943622018824
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125700",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.594997944701624,
+  "cos_mean": 0.7642571237219039
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125709",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.5939926282256457,
+  "cos_mean": 0.7633410304335494
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125718",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6261030440234048,
+  "cos_mean": 0.7812649002626314
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125722",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6241977826077333,
+  "cos_mean": 0.7769613807375108
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125731",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.625359214821876,
+  "cos_mean": 0.7799497155575597
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125756",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6026674135600283,
+  "cos_mean": 0.7669092211591538
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125760",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6388211265379291,
+  "cos_mean": 0.7927969511429868
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41125763",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6220747050771162,
+  "cos_mean": 0.7821321721053004
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41142278",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.5520467178674019,
+  "cos_mean": 0.7358398783446556
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41142280",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6430162328623619,
+  "cos_mean": 0.796520240792078
+ },
+ {
+  "dataset": "ARKitScenes",
+  "seq": "41142281",
+  "n": 200,
+  "total_frames": 500,
+  "drift_energy": 0.6105789739819418,
+  "cos_mean": 0.7747197275485226
+ }
+]
