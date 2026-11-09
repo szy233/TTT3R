@@ -2,7 +2,7 @@
 
 - **会场：** ICLR 2027，OpenReview 公开讨论，可上传修订版
 - **截止：** 2026-11-18；12 月 16 日出结果
-- **阶段：** 初次回应，Phase 7。**E1–E8 全部完成并裁定。E7 要求的改动和写入后独立审阅的修正已于 2026-11-08 写入三条回应（见 `REBUTTAL_DRAFT_rich.md` 的 “E7 裁定后的改动” 和 “写入后的独立审阅”）。E8 要求的两处改动（噪声说明加 “500f”、PSN7 加一句逐格报告）也已于 2026-11-08 写入。修订版已于 2026-11-08 开始，源码在本 worktree 的 `paper/`（分支 `iclr2027-revision`，未 commit），全部改动见 `REVISION_LOG.md`，给审稿人的清单见 `CHANGE_LIST.md`。三条回复已于 2026-11-08/09 与作者逐段重过（见 `REBUTTAL_DRAFT_rich.md` 的“与作者逐段重过”）。作者确认 ICLR 可以多轮回复，字数上限不再是硬约束，但要精简。发布顺序：先上传修订版，再发变更清单（单独一条评论），最后发三条回复。三条回复和修订版都尚未发出或上传**
+- **阶段：** 初次回应，Phase 7。**E1–E9 全部完成并裁定（E9 不成立，见下）。E7 要求的改动和写入后独立审阅的修正已于 2026-11-08 写入三条回应（见 `REBUTTAL_DRAFT_rich.md` 的 “E7 裁定后的改动” 和 “写入后的独立审阅”）。E8 要求的两处改动（噪声说明加 “500f”、PSN7 加一句逐格报告）也已于 2026-11-08 写入。修订版已于 2026-11-08 开始，源码在本 worktree 的 `paper/`（分支 `iclr2027-revision`，已 commit 为 `c86fa4c` 并推到私有仓库 `szy233/ddd3r`），全部改动见 `REVISION_LOG.md`，给审稿人的清单见 `CHANGE_LIST.md`。三条回复已于 2026-11-08/09 与作者逐段重过（见 `REBUTTAL_DRAFT_rich.md` 的“与作者逐段重过”）。作者确认 ICLR 可以多轮回复，字数上限不再是硬约束，但要精简。发布顺序：先上传修订版，再发变更清单（单独一条评论），最后发三条回复。三条回复和修订版都尚未发出或上传。rebuttal 材料已于 2026-11-09 按作者要求推到公开仓库 `szy233/TTT3R` 的分支 `claude/project-understanding-b08e9a`（作者知道其中含审稿原文和未发出的回复）**
 - **更新：** 2026-11-08
 
 ## E6 和 E6d 的裁定
@@ -101,7 +101,7 @@ ARKitScenes 1000 帧的舍入噪声是 ATE +0.2%、R_100 −1.0%，这是 ARKitS
 
 ## τ 和 KITTI 更正：补丁已应用到修订分支
 
-2026-11-08 起，论文在本 worktree 的 `paper/` 克隆里修订（分支 `iclr2027-revision`，未 commit），补丁已应用，之后又按 E6–E8 的裁定改写了 (iii) 等段落，详见 `REVISION_LOG.md`。`understand-full-project-14f204/paper` **仍然没有任何改动**，将来要从克隆里 fetch 过去。`patches/tau_kitti_fix.patch` 取代了旧的 `tau_fix.patch`。两件事必须一起应用：只改 τ 的话，KITTI 那几格仍是 τ=2。
+2026-11-08 起，论文在本 worktree 的 `paper/` 克隆里修订（分支 `iclr2027-revision`，2026-11-09 已 commit 为 `c86fa4c` 并推到私有仓库 `szy233/ddd3r`），补丁已应用，之后又按 E6–E8 的裁定改写了 (iii) 等段落，详见 `REVISION_LOG.md`。`understand-full-project-14f204/paper` **仍然没有任何改动**，将来要从克隆里 fetch 过去。`patches/tau_kitti_fix.patch` 取代了旧的 `tau_fix.patch`。两件事必须一起应用：只改 τ 的话，KITTI 那几格仍是 τ=2。
 
 补丁内容（已在临时副本验证，能应用到论文 `ce69b27`，两个版本都能编译，均 19 页）：
 

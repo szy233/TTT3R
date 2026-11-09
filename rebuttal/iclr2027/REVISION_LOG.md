@@ -8,8 +8,8 @@
 - **基线：** 对 ICLR 构建来说，`ce69b27` 的源码与 9 月 26 日的 `43bf931` 完全相同。ce69b27 只加了 advisor 草稿用的文件。已提交 PDF 的 AI 声明比 43bf931 早一版，所以 pdfdiff 在声明部分会多出一些差异。
 - **构建：** 在 `paper/` 里运行 `latexmk -pdf iclr2027.tex`。输出 `paper/iclr2027.pdf`，共 25 页，正文到第 10 页结束，符合讨论期 10 页的上限。只剩基线里原有的两处 2pt 以内的 overfull，没有未定义引用。
 - **标蓝：** 改动的文字和新加的表格都是蓝色。`iclr2027.tex` 里把 `\revisiontrue` 改成 `\revisionfalse` 就全部恢复为黑色，正式版用这个开关。
-- **全部 diff：** 运行 `git -C paper diff ce69b27`；新文件 `sec/appendix_revision.tex` 未被 git 跟踪，要单独看。
-- **尚未 commit。**
+- **全部 diff：** 运行 `git -C paper diff ce69b27 c86fa4c`，新文件 `sec/appendix_revision.tex` 也在其中。
+- **已 commit 并推送（2026-11-09）：** `c86fa4c`，推到私有仓库 `szy233/ddd3r` 的分支 `iclr2027-revision`；该仓库的 `main` 没动。克隆的 push 地址仍是 `DISABLED`，推送时直接指定了地址。
 
 ## 编号变化
 
